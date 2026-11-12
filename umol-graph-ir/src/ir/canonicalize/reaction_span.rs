@@ -23,11 +23,12 @@ use super::super::stereo::{
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    hash_value, molecule_remapping, rank_colors, reaction_canonicalize_level,
-    reaction_span_canonicalize_level, reaction_span_counts, AutomorphismAdapter, AutomorphismColor,
-    CanonicalCandidate, CanonicalSearchResult, Canonicalize, CanonicalizeContext, DeferredKey,
-    DescriptionLevel, InitialColors, OrderedPartition, ReactionCanonicalizeError,
-    ReactionSpanCanonicalizeError, TopologySearchInput,
+    color_representatives, hash_value, molecule_remapping, rank_colors,
+    reaction_canonicalize_level, reaction_span_canonicalize_level, remapping_exists,
+    remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor, CanonicalCandidate,
+    CanonicalSearchResult, Canonicalize, CanonicalizeContext, DeferredKey, DescriptionLevel,
+    InitialColors, OrderedPartition, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
+    TopologySearchInput,
 };
 
 /// The key of a leaf: the span in the entity order of the leaf, with each entity span as the
@@ -63,7 +64,9 @@ fn remapping_from_order(
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = reaction_span_counts(span).map(|count| (0..count).collect::<Vec<_>>());
+    let mut images = span
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
         let (entity_kind, kind_id) = match incidence_graph.entity(node) {
@@ -88,7 +91,9 @@ fn remapping_from_generator(
     incidence_graph: &IncidenceGraph,
     generator: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = reaction_span_counts(span).map(|count| (0..count).collect::<Vec<_>>());
+    let mut images = span
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
     for node in incidence_graph.graph().node_ids() {
         let entity = incidence_graph.entity(node);
         images[entity.kind() as usize][entity.kind_id()] =
@@ -97,15 +102,22 @@ fn remapping_from_generator(
     molecule_remapping(&images)
 }
 
-fn generator_preserves_stereo(
-    span: &ReactionSpan,
+/// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
+/// `target` with the same site and the same form.
+///
+/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `source`,
+/// and `target` has the entity counts of `source`. A generator of `source` is such a remapping of
+/// `source` onto itself.
+fn remapping_preserves_stereo(
+    source: &ReactionSpan,
+    target: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
-    generator: &[NodeId],
+    images: &[NodeId],
 ) -> bool {
     let entity_image =
-        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
-    let frame_action = |source: &[StereoLigand], target: &[StereoLigand]| {
-        let mapped = source
+        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
+        let mapped = ligands
             .iter()
             .map(|ligand| {
                 let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
@@ -114,7 +126,7 @@ fn generator_preserves_stereo(
                 Some(StereoLigand::new(atom_id, ligand.kind))
             })
             .collect::<Option<Vec<_>>>()?;
-        Permutation::between(&mapped, target)
+        Permutation::between(&mapped, image_ligands)
     };
     fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
     where
@@ -126,48 +138,48 @@ fn generator_preserves_stereo(
             .is_some_and(|mapped| mapped.normalized_eq(target))
     }
 
-    for source_id in span.stereo_atoms().ids() {
-        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source_id)) else {
+    for id in source.stereo_atoms().ids() {
+        let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(id)) else {
             return false;
         };
-        if entity_image(Entity::Atom(span.stereo_atoms().site(source_id)))
-            != Entity::Atom(span.stereo_atoms().site(target_id))
+        if entity_image(Entity::Atom(source.stereo_atoms().site(id)))
+            != Entity::Atom(target.stereo_atoms().site(image_id))
         {
             return false;
         }
         let Some(action) = frame_action(
-            span.stereo_atoms().ligands(source_id),
-            span.stereo_atoms().ligands(target_id),
+            source.stereo_atoms().ligands(id),
+            target.stereo_atoms().ligands(image_id),
         ) else {
             return false;
         };
         if !form_preserved(
-            span.stereo_atoms().attributes(source_id),
-            span.stereo_atoms().attributes(target_id),
+            source.stereo_atoms().attributes(id),
+            target.stereo_atoms().attributes(image_id),
             action,
         ) {
             return false;
         }
     }
 
-    for source_id in span.stereo_bonds().ids() {
-        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source_id)) else {
+    for id in source.stereo_bonds().ids() {
+        let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(id)) else {
             return false;
         };
-        if entity_image(Entity::Bond(span.stereo_bonds().site(source_id)))
-            != Entity::Bond(span.stereo_bonds().site(target_id))
+        if entity_image(Entity::Bond(source.stereo_bonds().site(id)))
+            != Entity::Bond(target.stereo_bonds().site(image_id))
         {
             return false;
         }
         let Some(action) = frame_action(
-            span.stereo_bonds().ligands(source_id),
-            span.stereo_bonds().ligands(target_id),
+            source.stereo_bonds().ligands(id),
+            target.stereo_bonds().ligands(image_id),
         ) else {
             return false;
         };
         if !form_preserved(
-            span.stereo_bonds().attributes(source_id),
-            span.stereo_bonds().attributes(target_id),
+            source.stereo_bonds().attributes(id),
+            target.stereo_bonds().attributes(image_id),
             action,
         ) {
             return false;
@@ -185,7 +197,8 @@ fn retain_stereo_preserving_generators(
     if span.stereo_atoms().count() == 0 && span.stereo_bonds().count() == 0 {
         return;
     }
-    generators.retain(|generator| generator_preserves_stereo(span, incidence_graph, generator));
+    generators
+        .retain(|generator| remapping_preserves_stereo(span, span, incidence_graph, generator));
 }
 
 /// Keep the generators that carry `span` onto itself: the span remapped by the generator equals the
@@ -196,10 +209,71 @@ fn retain_preserving_generators(
     generators: &mut Vec<Vec<NodeId>>,
 ) {
     generators.retain(|generator| {
-        span.clone()
-            .try_remap(&remapping_from_generator(span, incidence_graph, generator))
-            .is_some_and(|remapped| remapped.framed_eq(span))
+        span.framed_eq_under(
+            span,
+            &remapping_from_generator(span, incidence_graph, generator),
+        )
     });
+}
+
+/// The color of the incidence at `edge`: its role and, for an atom of an aromatic system or a
+/// multicenter bond, the span of the electron counts of that atom on each side.
+fn incidence_color<'a>(
+    span: &ReactionSpan,
+    incidence_graph: &'a IncidenceGraph,
+    edge: EdgeId,
+) -> (&'a Incidence, Option<EntitySpan<Option<i64>>>) {
+    let incidence = incidence_graph.incidence(edge);
+    let electron_count = match incidence {
+        Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+            let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+            let (owner, atom) = match (
+                incidence_graph.entity(first),
+                incidence_graph.entity(second),
+            ) {
+                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                _ => {
+                    unreachable!("an electron contribution connects an overlay to an atom")
+                }
+            };
+            let sides = match owner {
+                Entity::AromaticSystem(id) => {
+                    let atom_position = AtomPosition::from(
+                        span.aromatic_systems()
+                            .atoms(id)
+                            .position(|id| id == atom)
+                            .expect("incidence atom belongs to its overlay"),
+                    );
+                    let attributes = span.aromatic_systems().attributes(id);
+                    [attributes.lhs(), attributes.rhs()]
+                        .map(|form| form.map(|form| form.electrons.at(atom_position)))
+                }
+                Entity::MulticenterBond(id) => {
+                    let atom_position = AtomPosition::from(
+                        span.multicenter_bonds()
+                            .atoms(id)
+                            .position(|id| id == atom)
+                            .expect("incidence atom belongs to its overlay"),
+                    );
+                    let attributes = span.multicenter_bonds().attributes(id);
+                    [attributes.lhs(), attributes.rhs()]
+                        .map(|form| form.map(|form| form.electrons.at(atom_position)))
+                }
+                _ => unreachable!(
+                    "electron contributions belong to aromatic or multicenter entities"
+                ),
+            };
+            Some(match sides {
+                [Some(lhs), Some(rhs)] if lhs == rhs => EntitySpan::Unchanged(lhs),
+                [Some(lhs), Some(rhs)] => EntitySpan::Modified { lhs, rhs },
+                [Some(lhs), None] => EntitySpan::Removed(lhs),
+                [None, Some(rhs)] => EntitySpan::Added(rhs),
+                [None, None] => unreachable!("an entity span is present on a side"),
+            })
+        }
+        _ => None,
+    };
+    (incidence, electron_count)
 }
 
 /// The integers of the colors of a normalized span at `level`: one per entity, by incidence node,
@@ -341,58 +415,7 @@ fn initial_colors(
 
     let incidence_colors = incidence_graph
         .incidences()
-        .map(|(edge, incidence)| {
-            let electron_count = match incidence {
-                Incidence::AromaticAtom | Incidence::MulticenterAtom => {
-                    let [first, second] = incidence_graph.graph().edge_endpoints(edge);
-                    let (owner, atom) = match (
-                        incidence_graph.entity(first),
-                        incidence_graph.entity(second),
-                    ) {
-                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
-                        _ => {
-                            unreachable!("an electron contribution connects an overlay to an atom")
-                        }
-                    };
-                    let sides = match owner {
-                        Entity::AromaticSystem(id) => {
-                            let atom_position = AtomPosition::from(
-                                span.aromatic_systems()
-                                    .atoms(id)
-                                    .position(|id| id == atom)
-                                    .expect("incidence atom belongs to its overlay"),
-                            );
-                            let attributes = span.aromatic_systems().attributes(id);
-                            [attributes.lhs(), attributes.rhs()]
-                                .map(|form| form.map(|form| form.electrons.at(atom_position)))
-                        }
-                        Entity::MulticenterBond(id) => {
-                            let atom_position = AtomPosition::from(
-                                span.multicenter_bonds()
-                                    .atoms(id)
-                                    .position(|id| id == atom)
-                                    .expect("incidence atom belongs to its overlay"),
-                            );
-                            let attributes = span.multicenter_bonds().attributes(id);
-                            [attributes.lhs(), attributes.rhs()]
-                                .map(|form| form.map(|form| form.electrons.at(atom_position)))
-                        }
-                        _ => unreachable!(
-                            "electron contributions belong to aromatic or multicenter entities"
-                        ),
-                    };
-                    Some(match sides {
-                        [Some(lhs), Some(rhs)] if lhs == rhs => EntitySpan::Unchanged(lhs),
-                        [Some(lhs), Some(rhs)] => EntitySpan::Modified { lhs, rhs },
-                        [Some(lhs), None] => EntitySpan::Removed(lhs),
-                        [None, Some(rhs)] => EntitySpan::Added(rhs),
-                        [None, None] => unreachable!("an entity span is present on a side"),
-                    })
-                }
-                _ => None,
-            };
-            ((incidence, electron_count), edge.index())
-        })
+        .map(|(edge, _)| (incidence_color(span, incidence_graph, edge), edge.index()))
         .collect();
     let mut incidences = vec![0; incidence_graph.graph().edge_count()];
     rank_colors(incidence_colors, next, &mut incidences);
@@ -400,6 +423,81 @@ fn initial_colors(
     Ok(InitialColors {
         entities,
         incidences,
+    })
+}
+
+/// Whether an entity of `source` and an entity of `target` have the same color. Entities of two
+/// kinds do not.
+fn same_entity_color(
+    source: &ReactionSpan,
+    entity: Entity,
+    target: &ReactionSpan,
+    image: Entity,
+) -> bool {
+    match (entity, image) {
+        (Entity::Atom(entity), Entity::Atom(image)) => {
+            source.atoms()[entity.index()].as_color() == target.atoms()[image.index()].as_color()
+        }
+        (Entity::Bond(entity), Entity::Bond(image)) => {
+            source.bonds()[entity.index()].as_color() == target.bonds()[image.index()].as_color()
+        }
+        (Entity::DativeBond(entity), Entity::DativeBond(image)) => {
+            source.dative_bonds().attributes(entity).as_color()
+                == target.dative_bonds().attributes(image).as_color()
+        }
+        (Entity::AromaticSystem(entity), Entity::AromaticSystem(image)) => {
+            source.aromatic_systems().attributes(entity).as_color()
+                == target.aromatic_systems().attributes(image).as_color()
+        }
+        (Entity::MulticenterBond(entity), Entity::MulticenterBond(image)) => {
+            source.multicenter_bonds().attributes(entity).as_color()
+                == target.multicenter_bonds().attributes(image).as_color()
+        }
+        (Entity::NoncovalentBond(entity), Entity::NoncovalentBond(image)) => {
+            source.noncovalent_bonds().attributes(entity).as_color()
+                == target.noncovalent_bonds().attributes(image).as_color()
+        }
+        (Entity::StereoAtom(entity), Entity::StereoAtom(image)) => {
+            source.stereo_atoms().attributes(entity).as_color()
+                == target.stereo_atoms().attributes(image).as_color()
+        }
+        (Entity::StereoBond(entity), Entity::StereoBond(image)) => {
+            source.stereo_bonds().attributes(entity).as_color()
+                == target.stereo_bonds().attributes(image).as_color()
+        }
+        _ => false,
+    }
+}
+
+/// Whether the color integers of two normalized spans stand for the same colors, each equally
+/// often. The integers are those of `initial_colors` at one level.
+fn same_colors(
+    source: &ReactionSpan,
+    source_incidence: &IncidenceGraph,
+    source_colors: &InitialColors,
+    target: &ReactionSpan,
+    target_incidence: &IncidenceGraph,
+    target_colors: &InitialColors,
+) -> bool {
+    let Some(entities) = color_representatives(&source_colors.entities, &target_colors.entities)
+    else {
+        return false;
+    };
+    let Some(incidences) =
+        color_representatives(&source_colors.incidences, &target_colors.incidences)
+    else {
+        return false;
+    };
+    entities.into_iter().all(|(entity, image)| {
+        same_entity_color(
+            source,
+            source_incidence.entity(NodeId(entity as u32)),
+            target,
+            target_incidence.entity(NodeId(image as u32)),
+        )
+    }) && incidences.into_iter().all(|(edge, image)| {
+        incidence_color(source, source_incidence, EdgeId(edge as u32))
+            == incidence_color(target, target_incidence, EdgeId(image as u32))
     })
 }
 
@@ -948,6 +1046,116 @@ impl ReactionSpan {
         let canonical = normalized.remap(&remapping).reframe()?;
         Ok((canonical, remapping))
     }
+
+    /// Canonical equality at `level` of two spans that both select `level` and have equal entity
+    /// counts.
+    ///
+    /// The colors of the two spans, then their refined cells, decide unequal pairs. A remapping
+    /// that passes the check of `level` decides equal ones.
+    fn canonical_eq_at(
+        &self,
+        other: &Self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> bool {
+        let (source, target) = match (self.clone().normalize(), other.clone().normalize()) {
+            (Ok(source), Ok(target)) => (source, target),
+            (Err(_), Err(_)) => return self.framed_eq(other),
+            _ => return false,
+        };
+        let incidence_level = match level {
+            DescriptionLevel::Topology => IncidenceLevel::Topology,
+            DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+            DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+        };
+        let source_incidence = source.incidence_graph(incidence_level);
+        let target_incidence = target.incidence_graph(incidence_level);
+        let (source_colors, target_colors) = match (
+            initial_colors(&source, &source_incidence, level),
+            initial_colors(&target, &target_incidence, level),
+        ) {
+            (Ok(source_colors), Ok(target_colors)) => (source_colors, target_colors),
+            (Err(_), Err(_)) => return self.framed_eq(other),
+            _ => return false,
+        };
+        if !same_colors(
+            &source,
+            &source_incidence,
+            &source_colors,
+            &target,
+            &target_incidence,
+            &target_colors,
+        ) {
+            return false;
+        }
+
+        let search_input = |span: &ReactionSpan, incidence_graph, colors: &InitialColors| {
+            if level == DescriptionLevel::Topology {
+                let TopologySearchInput {
+                    adapter,
+                    initial_partition,
+                } = topology_search_input(span, incidence_graph, &colors.entities);
+                (adapter, initial_partition)
+            } else {
+                let adapter = AutomorphismAdapter::new(incidence_graph, colors);
+                let partition = OrderedPartition::from_descriptors(&adapter.colors);
+                (adapter, partition)
+            }
+        };
+        let (source_adapter, source_partition) =
+            search_input(&source, &source_incidence, &source_colors);
+        let (target_adapter, target_partition) =
+            search_input(&target, &target_incidence, &target_colors);
+        let check = |images: &[NodeId]| {
+            remapping_preserves_incidences(&source_adapter, &target_adapter, images)
+                && match level {
+                    DescriptionLevel::Topology | DescriptionLevel::Constitution => true,
+                    DescriptionLevel::Structure => {
+                        remapping_preserves_stereo(&source, &target, &source_incidence, images)
+                    }
+                    DescriptionLevel::Full => source.framed_eq_under(
+                        &target,
+                        &remapping_from_generator(&source, &source_incidence, images),
+                    ),
+                }
+        };
+        match level {
+            DescriptionLevel::Topology | DescriptionLevel::Constitution => remapping_exists(
+                &source_adapter,
+                source_partition,
+                &target_adapter,
+                target_partition,
+                context.automorphism_algorithm,
+                &check,
+                false,
+                &|_: &mut Vec<Vec<NodeId>>| {},
+            ),
+            DescriptionLevel::Structure => remapping_exists(
+                &source_adapter,
+                source_partition,
+                &target_adapter,
+                target_partition,
+                context.automorphism_algorithm,
+                &check,
+                true,
+                &|generators: &mut Vec<Vec<NodeId>>| {
+                    retain_stereo_preserving_generators(&target, &target_incidence, generators);
+                },
+            ),
+            DescriptionLevel::Full => remapping_exists(
+                &source_adapter,
+                source_partition,
+                &target_adapter,
+                target_partition,
+                context.automorphism_algorithm,
+                &check,
+                true,
+                &|generators: &mut Vec<Vec<NodeId>>| {
+                    retain_preserving_generators(&target, &target_incidence, generators);
+                },
+            ),
+        }
+    }
 }
 
 impl Canonicalize for ReactionSpan {
@@ -974,8 +1182,15 @@ impl Canonicalize for ReactionSpan {
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
+        if self.entity_counts() != other.entity_counts() {
+            return false;
+        }
         if self == other {
             return true;
+        }
+        let level = reaction_span_canonicalize_level(self);
+        if level == reaction_span_canonicalize_level(other) {
+            return self.canonical_eq_at(other, level, context);
         }
         match (
             self.clone().canonicalize(context),
@@ -985,7 +1200,7 @@ impl Canonicalize for ReactionSpan {
             (
                 Err(ReactionSpanCanonicalizeError::Contradiction(_)),
                 Err(ReactionSpanCanonicalizeError::Contradiction(_)),
-            ) => true,
+            ) => self.framed_eq(other),
             _ => false,
         }
     }
@@ -1033,15 +1248,9 @@ impl Canonicalize for Reaction {
         if self == other {
             return true;
         }
-        match (
-            self.clone().canonicalize(context),
-            other.clone().canonicalize(context),
-        ) {
-            (Ok(left), Ok(right)) => left == right,
-            (
-                Err(ReactionCanonicalizeError::Contradiction(_)),
-                Err(ReactionCanonicalizeError::Contradiction(_)),
-            ) => true,
+        match (self.to_reaction_span(), other.to_reaction_span()) {
+            (Ok(left), Ok(right)) => left.canonical_eq(&right, context),
+            (Err(_), Err(_)) => self.framed_eq(other),
             _ => false,
         }
     }

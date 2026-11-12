@@ -15,6 +15,7 @@ use crate::ir::{
     StereoAtomDelta, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoKind,
     StereoLigand, StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
+use crate::mol_dsl;
 
 #[rstest]
 #[case::topology(
@@ -279,6 +280,298 @@ fn test_remapping_from_generator(
     assert_eq!(
         remapping_from_generator(&span, &incidence_graph, &generator),
         expected
+    );
+}
+
+#[rstest]
+#[case::rotation(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 9],
+    true
+)]
+#[case::transposition(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 2, 1, 3, 4, 6, 5, 7, 8, 9],
+    false
+)]
+#[case::site_moved(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![1, 0, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+#[case::renumbered(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+                :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+                :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    true
+)]
+#[case::renumbered_inverted(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+                :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+                :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    false
+)]
+#[case::stereo_bond(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    true
+)]
+#[case::stereo_bond_inverted(
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    Reaction::new(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#
+        ),
+        Deltas::default(),
+    )
+    .to_reaction_span()
+    .unwrap(),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    false
+)]
+#[case::modified_configuration(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    true
+)]
+#[case::modified_configuration_reversed(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+fn test_remapping_preserves_stereo(
+    #[case] source: ReactionSpan,
+    #[case] target: ReactionSpan,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let incidence_graph = source.incidence_graph(IncidenceLevel::Full);
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_preserves_stereo(&source, &target, &incidence_graph, &images),
+        expected,
     );
 }
 
@@ -921,6 +1214,150 @@ fn initial_color_span() -> ReactionSpan {
 }
 
 #[rstest]
+#[case::bond_endpoint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![(
+            AtomId(0),
+            AtomId(1),
+            EntitySpan::Unchanged(BondForm::from_order(1)),
+        )],
+        ..Default::default()
+    }),
+    Entity::Bond(BondId(0)),
+    AtomId(0),
+    (Incidence::BondEndpoint, None)
+)]
+#[case::aromatic_atom_unchanged(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(EntitySpan::Unchanged(Some(2))))
+)]
+#[case::aromatic_atom_modified(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (
+        Incidence::AromaticAtom,
+        Some(EntitySpan::Modified {
+            lhs: Some(2),
+            rhs: Some(1),
+        })
+    )
+)]
+#[case::aromatic_atom_equal_sides(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(1),
+    (Incidence::AromaticAtom, Some(EntitySpan::Unchanged(Some(1))))
+)]
+#[case::aromatic_atom_added(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Added(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(EntitySpan::Added(Some(2))))
+)]
+#[case::aromatic_atom_removed(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Removed(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(EntitySpan::Removed(Some(2))))
+)]
+fn test_incidence_color(
+    #[case] span: ReactionSpan,
+    #[case] owner: Entity,
+    #[case] atom: AtomId,
+    #[case] expected: (Incidence, Option<EntitySpan<Option<i64>>>),
+) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Constitution);
+    let edge = incidence_graph
+        .graph()
+        .find_edge(
+            incidence_graph.node_of(owner),
+            incidence_graph.node_of(Entity::Atom(atom)),
+        )
+        .unwrap();
+    let (incidence, electron_count) = incidence_color(&span, &incidence_graph, edge);
+
+    assert_eq!((incidence.clone(), electron_count), expected);
+}
+
+#[rstest]
 #[case::atom_unchanged(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
 #[case::atom_added(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
 #[case::atom_removed(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
@@ -1152,6 +1589,256 @@ fn test_initial_colors_error(#[case] span: ReactionSpan, #[case] level: Descript
     assert_eq!(
         initial_colors(&span, &incidence_graph, level),
         Err(Contradiction)
+    );
+}
+
+#[rstest]
+#[case::atom_unchanged(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
+#[case::atom_added(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+#[case::atom_removed(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
+#[case::atom_added_removed(Entity::Atom(AtomId(2)), Entity::Atom(AtomId(3)), false)]
+#[case::atom_modified(Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)), true)]
+#[case::atom_modified_reversed(Entity::Atom(AtomId(4)), Entity::Atom(AtomId(6)), false)]
+#[case::bond_unchanged(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), true)]
+#[case::bond_added(Entity::Bond(BondId(0)), Entity::Bond(BondId(2)), false)]
+#[case::bond_removed(Entity::Bond(BondId(0)), Entity::Bond(BondId(3)), false)]
+#[case::bond_modified(Entity::Bond(BondId(4)), Entity::Bond(BondId(5)), true)]
+#[case::bond_modified_reversed(Entity::Bond(BondId(4)), Entity::Bond(BondId(6)), false)]
+#[case::dative_unchanged(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(1)),
+    true
+)]
+#[case::dative_added(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(2)),
+    false
+)]
+#[case::aromatic_modified_electrons(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    true
+)]
+#[case::aromatic_modified_charge(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(2)),
+    false
+)]
+#[case::aromatic_added(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(3)),
+    false
+)]
+#[case::multicenter_modified_electrons(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(1)),
+    true
+)]
+#[case::multicenter_removed(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(2)),
+    false
+)]
+#[case::noncovalent_unchanged(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(1)),
+    true
+)]
+#[case::noncovalent_modified(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(2)),
+    false
+)]
+#[case::stereo_atom_modified_configuration(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(1)),
+    true
+)]
+#[case::stereo_atom_added(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(2)),
+    false
+)]
+#[case::stereo_bond_modified_configuration(
+    Entity::StereoBond(StereoBondId(0)),
+    Entity::StereoBond(StereoBondId(1)),
+    true
+)]
+#[case::entity_kind(Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+fn test_same_entity_color(
+    initial_color_span: ReactionSpan,
+    #[case] entity: Entity,
+    #[case] image: Entity,
+    #[case] expected: bool,
+) {
+    let span = initial_color_span
+        .normalize()
+        .expect("fixed span normalizes");
+
+    assert_eq!(same_entity_color(&span, entity, &span, image), expected);
+}
+
+#[rstest]
+#[case::renumbered(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    true
+)]
+#[case::added_and_removed_exchanged(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::F)),
+            EntitySpan::Removed(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::different_element(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Added(AtomForm::from_element(Element::S)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::modified_and_unchanged(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Modified {
+                lhs: AtomForm::from_element(Element::C).with_charge(0_i64),
+                rhs: AtomForm::from_element(Element::C).with_charge(1_i64),
+            },
+        ],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(0_i64)),
+        ],
+        ..Default::default()
+    }),
+    false
+)]
+#[case::electron_count_change_reversed(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    false
+)]
+fn test_same_colors(
+    #[case] source: ReactionSpan,
+    #[case] target: ReactionSpan,
+    #[case] expected: bool,
+) {
+    let source = source.normalize().unwrap();
+    let target = target.normalize().unwrap();
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_colors =
+        initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap();
+    let target_colors =
+        initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap();
+
+    assert_eq!(
+        same_colors(
+            &source,
+            &source_incidence,
+            &source_colors,
+            &target,
+            &target_incidence,
+            &target_colors,
+        ),
+        expected,
     );
 }
 

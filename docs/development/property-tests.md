@@ -462,9 +462,11 @@ N(C(x)) = C(x)    R(C(x)) = C(x)
 State the equality appropriate to each equation; do not hide a frame or id quotient behind `==`.
 The relation ladder is `==` implies `normalized_eq`, which implies `framed_eq`, which implies
 `canonical_eq`. For satisfiable integrity-valid values, canonical equality is exactly framed
-equality under some remapping. Two intrinsic contradictions compare equal at each
-semantic quotient, while one contradiction and one satisfiable value do not. A transformation that
-must produce a value still returns its contradiction error rather than manufacturing a witness.
+equality under some remapping. An aggregate that fails at one stage is compared by the equality of
+the stage before, so two intrinsically contradictory aggregates are equal at a quotient only when
+they are equal at the previous one; one contradiction and one satisfiable value are not equal. A
+transformation that must produce a value still returns its contradiction error rather than
+manufacturing a witness.
 
 Run these properties over raw satisfiable, normalized, reframed, and canonical values, plus focused
 intrinsic-contradiction and incompatible-action cases. Cover all six overlay kinds and every

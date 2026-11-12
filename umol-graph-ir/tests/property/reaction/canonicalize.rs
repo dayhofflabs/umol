@@ -472,7 +472,8 @@ proptest! {
         prop_assert_eq!(reaction.canonicalize(&context()), Err(expected));
     }
 
-    /// `canonical_eq` agrees with equality of the canonical forms, with two contradictions equal.
+    /// `canonical_eq` agrees with equality of the canonical forms, and with `framed_eq` when both
+    /// canonicalizations fail.
     #[test]
     fn test_reaction_canonical_eq_contract(
         (left, right) in reaction_canonical_pair_strategy(),
@@ -483,14 +484,14 @@ proptest! {
             right.clone().canonicalize(&context),
         ) {
             (Ok(left), Ok(right)) => left == right,
-            (Err(_), Err(_)) => true,
+            (Err(_), Err(_)) => left.framed_eq(&right),
             _ => false,
         };
 
         prop_assert_eq!(left.canonical_eq(&right, &context), expected);
         match (left.canonical_hash(&context), right.canonical_hash(&context)) {
             (Ok(left), Ok(right)) => prop_assert_eq!(left == right, expected),
-            (Err(_), Err(_)) => prop_assert!(expected),
+            (Err(_), Err(_)) => {}
             _ => prop_assert!(!expected),
         }
     }
@@ -504,15 +505,18 @@ proptest! {
 
         prop_assert_ne!(&first, &second);
         prop_assert_ne!(&second, &third);
-        prop_assert!(first.normalized_eq(&second));
-        prop_assert!(second.normalized_eq(&third));
-        prop_assert!(first.normalized_eq(&third));
-        prop_assert!(first.framed_eq(&second));
-        prop_assert!(second.framed_eq(&third));
-        prop_assert!(first.framed_eq(&third));
-        prop_assert!(first.canonical_eq(&second, &context));
-        prop_assert!(second.canonical_eq(&third, &context));
-        prop_assert!(first.canonical_eq(&third, &context));
+        prop_assert!(first.normalized_eq(&first.clone()));
+        prop_assert!(!first.normalized_eq(&second));
+        prop_assert!(!second.normalized_eq(&third));
+        prop_assert!(!first.normalized_eq(&third));
+        prop_assert!(first.framed_eq(&first.clone()));
+        prop_assert!(!first.framed_eq(&second));
+        prop_assert!(!second.framed_eq(&third));
+        prop_assert!(!first.framed_eq(&third));
+        prop_assert!(first.canonical_eq(&first.clone(), &context));
+        prop_assert!(!first.canonical_eq(&second, &context));
+        prop_assert!(!second.canonical_eq(&third, &context));
+        prop_assert!(!first.canonical_eq(&third, &context));
         prop_assert_eq!(
             first.tracked_canonicalize(&context),
             Err(ReactionCanonicalizeError::Contradiction(Contradiction)),

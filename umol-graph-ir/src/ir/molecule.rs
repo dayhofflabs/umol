@@ -11,6 +11,7 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
+use strum::EnumCount;
 pub use transact::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
 use umol_graph_core::{
     Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,
@@ -270,7 +271,6 @@ impl Molecule {
     /// Under identity this is [`Reframe::framed_eq`]. Inverting the permutations reverses the
     /// comparison, and successive remappings compose. For molecules whose canonicalizations
     /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
-    /// Equality totalization for two intrinsic contradictions does not require such a witness.
     pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
         self.clone()
             .try_remap(remapping)
@@ -737,6 +737,20 @@ impl Molecule {
 
     pub fn is_empty(&self) -> bool {
         self.atoms.is_empty()
+    }
+
+    /// Number of entities of each kind, indexed by `EntityKind as usize`.
+    pub fn entity_counts(&self) -> [usize; EntityKind::COUNT] {
+        [
+            self.atoms.len(),
+            self.bonds.len(),
+            self.dative_bonds.count(),
+            self.aromatic_systems.count(),
+            self.multicenter_bonds.count(),
+            self.noncovalent_bonds.count(),
+            self.stereo_atoms.count(),
+            self.stereo_bonds.count(),
+        ]
     }
 
     /// True if the molecule-scope `Constraints` tree is non-empty.
@@ -2817,6 +2831,15 @@ impl Normalize for Molecule {
         *constraints = mem::take(constraints).normalize()?;
         Ok(self)
     }
+
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self.entity_counts() == other.entity_counts()
+            && (self == other
+                || matches!(
+                    (self.clone().normalize(), other.clone().normalize()),
+                    (Ok(left), Ok(right)) if left == right
+                ))
+    }
 }
 
 impl FrameTransport for Molecule {
@@ -2924,6 +2947,20 @@ impl Reframe for Molecule {
                 .normalize()?,
         );
         Ok(self)
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self.entity_counts() != other.entity_counts() {
+            return false;
+        }
+        if self == other {
+            return true;
+        }
+        match (self.clone().reframe(), other.clone().reframe()) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => self.normalized_eq(other),
+            _ => false,
+        }
     }
 }
 

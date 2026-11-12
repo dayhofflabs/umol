@@ -101,7 +101,7 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
 /// participant-frame selection, and canonicalization additionally selects entity ids. It preserves
 /// the represented aggregate, transports every reference and position-sensitive value, and
 /// normalizes carried forms in the selected frame. Construction of the canonical form is fallible;
-/// canonical equality totalizes those failures according to the aggregate's semantic contract.
+/// canonical equality is total and compares two values that both fail by framed equality.
 ///
 /// # Semantic properties
 ///
@@ -109,8 +109,8 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
 ///
 /// - successful complete canonicalization is exactly idempotent and invariant under valid dense
 ///   entity remapping;
-/// - `canonical_eq` is reflexive, symmetric, and transitive under its documented failure
-///   totalization;
+/// - `canonical_eq` is reflexive, symmetric, and transitive, including on values whose
+///   canonicalization fails;
 /// - successful canonical hashes are invariant under valid dense entity remapping, and canonical
 ///   equality implies equal canonical hashes when both hash operations succeed.
 ///
@@ -169,8 +169,9 @@ pub trait Canonicalize: Reframe {
 
     /// Compare complete canonical forms.
     ///
-    /// Structural identity short-circuits the operation. Otherwise, two intrinsic contradictions
-    /// compare equal.
+    /// Structural identity short-circuits the operation. A value whose canonicalization fails is
+    /// unequal to one whose canonicalization succeeds, and two values whose canonicalizations
+    /// both fail are compared by [`Reframe::framed_eq`].
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool;
 }
 
@@ -595,6 +596,79 @@ impl OrderedPartition {
     }
 }
 
+/// Whether two partitions agree in the number, the size, and the color of their cells, position by
+/// position. Every cell holds nodes of one color.
+fn same_cells(
+    source: &AutomorphismAdapter,
+    source_partition: &OrderedPartition,
+    target: &AutomorphismAdapter,
+    target_partition: &OrderedPartition,
+) -> bool {
+    source_partition.cells.len() == target_partition.cells.len()
+        && source_partition
+            .cells
+            .iter()
+            .zip(&target_partition.cells)
+            .all(|(source_cell, target_cell)| {
+                source_cell.len() == target_cell.len()
+                    && source.color(source_cell[0]) == target.color(target_cell[0])
+            })
+}
+
+/// Whether the remapping `images` carries every entity node of `source` to a node of `target` with
+/// the same color and the same incidences.
+///
+/// `images` holds the image of each entity node of `source`, and `target` has as many entity nodes.
+/// Two entity nodes are incident when an edge joins them or a subdivision node lies between them.
+/// The color of an incidence is the color of its subdivision node; an edge has none.
+fn remapping_preserves_incidences(
+    source: &AutomorphismAdapter,
+    target: &AutomorphismAdapter,
+    images: &[NodeId],
+) -> bool {
+    fn incidences(
+        adapter: &AutomorphismAdapter,
+        node: NodeId,
+        image: impl Fn(NodeId) -> NodeId,
+        incidences: &mut Vec<(NodeId, Option<AutomorphismColor>)>,
+    ) {
+        incidences.clear();
+        for neighbor in adapter.graph().neighbors(node) {
+            if neighbor.node.index() < adapter.source_node_count {
+                incidences.push((image(neighbor.node), None));
+            } else {
+                let other = adapter
+                    .graph()
+                    .neighbors(neighbor.node)
+                    .iter()
+                    .map(|endpoint| endpoint.node)
+                    .find(|&endpoint| endpoint != node)
+                    .expect("a subdivision node joins two entity nodes");
+                incidences.push((image(other), Some(adapter.color(neighbor.node))));
+            }
+        }
+        incidences.sort_unstable();
+    }
+
+    let mut source_incidences = Vec::new();
+    let mut target_incidences = Vec::new();
+    (0..source.source_node_count).all(|index| {
+        let node = NodeId(index as u32);
+        let image = images[index];
+        if source.color(node) != target.color(image) {
+            return false;
+        }
+        incidences(
+            source,
+            node,
+            |neighbor| images[neighbor.index()],
+            &mut source_incidences,
+        );
+        incidences(target, image, |neighbor| neighbor, &mut target_incidences);
+        source_incidences == target_incidences
+    })
+}
+
 #[cfg(test)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct CanonicalSearchStats {
@@ -838,6 +912,96 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     }
 }
 
+/// Whether a remapping from `source` to `target` passes `check`.
+///
+/// Both partitions are refined, and cells that differ give false. When every entity cell then
+/// holds one node, the cells give the one remapping, and `check` decides. Otherwise the remapping
+/// along the path of first nodes is tried, and if it fails, `target` is searched and every leaf is
+/// paired with the end of that path.
+///
+/// `check` receives the image of each entity node of `source`. It must give the same answer for
+/// two remappings that differ by an automorphism of `target` that the search keeps, which
+/// `filter_generators` restricts when `apply_generator_filter` is set. The colors of the two
+/// adapters must stand for the same colors.
+#[allow(clippy::too_many_arguments)]
+fn remapping_exists<Check, FilterGenerators>(
+    source: &AutomorphismAdapter,
+    source_partition: OrderedPartition,
+    target: &AutomorphismAdapter,
+    target_partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    check: &Check,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> bool
+where
+    Check: Fn(&[NodeId]) -> bool,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    let entity_count = source.source_node_count;
+    let source_root = source_partition.refine(source.graph());
+    let target_root = target_partition.refine(target.graph());
+    if !same_cells(source, &source_root, target, &target_root) {
+        return false;
+    }
+    let images = |source_order: &[NodeId], target_order: &[NodeId]| {
+        let mut images = vec![NodeId(0); entity_count];
+        for (source_node, target_node) in source_order.iter().zip(target_order) {
+            images[source_node.index()] = *target_node;
+        }
+        images
+    };
+    if source_root
+        .first_non_singleton_entity_cell(entity_count)
+        .is_none()
+    {
+        return check(&images(
+            &source_root.entity_order(entity_count),
+            &target_root.entity_order(entity_count),
+        ));
+    }
+
+    let mut source_path = source_root;
+    let mut target_path = Some(target_root.clone());
+    while let Some(cell_index) = source_path.first_non_singleton_entity_cell(entity_count) {
+        target_path = target_path.map(|path| {
+            let node = path.cells[cell_index][0];
+            path.individualize(cell_index, node).refine(target.graph())
+        });
+        let node = source_path.cells[cell_index][0];
+        source_path = source_path
+            .individualize(cell_index, node)
+            .refine(source.graph());
+        if target_path
+            .as_ref()
+            .is_some_and(|path| !same_cells(source, &source_path, target, path))
+        {
+            target_path = None;
+        }
+    }
+    let source_order = source_path.entity_order(entity_count);
+    if target_path
+        .is_some_and(|path| check(&images(&source_order, &path.entity_order(entity_count))))
+    {
+        return true;
+    }
+
+    let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
+        key: !check(&images(&source_order, order)),
+        entity_order: Vec::new(),
+    };
+    !canonical_search_impl(
+        target,
+        target_root,
+        algorithm,
+        &leaf_candidate,
+        apply_generator_filter,
+        filter_generators,
+    )
+    .candidate
+    .key
+}
+
 /// A leaf key that is built when it is first compared or read.
 struct DeferredKey<'a, K, Build> {
     order: Vec<NodeId>,
@@ -916,30 +1080,46 @@ fn rank_colors<T: Ord>(mut colors: Vec<(T, usize)>, first: u32, ranks: &mut [u32
     }
 }
 
-fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
-    [
-        molecule.atoms().count(),
-        molecule.bonds().count(),
-        molecule.dative_bonds().count(),
-        molecule.aromatic_systems().count(),
-        molecule.multicenter_bonds().count(),
-        molecule.noncovalent_bonds().count(),
-        molecule.stereo_atoms().count(),
-        molecule.stereo_bonds().count(),
-    ]
-}
-
-fn reaction_span_counts(span: &ReactionSpan) -> [usize; 8] {
-    [
-        span.atoms().len(),
-        span.bonds().len(),
-        span.dative_bonds().count(),
-        span.aromatic_systems().count(),
-        span.multicenter_bonds().count(),
-        span.noncovalent_bonds().count(),
-        span.stereo_atoms().count(),
-        span.stereo_bonds().count(),
-    ]
+/// One position per color integer in each of two lists, in the order of the integers: the first
+/// position that holds the integer. `None` when the lists do not hold each integer equally often.
+fn color_representatives(source: &[u32], target: &[u32]) -> Option<Vec<(usize, usize)>> {
+    if source.len() != target.len() {
+        return None;
+    }
+    let (Some(&first), Some(&last)) = (source.iter().min(), source.iter().max()) else {
+        return Some(Vec::new());
+    };
+    let integer_count = (last - first) as usize + 1;
+    let mut counts = vec![0_i64; integer_count];
+    let mut source_positions = vec![usize::MAX; integer_count];
+    let mut target_positions = vec![usize::MAX; integer_count];
+    for (position, &color) in source.iter().enumerate() {
+        let index = (color - first) as usize;
+        counts[index] += 1;
+        if source_positions[index] == usize::MAX {
+            source_positions[index] = position;
+        }
+    }
+    for (position, &color) in target.iter().enumerate() {
+        if color < first || color > last {
+            return None;
+        }
+        let index = (color - first) as usize;
+        counts[index] -= 1;
+        if target_positions[index] == usize::MAX {
+            target_positions[index] = position;
+        }
+    }
+    if counts.iter().any(|&count| count != 0) {
+        return None;
+    }
+    Some(
+        source_positions
+            .into_iter()
+            .zip(target_positions)
+            .filter(|&(source_position, _)| source_position != usize::MAX)
+            .collect(),
+    )
 }
 
 fn molecule_remapping(images: &[Vec<usize>; 8]) -> MoleculeRemapping {

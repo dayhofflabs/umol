@@ -155,9 +155,11 @@ pub trait Normalize: Sized + Clone + PartialEq {
     /// By-value normal form (the folding lives here). Idempotent.
     fn normalize(self) -> Result<Self, Contradiction>;
 
-    /// Equal normal forms. Two unsatisfiable values count as equal.
-    /// Structural equality short-circuits normalization; otherwise the normal forms
-    /// with the derived structural `==` (on `Result<Self, _>`) — no recursion.
+    /// Equal normal forms. Structural equality short-circuits normalization; otherwise the normal
+    /// forms are compared with the derived structural `==` (on `Result<Self, _>`) — no recursion.
+    ///
+    /// By default two unsatisfiable values count as equal. Molecule, ReactionSpan, and Reaction
+    /// override this: there an unsatisfiable value is equal only to a structurally equal value.
     fn normalized_eq(&self, other: &Self) -> bool {
         self == other || self.clone().normalize() == other.clone().normalize()
     }
@@ -233,8 +235,9 @@ pub(crate) trait AsColor {
 /// receiver, `reframe` agrees with the value returned by `tracked_reframe`; transporting the
 /// normalized input by the returned action and normalizing again reproduces that value. Reframing
 /// is idempotent, and the representative action of a reframed value is identity. Normalized
-/// equality implies framed equality. As with normalized equality, framed equality counts two
-/// intrinsically contradictory values as equal.
+/// equality implies framed equality. By default, as with normalized equality, framed equality
+/// counts two intrinsically contradictory values as equal; Molecule, ReactionSpan, and Reaction
+/// compare two values that both fail to reframe by normalized equality.
 pub trait Reframe: Normalize + FrameTransport {
     /// Derive the complete participant-frame action taking the receiver's stored frames to their
     /// representatives. The action is derived before normalization and is total for every
@@ -259,8 +262,11 @@ pub trait Reframe: Normalize + FrameTransport {
     /// materialize a complete action that the caller did not request.
     fn reframe(self) -> Result<Self, Contradiction>;
 
-    /// Equality modulo the stored frame: the reframed values agree. Two unsatisfiable receivers
-    /// count as equal, as they do under [`Normalize::normalized_eq`].
+    /// Equality modulo the stored frame: the reframed values agree.
+    ///
+    /// By default two unsatisfiable receivers count as equal, as they do under
+    /// [`Normalize::normalized_eq`]. Molecule, ReactionSpan, and Reaction override this: two
+    /// receivers that both fail to reframe are compared by [`Normalize::normalized_eq`].
     fn framed_eq(&self, other: &Self) -> bool {
         if self == other {
             return true;

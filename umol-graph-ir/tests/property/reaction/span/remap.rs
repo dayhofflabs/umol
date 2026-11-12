@@ -2,13 +2,15 @@
 //!
 //! Generated spans include direct span entries and materializable reactions. Two independently
 //! generated total correspondences exercise exact identity, inverse, composition, and preservation
-//! of both compact side projections.
+//! of both compact side projections. The same domain exercises `framed_eq_under`: a span is equal
+//! to its remapped copy under the remapping, the relation is `framed_eq` under identity, inverting
+//! the remapping reverses it, and successive remappings compose.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{Correspondence, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
-    AtomId, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeRemapping, ReactionSpan,
+    AtomId, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeRemapping, ReactionSpan, Reframe,
 };
 
 use super::reaction_span_scenario_strategy;
@@ -107,6 +109,15 @@ proptest! {
         ))),
         ..Config::default()
     })]
+
+    #[test]
+    fn test_reaction_span_remap_framed_eq_under(
+        scenario in reaction_span_scenario_strategy(),
+    ) {
+        let remapped = scenario.span.clone().remap(&scenario.first);
+
+        prop_assert!(scenario.span.framed_eq_under(&remapped, &scenario.first));
+    }
 
     #[test]
     fn test_reaction_span_remap_identity(
@@ -341,5 +352,77 @@ proptest! {
             );
             prop_assert_eq!(source.remap(&remapping), target);
         }
+    }
+
+    #[test]
+    fn test_reaction_span_framed_eq_under_identity(
+        scenario in reaction_span_scenario_strategy(),
+    ) {
+        let counts = scenario.span.entity_counts();
+        let identity = MoleculeRemapping::new(
+            GraphRemapping::identity(counts[0], counts[1]),
+            Remapping::identity(counts[2]),
+            Remapping::identity(counts[3]),
+            Remapping::identity(counts[4]),
+            Remapping::identity(counts[5]),
+            Remapping::identity(counts[6]),
+            Remapping::identity(counts[7]),
+        );
+        let other = scenario.span.clone().remap(&scenario.first);
+
+        prop_assert_eq!(
+            scenario.span.framed_eq_under(&other, &identity),
+            scenario.span.framed_eq(&other),
+        );
+    }
+
+    #[test]
+    fn test_reaction_span_framed_eq_under_inverse(
+        scenario in reaction_span_scenario_strategy(),
+    ) {
+        let inverse = MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(inverse_images(scenario.first.graph().nodes())).unwrap(),
+                Remapping::new(inverse_images(scenario.first.graph().edges())).unwrap(),
+            ),
+            Remapping::new(inverse_images(scenario.first.dative_bonds())).unwrap(),
+            Remapping::new(inverse_images(scenario.first.aromatic_systems())).unwrap(),
+            Remapping::new(inverse_images(scenario.first.multicenter_bonds())).unwrap(),
+            Remapping::new(inverse_images(scenario.first.noncovalent_bonds())).unwrap(),
+            Remapping::new(inverse_images(scenario.first.stereo_atoms())).unwrap(),
+            Remapping::new(inverse_images(scenario.first.stereo_bonds())).unwrap(),
+        );
+        let remapped = scenario.span.clone().remap(&scenario.first);
+        let other = scenario.span.clone().remap(&scenario.second);
+
+        prop_assert!(remapped.framed_eq_under(&scenario.span, &inverse));
+        prop_assert_eq!(
+            scenario.span.framed_eq_under(&other, &scenario.first),
+            other.framed_eq_under(&scenario.span, &inverse),
+        );
+    }
+
+    #[test]
+    fn test_reaction_span_framed_eq_under_composition(
+        scenario in reaction_span_scenario_strategy(),
+    ) {
+        let second = scenario.span.clone().remap(&scenario.first);
+        let third = second.clone().remap(&scenario.second);
+        let composed = MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(composed_images(scenario.first.graph().nodes(), scenario.second.graph().nodes())).unwrap(),
+                Remapping::new(composed_images(scenario.first.graph().edges(), scenario.second.graph().edges())).unwrap(),
+            ),
+            Remapping::new(composed_images(scenario.first.dative_bonds(), scenario.second.dative_bonds())).unwrap(),
+            Remapping::new(composed_images(scenario.first.aromatic_systems(), scenario.second.aromatic_systems())).unwrap(),
+            Remapping::new(composed_images(scenario.first.multicenter_bonds(), scenario.second.multicenter_bonds())).unwrap(),
+            Remapping::new(composed_images(scenario.first.noncovalent_bonds(), scenario.second.noncovalent_bonds())).unwrap(),
+            Remapping::new(composed_images(scenario.first.stereo_atoms(), scenario.second.stereo_atoms())).unwrap(),
+            Remapping::new(composed_images(scenario.first.stereo_bonds(), scenario.second.stereo_bonds())).unwrap(),
+        );
+
+        prop_assert!(scenario.span.framed_eq_under(&second, &scenario.first));
+        prop_assert!(second.framed_eq_under(&third, &scenario.second));
+        prop_assert!(scenario.span.framed_eq_under(&third, &composed));
     }
 }

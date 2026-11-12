@@ -20,6 +20,7 @@ use crate::ir::{
     StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
+use crate::mol_dsl;
 
 #[fixture]
 fn symmetric_stereo_canonicalization_molecule() -> Molecule {
@@ -255,7 +256,8 @@ fn test_canonicalize_structure_para_stereo(
     canonicalize_context: CanonicalizeContext,
 ) {
     let atom_images = [1, 0, 6, 8, 7, 9, 2, 4, 3, 5, 13, 11, 10, 12].map(AtomId);
-    let mut images = molecule_counts(&para_stereo_canonicalization_molecule)
+    let mut images = para_stereo_canonicalization_molecule
+        .entity_counts()
         .map(|count| (0..count).collect::<Vec<_>>());
     images[0] = atom_images.iter().map(|id| id.index()).collect();
     let remapping = molecule_remapping(&images);
@@ -601,6 +603,85 @@ fn test_canonicalize_structure_stereo_frame(
 }
 
 #[rstest]
+#[case::bond_endpoint(
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+    Entity::Bond(BondId(0)),
+    AtomId(0),
+    (Incidence::BondEndpoint, None)
+)]
+#[case::dative_donor(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    Entity::DativeBond(DativeBondId(0)),
+    AtomId(0),
+    (Incidence::DativeDonor, None)
+)]
+#[case::dative_acceptor(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    Entity::DativeBond(DativeBondId(0)),
+    AtomId(1),
+    (Incidence::DativeAcceptor, None)
+)]
+#[case::aromatic_atom_oxygen(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(2))
+)]
+#[case::aromatic_atom_carbon(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(1),
+    (Incidence::AromaticAtom, Some(1))
+)]
+#[case::aromatic_atom_without_counts(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+            AromaticSystemForm::default(),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, None)
+)]
+#[case::multicenter_atom(
+    mol_dsl!(
+        r#"{:atoms ["B" "B" "H"] :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]"}]}"#
+    ),
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    AtomId(1),
+    (Incidence::MulticenterAtom, Some(0))
+)]
+fn test_incidence_color(
+    #[case] molecule: Molecule,
+    #[case] owner: Entity,
+    #[case] atom: AtomId,
+    #[case] expected: (Incidence, Option<i64>),
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+    let edge = incidence_graph
+        .graph()
+        .find_edge(
+            incidence_graph.node_of(owner),
+            incidence_graph.node_of(Entity::Atom(atom)),
+        )
+        .unwrap();
+    let (incidence, electron_count) = incidence_color(&molecule, &incidence_graph, edge);
+
+    assert_eq!((incidence.clone(), electron_count), expected);
+}
+
+#[rstest]
 #[case::atom_constraint(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), false)]
 #[case::atom_element(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
 #[case::atom_charge(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
@@ -761,6 +842,149 @@ fn test_initial_colors_error(#[case] molecule: Molecule, #[case] level: Descript
     assert_eq!(
         initial_colors(&molecule, &incidence_graph, level),
         Err(Contradiction)
+    );
+}
+
+#[rstest]
+#[case::atom_constraint(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), false)]
+#[case::atom_element(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+#[case::atom_charge(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
+#[case::normalized_bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), true)]
+#[case::bond_order(Entity::Bond(BondId(0)), Entity::Bond(BondId(2)), false)]
+#[case::normalized_dative(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(1)),
+    true
+)]
+#[case::dative_order(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(2)),
+    false
+)]
+#[case::aromatic_electrons(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    true
+)]
+#[case::aromatic_charge(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(2)),
+    false
+)]
+#[case::multicenter_electrons(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(1)),
+    true
+)]
+#[case::noncovalent_kind_equal(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(1)),
+    true
+)]
+#[case::noncovalent_kind_distinct(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(2)),
+    false
+)]
+#[case::stereo_atom_configuration(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(1)),
+    true
+)]
+#[case::stereo_atom_kind(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(2)),
+    false
+)]
+#[case::stereo_bond_configuration(
+    Entity::StereoBond(StereoBondId(0)),
+    Entity::StereoBond(StereoBondId(1)),
+    true
+)]
+#[case::entity_kind(Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+fn test_same_entity_color(
+    initial_color_molecule: Molecule,
+    #[case] entity: Entity,
+    #[case] image: Entity,
+    #[case] expected: bool,
+) {
+    let molecule = initial_color_molecule
+        .normalize()
+        .expect("fixed molecule normalizes");
+
+    assert_eq!(
+        same_entity_color(&molecule, entity, &molecule, image),
+        expected
+    );
+}
+
+#[rstest]
+#[case::renumbered(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"] [4 0 "1"]]}"#),
+    true
+)]
+#[case::different_element(
+    mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    false
+)]
+#[case::different_element_counts(
+    mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    false
+)]
+#[case::different_bond_order(
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+    false
+)]
+#[case::electron_counts_moved(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,2,1,1,1]"}]}"#
+    ),
+    true
+)]
+#[case::different_electron_counts(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]}"#
+    ),
+    false
+)]
+fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] expected: bool) {
+    let source = source.normalize().unwrap();
+    let target = target.normalize().unwrap();
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_colors =
+        initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap();
+    let target_colors =
+        initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap();
+
+    assert_eq!(
+        same_colors(
+            &source,
+            &source_incidence,
+            &source_colors,
+            &target,
+            &target_incidence,
+            &target_colors,
+        ),
+        expected,
     );
 }
 
@@ -1248,6 +1472,120 @@ fn test_automorphism_adapter_automorphisms() {
 }
 
 #[rstest]
+#[case::rotation(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 9],
+    true
+)]
+#[case::transposition(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "F" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    vec![0, 2, 1, 3, 4, 6, 5, 7, 8, 9],
+    false
+)]
+#[case::site_moved(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    vec![1, 0, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+#[case::renumbered(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
+    ),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    true
+)]
+#[case::renumbered_inverted(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
+    ),
+    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    false
+)]
+#[case::stereo_bond(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    true
+)]
+#[case::stereo_bond_inverted(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    false
+)]
+fn test_remapping_preserves_stereo(
+    #[case] source: Molecule,
+    #[case] target: Molecule,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let incidence_graph = source.incidence_graph(IncidenceLevel::Full);
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_preserves_stereo(&source, &target, &incidence_graph, &images),
+        expected,
+    );
+}
+
+#[rstest]
 #[case::feature_free(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -1698,6 +2036,127 @@ fn test_ordered_partition_refine_exhaustive_domain(
 }
 
 #[rstest]
+#[case::renumbered(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"] [4 0 "1"]]}"#),
+    true
+)]
+#[case::different_constitution(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    false
+)]
+#[case::different_size(
+    mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}"#),
+    false
+)]
+fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] expected: bool) {
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_adapter = AutomorphismAdapter::new(
+        &source_incidence,
+        &initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let target_adapter = AutomorphismAdapter::new(
+        &target_incidence,
+        &initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let source_partition =
+        OrderedPartition::from_descriptors(&source_adapter.colors).refine(source_adapter.graph());
+    let target_partition =
+        OrderedPartition::from_descriptors(&target_adapter.colors).refine(target_adapter.graph());
+
+    assert_eq!(
+        same_cells(
+            &source_adapter,
+            &source_partition,
+            &target_adapter,
+            &target_partition
+        ),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::renumbered(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    mol_dsl!(r#"{:atoms ["B" "N"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#),
+    vec![1, 0, 2],
+    true
+)]
+#[case::donor_and_acceptor_exchanged(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#),
+    vec![0, 1, 2],
+    false
+)]
+#[case::electron_counts(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    true
+)]
+#[case::electron_counts_moved(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,2,1,1,1]"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    false
+)]
+#[case::bond_moved(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 2 "1"] [2 1 "1"]]}"#),
+    vec![0, 1, 2, 3, 4],
+    false
+)]
+fn test_remapping_preserves_incidences(
+    #[case] source: Molecule,
+    #[case] target: Molecule,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_adapter = AutomorphismAdapter::new(
+        &source_incidence,
+        &initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let target_adapter = AutomorphismAdapter::new(
+        &target_incidence,
+        &initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap(),
+    );
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_preserves_incidences(&source_adapter, &target_adapter, &images),
+        expected,
+    );
+    assert_eq!(
+        source.framed_eq_under(
+            &target,
+            &remapping_from_generator(&source, &source_incidence, &images),
+        ),
+        expected,
+    );
+}
+
+#[rstest]
 fn test_canonical_search_color_labels() {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -1750,6 +2209,90 @@ fn test_canonical_search_color_labels() {
     );
 
     assert_eq!(actual.candidate.key, expected.candidate.key);
+}
+
+#[rstest]
+#[case::cells_differ(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    false
+)]
+#[case::single_node_cells(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["N" "O" "C"] :bonds [[2 1 "1"] [1 0 "1"]]}"#),
+    true
+)]
+#[case::single_node_cells_check_fails(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 2 "1"] [2 1 "1"]]}"#),
+    false
+)]
+#[case::first_path(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 2 "1"] [2 4 "1"] [4 1 "1"] [1 3 "1"] [3 5 "1"] [5 0 "1"]]}"#),
+    true
+)]
+#[case::search_finds_remapping(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 0 "1"] [0 4 "1"] [1 3 "1"] [2 6 "1"] [5 7 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[7 6 "1"] [6 5 "1"] [5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"]
+                    [1 0 "1"] [0 7 "1"] [7 3 "1"] [6 4 "1"] [5 1 "1"] [2 0 "1"]]}"#
+    ),
+    true
+)]
+#[case::search_finds_none(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 4 "1"] [0 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 0 "1"] [0 4 "1"] [1 3 "1"] [2 6 "1"] [5 7 "1"]]}"#
+    ),
+    false
+)]
+fn test_remapping_exists(
+    #[case] source: Molecule,
+    #[case] target: Molecule,
+    #[case] expected: bool,
+) {
+    let source_incidence = source.incidence_graph(IncidenceLevel::Topology);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Topology);
+    let source_colors =
+        initial_colors(&source, &source_incidence, DescriptionLevel::Topology).unwrap();
+    let target_colors =
+        initial_colors(&target, &target_incidence, DescriptionLevel::Topology).unwrap();
+    let TopologySearchInput {
+        adapter: source_adapter,
+        initial_partition: source_partition,
+    } = topology_search_input(&source, &source_incidence, &source_colors.entities);
+    let TopologySearchInput {
+        adapter: target_adapter,
+        initial_partition: target_partition,
+    } = topology_search_input(&target, &target_incidence, &target_colors.entities);
+
+    assert_eq!(
+        remapping_exists(
+            &source_adapter,
+            source_partition,
+            &target_adapter,
+            target_partition,
+            AutomorphismAlgorithm::Nauty,
+            &|images: &[NodeId]| {
+                remapping_preserves_incidences(&source_adapter, &target_adapter, images)
+            },
+            false,
+            &|_: &mut Vec<Vec<NodeId>>| {},
+        ),
+        expected,
+    );
 }
 
 #[rstest]
@@ -2002,7 +2545,9 @@ fn test_canonicalize_constitution_entity_kind(canonicalize_context: Canonicalize
             .into_iter()
             .enumerate()
         {
-            let mut images = molecule_counts(&molecule).map(|count| (0..count).collect::<Vec<_>>());
+            let mut images = molecule
+                .entity_counts()
+                .map(|count| (0..count).collect::<Vec<_>>());
             images[0] = atom_images;
             if index % 2 == 1 {
                 for entity_kind_images in &mut images[1..6] {

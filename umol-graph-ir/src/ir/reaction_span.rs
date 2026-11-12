@@ -13,6 +13,7 @@ use std::hash::Hash;
 use std::mem;
 use std::sync::Arc;
 
+use strum::EnumCount;
 use thiserror::Error;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCorrespondence,
@@ -405,6 +406,20 @@ impl ReactionSpan {
             stereo_bonds,
             constraints: Arc::new(constraints),
         })
+    }
+
+    /// Complete framed equality under an entity-id remapping from `self` to `other`.
+    ///
+    /// Returns `false` when a component length differs from `self`'s union-table count or the
+    /// remapped span lies outside `other`'s framed-equality class.
+    ///
+    /// Under identity this is [`Reframe::framed_eq`]. Inverting the permutations reverses the
+    /// comparison, and successive remappings compose. For spans whose canonicalizations
+    /// succeed, `canonical_eq` holds exactly when some remapping makes this comparison true.
+    pub fn framed_eq_under(&self, other: &Self, remapping: &MoleculeRemapping) -> bool {
+        self.clone()
+            .try_remap(remapping)
+            .is_some_and(|remapped| remapped.framed_eq(other))
     }
 }
 
@@ -1191,6 +1206,20 @@ impl ReactionSpan {
         &self.constraints
     }
 
+    /// Number of entities of each kind in the union frame, indexed by `EntityKind as usize`.
+    pub fn entity_counts(&self) -> [usize; EntityKind::COUNT] {
+        [
+            self.atoms.len(),
+            self.bonds.len(),
+            self.dative_bonds.count(),
+            self.aromatic_systems.count(),
+            self.multicenter_bonds.count(),
+            self.noncovalent_bonds.count(),
+            self.stereo_atoms.count(),
+            self.stereo_bonds.count(),
+        ]
+    }
+
     fn reverse_sides(&self) -> Self {
         let dative_bonds = self
             .dative_bonds
@@ -1824,6 +1853,15 @@ impl Normalize for ReactionSpan {
         ))?);
         Ok(self)
     }
+
+    fn normalized_eq(&self, other: &Self) -> bool {
+        self.entity_counts() == other.entity_counts()
+            && (self == other
+                || matches!(
+                    (self.clone().normalize(), other.clone().normalize()),
+                    (Ok(left), Ok(right)) if left == right
+                ))
+    }
 }
 
 impl FrameTransport for ReactionSpan {
@@ -1935,6 +1973,20 @@ impl Reframe for ReactionSpan {
             .collect::<Result<_, _>>()?;
         self.constraints = Arc::new(normalize_constraint_spans(constraints)?);
         Ok(self)
+    }
+
+    fn framed_eq(&self, other: &Self) -> bool {
+        if self.entity_counts() != other.entity_counts() {
+            return false;
+        }
+        if self == other {
+            return true;
+        }
+        match (self.clone().reframe(), other.clone().reframe()) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => self.normalized_eq(other),
+            _ => false,
+        }
     }
 }
 
@@ -2752,6 +2804,7 @@ mod tests {
     use super::super::num::NumForm;
     use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity};
     use super::*;
+    use crate::mol_dsl;
 
     #[fixture]
     fn canonicalize_context() -> CanonicalizeContext {
@@ -3325,6 +3378,109 @@ mod tests {
     }
 
     #[rstest]
+    #[case::modified_equal_sides(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Modified { lhs: AtomForm::from_element(Element::C), rhs: AtomForm::from_element(Element::C) },
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::different_element(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::one_fails(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_identical(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::both_fail_different(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_different_counts(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    fn test_reaction_span_normalized_eq(
+        #[case] left: ReactionSpanEntries,
+        #[case] right: ReactionSpanEntries,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            ReactionSpan::from_entries(left).normalized_eq(&ReactionSpan::from_entries(right)),
+            expected,
+        );
+    }
+
+    #[rstest]
     fn test_reaction_span_reframe_by(#[values(false, true)] shared: bool) {
         let predicate = |value| Box::new(AtomConstraintForm::valence(NumForm::Lit(value)));
         let entries = ReactionSpanEntries {
@@ -3499,6 +3655,193 @@ mod tests {
     }
 
     #[rstest]
+    #[case::aromatic_frame(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(0)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 2])),
+            )],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::different_element(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::one_fails(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_identical(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::both_fail_equal_normal_forms(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Modified { lhs: AtomForm::from_element(Element::C), rhs: AtomForm::from_element(Element::C) },
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        true
+    )]
+    #[case::both_fail_different_frames(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0), AtomId(2)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1])),
+            )],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_different(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    #[case::both_fail_different_counts(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([]))),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            ..Default::default()
+        },
+        false
+    )]
+    fn test_reaction_span_framed_eq(
+        #[case] left: ReactionSpanEntries,
+        #[case] right: ReactionSpanEntries,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            ReactionSpan::from_entries(left).framed_eq(&ReactionSpan::from_entries(right)),
+            expected,
+        );
+    }
+
+    #[rstest]
     #[case::bond(
         ReactionSpanEntries {
             atoms: vec![
@@ -3656,6 +3999,239 @@ mod tests {
         );
 
         assert_eq!(span.try_remap(&correspondence), None);
+    }
+
+    #[fixture]
+    fn fluoromethane_hydrolysis_entries() -> ReactionSpanEntries {
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Removed(AtomForm::from_element(Element::F)),
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Removed(BondForm::from_order(1)),
+                ),
+                (
+                    AtomId(0),
+                    AtomId(2),
+                    EntitySpan::Added(BondForm::from_order(1)),
+                ),
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[rstest]
+    #[case::identity(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Removed(AtomForm::from_element(Element::F)),
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+                (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            ],
+            ..Default::default()
+        },
+        MoleculeRemapping::new(
+            GraphRemapping::identity(3, 2),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+        ),
+        true
+    )]
+    #[case::renumbered(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+                EntitySpan::Removed(AtomForm::from_element(Element::F)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+            ],
+            ..Default::default()
+        },
+        MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(vec![NodeId(2), NodeId(1), NodeId(0)]).unwrap(),
+                Remapping::new(vec![EdgeId(1), EdgeId(0)]).unwrap(),
+            ),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+        ),
+        true
+    )]
+    #[case::renumbered_identity(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+                EntitySpan::Removed(AtomForm::from_element(Element::F)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+            ],
+            ..Default::default()
+        },
+        MoleculeRemapping::new(
+            GraphRemapping::identity(3, 2),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+        ),
+        false
+    )]
+    #[case::sulfur_added(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::S)),
+                EntitySpan::Removed(AtomForm::from_element(Element::F)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
+            ],
+            ..Default::default()
+        },
+        MoleculeRemapping::new(
+            GraphRemapping::new(
+                Remapping::new(vec![NodeId(2), NodeId(1), NodeId(0)]).unwrap(),
+                Remapping::new(vec![EdgeId(1), EdgeId(0)]).unwrap(),
+            ),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+        ),
+        false
+    )]
+    fn test_reaction_span_framed_eq_under(
+        #[from(fluoromethane_hydrolysis_entries)] left: ReactionSpanEntries,
+        #[case] right: ReactionSpanEntries,
+        #[case] remapping: MoleculeRemapping,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            ReactionSpan::from_entries(left)
+                .framed_eq_under(&ReactionSpan::from_entries(right), &remapping),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::furan(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+                (AtomId(0), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(0)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 2])),
+            )],
+            ..Default::default()
+        },
+        MoleculeRemapping::new(
+            GraphRemapping::identity(5, 5),
+            Remapping::default(),
+            Remapping::identity(1),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+            Remapping::default(),
+        )
+    )]
+    fn test_reaction_span_framed_eq_under_frame(
+        #[case] left: ReactionSpanEntries,
+        #[case] right: ReactionSpanEntries,
+        #[case] remapping: MoleculeRemapping,
+    ) {
+        let left = ReactionSpan::from_entries(left);
+        let right = ReactionSpan::from_entries(right);
+
+        assert!(!left.normalized_eq(&right));
+        assert!(left.framed_eq_under(&right, &remapping));
+    }
+
+    #[rstest]
+    #[case::atoms(0)]
+    #[case::bonds(1)]
+    #[case::dative_bonds(2)]
+    #[case::aromatic_systems(3)]
+    #[case::multicenter_bonds(4)]
+    #[case::noncovalent_bonds(5)]
+    #[case::stereo_atoms(6)]
+    #[case::stereo_bonds(7)]
+    fn test_reaction_span_framed_eq_under_count_error(#[case] kind: usize) {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C))],
+            ..Default::default()
+        });
+        let remapping = MoleculeRemapping::new(
+            GraphRemapping::identity(1 + usize::from(kind == 0), usize::from(kind == 1)),
+            Remapping::identity(usize::from(kind == 2)),
+            Remapping::identity(usize::from(kind == 3)),
+            Remapping::identity(usize::from(kind == 4)),
+            Remapping::identity(usize::from(kind == 5)),
+            Remapping::identity(usize::from(kind == 6)),
+            Remapping::identity(usize::from(kind == 7)),
+        );
+
+        assert!(!span.framed_eq_under(&span, &remapping));
     }
 
     #[rstest]
@@ -5474,6 +6050,109 @@ mod tests {
         assert_eq!(
             reaction.to_reaction_span().unwrap().constraints(),
             expected.as_slice(),
+        );
+    }
+
+    #[rstest]
+    #[case::helium(
+        Reaction::new(mol_dsl!(r#"{:atoms ["He"]}"#), Deltas::default()),
+        [1, 0, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::atom_added(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+                id: AtomId(1),
+                attributes: AtomForm::from_element(Element::O),
+            })]),
+        ),
+        [2, 0, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::atom_removed(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(1),
+                attributes: AtomForm::from_element(Element::O),
+            })]),
+        ),
+        [2, 0, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::ethane(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::default(),
+        ),
+        [2, 1, 0, 0, 0, 0, 0, 0]
+    )]
+    #[case::ammonia_borane(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [2, 0, 1, 0, 0, 0, 0, 0]
+    )]
+    #[case::benzene(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+                    :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+                    :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [6, 6, 0, 1, 0, 0, 0, 0]
+    )]
+    #[case::diborane(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["B" "B" "H" "H"]
+                    :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]"}
+                                        {:atoms [0 3 1] :attrs "[0,1,1]"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [4, 0, 0, 0, 2, 0, 0, 0]
+    )]
+    #[case::water_dimer(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["O" "H" "H" "O" "H" "H"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [3 4 "1"] [3 5 "1"]]
+                    :noncovalent-bonds [{:atoms [1 3] :attrs "Hbd"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [6, 4, 0, 0, 0, 1, 0, 0]
+    )]
+    #[case::bromochlorofluoroiodomethane(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [5, 4, 0, 0, 0, 0, 1, 0]
+    )]
+    #[case::but_2_ene(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "C" "C" "C"]
+                    :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                    :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+            ),
+            Deltas::default(),
+        ),
+        [4, 3, 0, 0, 0, 0, 0, 1]
+    )]
+    fn test_reaction_span_entity_counts(#[case] reaction: Reaction, #[case] expected: [usize; 8]) {
+        assert_eq!(
+            reaction.to_reaction_span().unwrap().entity_counts(),
+            expected,
         );
     }
 
