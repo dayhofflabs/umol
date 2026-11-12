@@ -255,7 +255,7 @@ neither conversion nor rendering performs stereo recognition/resolution.
 Reaction convey materializes/projects both sides, regenerates shared one-based labels for matched
 pairs, and leaves unmatched atoms unlabeled. Agents and source-only metadata are unavailable from
 graph IR; failures retain side context. Supported ingestion roundtrips under the same model/policy
-use canonical equality with para_stereo=false, preserving correspondence but not spelling,
+use canonical equality, preserving correspondence but not spelling,
 ring labels, or redundant slash markers.
 
 ### SMILES ingestion and export

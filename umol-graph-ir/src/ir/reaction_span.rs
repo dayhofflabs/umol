@@ -2756,7 +2756,6 @@ mod tests {
     #[fixture]
     fn canonicalize_context() -> CanonicalizeContext {
         CanonicalizeContext {
-            para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
     }

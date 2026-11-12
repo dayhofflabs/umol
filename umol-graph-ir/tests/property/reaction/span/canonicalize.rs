@@ -20,7 +20,6 @@ use crate::strategies::{
 
 fn context() -> CanonicalizeContext {
     CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
 }

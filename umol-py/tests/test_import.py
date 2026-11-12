@@ -408,15 +408,15 @@ def test_deferred_member(owner, name):
         (umol.Molecule.tracked_extract, "(self, /, selection)"),
         (
             umol.Molecule.canonicalize,
-            "(self, /, *, stereo_model=None, config=None)",
+            "(self, /, *, config=None)",
         ),
         (
             umol.Molecule.tracked_canonicalize,
-            "(self, /, *, stereo_model=None, config=None)",
+            "(self, /, *, config=None)",
         ),
         (
             umol.Molecule.canonical_eq,
-            "(self, /, other, *, stereo_model=None, config=None)",
+            "(self, /, other, *, config=None)",
         ),
         (
             umol.Molecule.substructure_matches,
@@ -467,27 +467,27 @@ def test_deferred_member(owner, name):
         (umol.Reaction.combined_fingerprint, "(self, /, *, config)"),
         (
             umol.Reaction.canonicalize,
-            "(self, /, *, stereo_model=None, config=None)",
+            "(self, /, *, config=None)",
         ),
         (
             umol.Reaction.tracked_canonicalize,
-            "(self, /, *, stereo_model=None, config=None)",
+            "(self, /, *, config=None)",
         ),
         (
             umol.Reaction.canonical_eq,
-            "(self, /, other, *, stereo_model=None, config=None)",
+            "(self, /, other, *, config=None)",
         ),
         (
             umol.ReactionSpan.canonicalize,
-            "(self, /, *, stereo_model=None, config=None)",
+            "(self, /, *, config=None)",
         ),
         (
             umol.ReactionSpan.tracked_canonicalize,
-            "(self, /, *, stereo_model=None, config=None)",
+            "(self, /, *, config=None)",
         ),
         (
             umol.ReactionSpan.canonical_eq,
-            "(self, /, other, *, stereo_model=None, config=None)",
+            "(self, /, other, *, config=None)",
         ),
     ],
 )

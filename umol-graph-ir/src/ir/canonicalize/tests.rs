@@ -13,17 +13,20 @@ use umol_edn::FromEdn;
 
 use super::*;
 use crate::ir::{
-    AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
-    AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm, AtomId, BondDelta, BondFieldChange,
-    BondForm, BondId, BooleanForm, Constraint, ConstraintDelta, DativeBondDelta,
-    DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas, MoleculeEntries,
-    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId,
-    NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondId,
-    ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange,
-    StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta, StereoBondFieldChange,
-    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandPair, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
-    TopicityRelationForm,
+    ArithExpr, AromaticSystemConstraintForm, AromaticSystemDelta, AromaticSystemFieldChange,
+    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
+    AtomId, BondConstraintForm, BondDelta, BondFieldChange, BondForm, BondId, BooleanForm,
+    Constraint, ConstraintDelta, ConstraintSpan, DativeBondConstraintForm, DativeBondDelta,
+    DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas, ElementForm, EntitySpan,
+    MoleculeConstraint, MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondDelta,
+    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondConstraintForm, NoncovalentBondDelta, NoncovalentBondFieldChange,
+    NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NumForm,
+    ReactionSpanEntries, RelationalConstraint, StereoAtomConstraintForm, StereoAtomDelta,
+    StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta,
+    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Stereogenicity,
+    StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 impl AutomorphismAdapter {
@@ -173,7 +176,6 @@ pub(super) fn initial_color_molecule() -> Molecule {
 #[fixture]
 pub(super) fn canonicalize_context() -> CanonicalizeContext {
     CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
 }
@@ -1361,14 +1363,12 @@ fn test_molecule_canonical_eq(
 #[case::opposite_even_frame([2, 1, 4, 3], 1, false)]
 fn test_molecule_canonical_eq_stereo_atom(
     stereo_atom_canonicalization_molecule: Molecule,
-    mut canonicalize_context: CanonicalizeContext,
+    canonicalize_context: CanonicalizeContext,
     #[case] ligand_ids: [u32; 4],
     #[case] coset: u32,
     #[case] expected: bool,
     #[values(false, true)] relabel: bool,
-    #[values(false, true)] para_stereo: bool,
 ) {
-    canonicalize_context.para_stereo = para_stereo;
     let mut elements = [Element::C, Element::F, Element::Cl, Element::Br, Element::I];
     if relabel {
         elements.swap(1, 2);
@@ -1416,14 +1416,12 @@ fn test_molecule_canonical_eq_stereo_atom(
 #[case::opposite([2, 3, 5, 4], 1, false)]
 fn test_molecule_canonical_eq_stereo_bond(
     stereo_bond_canonicalization_molecule: Molecule,
-    mut canonicalize_context: CanonicalizeContext,
+    canonicalize_context: CanonicalizeContext,
     #[case] ligand_ids: [u32; 4],
     #[case] coset: u32,
     #[case] expected: bool,
     #[values(false, true)] relabel: bool,
-    #[values(false, true)] para_stereo: bool,
 ) {
-    canonicalize_context.para_stereo = para_stereo;
     let mut elements = [
         Element::C,
         Element::C,
@@ -1509,12 +1507,10 @@ fn test_molecule_canonical_eq_remapping_witness(
 #[case::lone_pair(StereoLigandKind::LonePair, false)]
 #[case::virtual_ligand(StereoLigandKind::Virtual, true)]
 fn test_molecule_canonical_eq_virtual_ligand(
-    mut canonicalize_context: CanonicalizeContext,
+    canonicalize_context: CanonicalizeContext,
     #[case] kind: StereoLigandKind,
     #[case] expected: bool,
-    #[values(false, true)] para_stereo: bool,
 ) {
-    canonicalize_context.para_stereo = para_stereo;
     let source = Molecule::from_entries(MoleculeEntries {
         atoms: [Element::C, Element::F, Element::Cl, Element::Br]
             .into_iter()
@@ -2793,19 +2789,6 @@ fn test_reaction_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
     assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
 }
 
-#[rstest]
-fn test_constraint_key() {
-    let atom = Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4));
-    let bond = Constraint::Bond(
-        BondId(0),
-        BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
-    );
-    let left = Constraint::And(vec![atom.clone(), bond.clone(), atom.clone()]);
-    let right = Constraint::And(vec![bond, atom]);
-
-    assert_eq!(constraint_key(&left), constraint_key(&right));
-}
-
 pub(super) fn permutations(count: usize) -> Vec<Vec<usize>> {
     fn visit(values: &mut [usize], position: usize, output: &mut Vec<Vec<usize>>) {
         if position == values.len() {
@@ -2889,68 +2872,6 @@ fn test_incidence_cmp() {
     for pair in incidences.windows(2) {
         assert_eq!(pair[0].cmp(&pair[1]), Ordering::Less);
     }
-    for lhs in &incidences {
-        for rhs in &incidences {
-            assert_eq!(lhs.cmp(rhs), incidence_key(lhs).cmp(&incidence_key(rhs)));
-        }
-    }
-}
-
-#[rstest]
-#[case::empty(Vec::new(), Vec::new(), InitialColors {
-    entities: Vec::new(),
-    incidences: Vec::new(),
-})]
-#[case::repeated(
-    vec![
-        InitialColorKey::Entity {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Unsigned(2),
-        },
-        InitialColorKey::Entity {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Unsigned(2),
-        },
-    ],
-    vec![
-        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(1)),
-        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(1)),
-    ],
-    InitialColors {
-        entities: vec![0, 0],
-        incidences: vec![1, 1],
-    },
-)]
-#[case::ordered_distinct(
-    vec![
-        InitialColorKey::Entity {
-            position: EntityBlockPosition::BOND,
-            value: CanonicalKeyValue::Unsigned(0),
-        },
-        InitialColorKey::Entity {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Unsigned(2),
-        },
-        InitialColorKey::Entity {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Unsigned(1),
-        },
-    ],
-    vec![
-        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(2)),
-        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(0)),
-    ],
-    InitialColors {
-        entities: vec![2, 1, 0],
-        incidences: vec![4, 3],
-    },
-)]
-fn test_rank_initial_colors(
-    #[case] entity_keys: Vec<InitialColorKey>,
-    #[case] incidence_keys: Vec<InitialColorKey>,
-    #[case] expected: InitialColors,
-) {
-    assert_eq!(rank_initial_colors(&entity_keys, &incidence_keys), expected,);
 }
 
 #[rstest]
@@ -3290,69 +3211,21 @@ fn test_canonical_search_stats(
 }
 
 #[rstest]
-#[case::unbuilt(false, 1)]
-#[case::compared(true, 2)]
-fn test_deferred_key_into_key(#[case] compared: bool, #[case] expected_builds: usize) {
-    let builds = Cell::new(0_usize);
-    let build = |order: &[NodeId]| {
-        builds.set(builds.get() + 1);
-        CanonicalComparisonKey {
-            entity_blocks: vec![PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: index_sequence(order.iter().map(|node| node.index())),
-            }],
-            constraints: Vec::new(),
-        }
-    };
-    let key = DeferredKey::new(&[NodeId(1), NodeId(0)], &build);
-    if compared {
-        assert_eq!(
-            key.cmp(&DeferredKey::new(&[NodeId(0), NodeId(1)], &build)),
-            Ordering::Greater,
-        );
-    }
-
-    assert_eq!(
-        key.into_key(),
-        CanonicalComparisonKey {
-            entity_blocks: vec![PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: index_sequence([1, 0]),
-            }],
-            constraints: Vec::new(),
-        },
-    );
-    assert_eq!(builds.get(), expected_builds);
-}
-
-#[rstest]
 #[case::unbuilt(false, None, 0)]
 #[case::compared(
     true,
-    Some(CanonicalComparisonKey {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: index_sequence([1, 0]),
-        }],
-        constraints: Vec::new(),
-    }),
+    Some(vec![NodeId(1), NodeId(0)]),
     2,
 )]
 fn test_deferred_key_into_built(
     #[case] compared: bool,
-    #[case] expected: Option<CanonicalComparisonKey>,
+    #[case] expected: Option<Vec<NodeId>>,
     #[case] expected_builds: usize,
 ) {
     let builds = Cell::new(0_usize);
     let build = |order: &[NodeId]| {
         builds.set(builds.get() + 1);
-        CanonicalComparisonKey {
-            entity_blocks: vec![PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: index_sequence(order.iter().map(|node| node.index())),
-            }],
-            constraints: Vec::new(),
-        }
+        order.to_vec()
     };
     let key = DeferredKey::new(&[NodeId(1), NodeId(0)], &build);
     if compared {
@@ -3378,13 +3251,7 @@ fn test_deferred_key_cmp(
     let builds = Cell::new(0_usize);
     let build = |order: &[NodeId]| {
         builds.set(builds.get() + 1);
-        CanonicalComparisonKey {
-            entity_blocks: vec![PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: index_sequence(order.iter().map(|node| node.index())),
-            }],
-            constraints: Vec::new(),
-        }
+        order.to_vec()
     };
     let left = DeferredKey::new(&left, &build);
     let right = DeferredKey::new(&right, &build);
@@ -3428,373 +3295,4 @@ fn test_reaction_canonicalize_error_from(
     #[case] expected: ReactionCanonicalizeError,
 ) {
     assert_eq!(actual, expected);
-}
-
-#[rstest]
-#[case::topology(StructuralDomainPosition::TOPOLOGY, 0)]
-#[case::non_stereo(StructuralDomainPosition::NON_STEREO, 1)]
-#[case::stereo(StructuralDomainPosition::STEREO, 2)]
-fn test_structural_domain_position(
-    #[case] position: StructuralDomainPosition,
-    #[case] expected: u16,
-) {
-    assert_eq!(position.0, expected);
-}
-
-#[rstest]
-#[case::atom(
-    EntityBlockPosition::ATOM,
-    EntityBlockPosition::new(StructuralDomainPosition::TOPOLOGY, 0)
-)]
-#[case::bond(
-    EntityBlockPosition::BOND,
-    EntityBlockPosition::new(StructuralDomainPosition::TOPOLOGY, 1)
-)]
-#[case::dative_bond(
-    EntityBlockPosition::DATIVE_BOND,
-    EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 0)
-)]
-#[case::aromatic_system(
-    EntityBlockPosition::AROMATIC_SYSTEM,
-    EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 1)
-)]
-#[case::multicenter_bond(
-    EntityBlockPosition::MULTICENTER_BOND,
-    EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 2)
-)]
-#[case::noncovalent_bond(
-    EntityBlockPosition::NONCOVALENT_BOND,
-    EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 3)
-)]
-#[case::stereo_atom(
-    EntityBlockPosition::STEREO_ATOM,
-    EntityBlockPosition::new(StructuralDomainPosition::STEREO, 0)
-)]
-#[case::stereo_bond(
-    EntityBlockPosition::STEREO_BOND,
-    EntityBlockPosition::new(StructuralDomainPosition::STEREO, 1)
-)]
-fn test_entity_block_position(
-    #[case] position: EntityBlockPosition,
-    #[case] expected: EntityBlockPosition,
-) {
-    assert_eq!(position, expected);
-}
-
-#[rstest]
-#[case::topology_indices(EntityBlockPosition::ATOM, EntityBlockPosition::BOND)]
-#[case::topology_before_non_stereo(
-    EntityBlockPosition::new(StructuralDomainPosition::TOPOLOGY, 2),
-    EntityBlockPosition::DATIVE_BOND
-)]
-#[case::non_stereo_indices(EntityBlockPosition::DATIVE_BOND, EntityBlockPosition::AROMATIC_SYSTEM)]
-#[case::non_stereo_before_stereo(
-    EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 4),
-    EntityBlockPosition::STEREO_ATOM
-)]
-#[case::stereo_indices(EntityBlockPosition::STEREO_ATOM, EntityBlockPosition::STEREO_BOND)]
-fn test_entity_block_position_cmp(
-    #[case] lhs: EntityBlockPosition,
-    #[case] rhs: EntityBlockPosition,
-) {
-    assert_eq!(lhs.cmp(&rhs), Ordering::Less);
-}
-
-#[rstest]
-#[case::atom(
-    ConstraintBlockPosition::ATOM,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::ATOM)
-)]
-#[case::bond(
-    ConstraintBlockPosition::BOND,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::BOND)
-)]
-#[case::dative_bond(
-    ConstraintBlockPosition::DATIVE_BOND,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::DATIVE_BOND)
-)]
-#[case::aromatic_system(
-    ConstraintBlockPosition::AROMATIC_SYSTEM,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::AROMATIC_SYSTEM)
-)]
-#[case::multicenter_bond(
-    ConstraintBlockPosition::MULTICENTER_BOND,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::MULTICENTER_BOND)
-)]
-#[case::noncovalent_bond(
-    ConstraintBlockPosition::NONCOVALENT_BOND,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::NONCOVALENT_BOND)
-)]
-#[case::stereo_atom(
-    ConstraintBlockPosition::STEREO_ATOM,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::STEREO_ATOM)
-)]
-#[case::stereo_bond(
-    ConstraintBlockPosition::STEREO_BOND,
-    ConstraintBlockPosition::Inline(EntityBlockPosition::STEREO_BOND)
-)]
-#[case::molecule(ConstraintBlockPosition::MOLECULE, ConstraintBlockPosition::Molecule)]
-fn test_constraint_block_position(
-    #[case] position: ConstraintBlockPosition,
-    #[case] expected: ConstraintBlockPosition,
-) {
-    assert_eq!(position, expected);
-}
-
-#[rstest]
-#[case::unchanged(SpanTagPosition::UNCHANGED, 0)]
-#[case::removed(SpanTagPosition::REMOVED, 1)]
-#[case::modified(SpanTagPosition::MODIFIED, 2)]
-#[case::added(SpanTagPosition::ADDED, 3)]
-fn test_span_tag_position(#[case] position: SpanTagPosition, #[case] expected: u16) {
-    assert_eq!(position.0, expected);
-}
-
-#[rstest]
-#[case::boolean(CanonicalKeyValue::Bool(false), 1)]
-#[case::unsigned(CanonicalKeyValue::Unsigned(0), 2)]
-#[case::signed(CanonicalKeyValue::Signed(0), 3)]
-#[case::text(CanonicalKeyValue::Text(String::new()), 4)]
-#[case::sequence(CanonicalKeyValue::Sequence(Vec::new()), 5)]
-#[case::product(CanonicalKeyValue::Product(Vec::new()), 6)]
-#[case::variant(CanonicalKeyValue::Variant(VariantKey {
-        position: VariantPosition(0),
-        fields: Vec::new(),
-    }), 7)]
-#[case::span(CanonicalKeyValue::Span(SpanKey {
-        position: SpanTagPosition::UNCHANGED,
-        values: Vec::new(),
-    }), 8)]
-fn test_canonical_key_value_position(#[case] value: CanonicalKeyValue, #[case] expected: u16) {
-    assert_eq!(value.position(), expected);
-}
-
-#[rstest]
-#[case::position_precedes_payload(
-        PositionedKey {
-            position: FieldPosition(0),
-            value: CanonicalKeyValue::Signed(10),
-        },
-        PositionedKey {
-            position: FieldPosition(1),
-            value: CanonicalKeyValue::Signed(-10),
-        },
-        Ordering::Less,
-    )]
-#[case::payload_breaks_position_tie(
-        PositionedKey {
-            position: FieldPosition(0),
-            value: CanonicalKeyValue::Signed(10),
-        },
-        PositionedKey {
-            position: FieldPosition(0),
-            value: CanonicalKeyValue::Signed(-10),
-        },
-        Ordering::Greater,
-    )]
-fn test_positioned_key_cmp(
-    #[case] lhs: FieldKey,
-    #[case] rhs: FieldKey,
-    #[case] expected: Ordering,
-) {
-    assert_eq!(lhs.cmp(&rhs), expected);
-}
-
-#[rstest]
-#[case::span_tag_precedes_value(
-        SpanKey {
-            position: SpanTagPosition::UNCHANGED,
-            values: vec![CanonicalKeyValue::Signed(10)],
-        },
-        SpanKey {
-            position: SpanTagPosition::ADDED,
-            values: vec![CanonicalKeyValue::Signed(-10)],
-        },
-        Ordering::Less,
-    )]
-#[case::lhs_precedes_rhs(
-        SpanKey {
-            position: SpanTagPosition::MODIFIED,
-            values: vec![CanonicalKeyValue::Signed(0), CanonicalKeyValue::Signed(10)],
-        },
-        SpanKey {
-            position: SpanTagPosition::MODIFIED,
-            values: vec![CanonicalKeyValue::Signed(1), CanonicalKeyValue::Signed(-10)],
-        },
-        Ordering::Less,
-    )]
-fn test_span_key_cmp(#[case] lhs: SpanKey, #[case] rhs: SpanKey, #[case] expected: Ordering) {
-    assert_eq!(lhs.cmp(&rhs), expected);
-}
-
-#[rstest]
-#[case::unchanged(
-        EntitySpan::Unchanged(1),
-        SpanTagPosition::UNCHANGED,
-        vec![CanonicalKeyValue::Signed(1)],
-    )]
-#[case::added(
-        EntitySpan::Added(1),
-        SpanTagPosition::ADDED,
-        vec![CanonicalKeyValue::Signed(1)],
-    )]
-#[case::removed(
-        EntitySpan::Removed(1),
-        SpanTagPosition::REMOVED,
-        vec![CanonicalKeyValue::Signed(1)],
-    )]
-#[case::modified(
-        EntitySpan::Modified { lhs: 1, rhs: 2 },
-        SpanTagPosition::MODIFIED,
-        vec![CanonicalKeyValue::Signed(1), CanonicalKeyValue::Signed(2)],
-    )]
-fn test_entity_span_key(
-    #[case] span: EntitySpan<i64>,
-    #[case] position: SpanTagPosition,
-    #[case] values: Vec<CanonicalKeyValue>,
-) {
-    assert_eq!(
-        entity_span_key(&span, |value| CanonicalKeyValue::Signed(*value)),
-        CanonicalKeyValue::Span(SpanKey { position, values }),
-    );
-}
-
-#[rstest]
-#[case::equivalent(
-    EntitySpan::Modified { lhs: 1, rhs: 1 },
-    SpanTagPosition::UNCHANGED,
-    vec![CanonicalKeyValue::Signed(1)],
-)]
-#[case::distinct(
-    EntitySpan::Modified { lhs: 1, rhs: 2 },
-    SpanTagPosition::MODIFIED,
-    vec![CanonicalKeyValue::Signed(1), CanonicalKeyValue::Signed(2)],
-)]
-fn test_normalized_entity_span_key(
-    #[case] span: EntitySpan<i64>,
-    #[case] position: SpanTagPosition,
-    #[case] values: Vec<CanonicalKeyValue>,
-) {
-    assert_eq!(
-        normalized_entity_span_key(&span, |value| { Ok(CanonicalKeyValue::Signed(*value)) }),
-        Ok(CanonicalKeyValue::Span(SpanKey { position, values })),
-    );
-}
-
-#[rstest]
-#[case::absent_extension_preserves_key(None, Ordering::Equal)]
-#[case::present_extension_appends_field(
-        Some(PositionedKey {
-            position: FieldPosition(8),
-            value: CanonicalKeyValue::Unsigned(1),
-        }),
-        Ordering::Less,
-    )]
-fn test_canonical_key_value_append_only_extension(
-    #[case] extension: Option<FieldKey>,
-    #[case] expected: Ordering,
-) {
-    let original = CanonicalKeyValue::Product(vec![PositionedKey {
-        position: FieldPosition(0),
-        value: CanonicalKeyValue::Signed(1),
-    }]);
-    let mut extended_fields = match &original {
-        CanonicalKeyValue::Product(fields) => fields.clone(),
-        _ => unreachable!(),
-    };
-    extended_fields.extend(extension);
-    let extended = CanonicalKeyValue::Product(extended_fields);
-
-    assert_eq!(original.cmp(&extended), expected);
-}
-
-#[rstest]
-#[case::entity_blocks_precede_constraints(
-        CanonicalComparisonKey {
-            entity_blocks: vec![PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: CanonicalKeyValue::Unsigned(0),
-            }],
-            constraints: vec![PositionedKey {
-                position: ConstraintBlockPosition::ATOM,
-                value: CanonicalKeyValue::Unsigned(10),
-            }],
-        },
-        CanonicalComparisonKey {
-            entity_blocks: vec![PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: CanonicalKeyValue::Unsigned(1),
-            }],
-            constraints: vec![PositionedKey {
-                position: ConstraintBlockPosition::ATOM,
-                value: CanonicalKeyValue::Unsigned(0),
-            }],
-        },
-        Ordering::Less,
-    )]
-#[case::constraints_break_entity_tie(
-        CanonicalComparisonKey {
-            entity_blocks: Vec::new(),
-            constraints: vec![PositionedKey {
-                position: ConstraintBlockPosition::ATOM,
-                value: CanonicalKeyValue::Unsigned(0),
-            }],
-        },
-        CanonicalComparisonKey {
-            entity_blocks: Vec::new(),
-            constraints: vec![PositionedKey {
-                position: ConstraintBlockPosition::BOND,
-                value: CanonicalKeyValue::Unsigned(0),
-            }],
-        },
-        Ordering::Less,
-    )]
-fn test_canonical_comparison_key_cmp(
-    #[case] lhs: CanonicalComparisonKey,
-    #[case] rhs: CanonicalComparisonKey,
-    #[case] expected: Ordering,
-) {
-    assert_eq!(lhs.cmp(&rhs), expected);
-}
-
-#[rstest]
-#[case::non_stereo_before_stereo(
-    ConstraintBlockPosition::Inline(EntityBlockPosition::new(
-        StructuralDomainPosition::NON_STEREO,
-        4,
-    )),
-    ConstraintBlockPosition::STEREO_ATOM
-)]
-#[case::stereo_before_molecule(
-    ConstraintBlockPosition::STEREO_BOND,
-    ConstraintBlockPosition::MOLECULE
-)]
-fn test_constraint_block_position_cmp(
-    #[case] lhs: ConstraintBlockPosition,
-    #[case] rhs: ConstraintBlockPosition,
-) {
-    assert_eq!(lhs.cmp(&rhs), Ordering::Less);
-}
-
-#[rstest]
-#[case::local_idx(
-    RelationalConstraintPosition::new(EntityBlockPosition::DATIVE_BOND, 0),
-    RelationalConstraintPosition::new(EntityBlockPosition::DATIVE_BOND, 1)
-)]
-#[case::entity_idx(
-    RelationalConstraintPosition::new(EntityBlockPosition::DATIVE_BOND, 7),
-    RelationalConstraintPosition::new(EntityBlockPosition::AROMATIC_SYSTEM, 0)
-)]
-#[case::domain(
-    RelationalConstraintPosition::new(
-        EntityBlockPosition::new(StructuralDomainPosition::NON_STEREO, 4),
-        0,
-    ),
-    RelationalConstraintPosition::new(EntityBlockPosition::STEREO_ATOM, 0)
-)]
-fn test_relational_constraint_position_cmp(
-    #[case] lhs: RelationalConstraintPosition,
-    #[case] rhs: RelationalConstraintPosition,
-) {
-    assert_eq!(lhs.cmp(&rhs), Ordering::Less);
 }

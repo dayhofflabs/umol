@@ -2673,7 +2673,7 @@ committed search on the 20,056 pairs.
 
 ### S10 — Encoding
 
-#### S10a — Remove the encoding
+#### S10a — Remove the encoding **Done**
 
 **Module:** `ir/canonicalize.rs`.
 
@@ -2685,7 +2685,22 @@ changes (green). [dep: S9c]
 
 **Tests:** the library tests, the property suite, and the integration tests pass.
 
-#### S10b — Guides
+`ir/canonicalize.rs` loses some 1,440 lines and builds without a warning. Two items that
+are not part of the encoding had lost their last caller at S9b and go with it:
+`DeferredKey::into_key` is removed, and `BranchOrdering::NodeId` is compiled for tests only, as
+`ReverseNodeId` is.
+
+Tests. Seventeen tests go with their subjects: the tests of the positions, of the positioned and
+span keys, of `CanonicalKeyValue`, of the encoded `CanonicalComparisonKey`, of `constraint_key`,
+`entity_span_key`, `normalized_entity_span_key`, and `rank_initial_colors`, and
+`test_deferred_key_into_key`. `test_deferred_key_into_built` and `test_deferred_key_cmp` used the
+encoded key as the key type of their `DeferredKey` and use `Vec<NodeId>`: the expected key of the
+order `[1, 0]` is `vec![NodeId(1), NodeId(0)]` where it was the encoded sequence of 1 and 0.
+`test_incidence_cmp` keeps the declared order of `Incidence` and loses its comparison with
+`incidence_key`. The three test files import the types that reached them through the imports of
+the encoding. The 12,245 library tests pass.
+
+#### S10b — Guides **Done**
 
 **Module:** `docs/development/data-types.md`, `docs/development/nomenclature.md`,
 `ir/incidence.rs`.
@@ -2698,9 +2713,28 @@ ranked into. Its entry *Normalize* no longer names `Normalized<T>`, which does n
 code. The documentation of `Incidence` and of the two `incidence_graph` functions no longer refers
 to the schema. [dep: S10a]
 
+In the data-type guide the section *Canonical comparison schema* and the paragraph on explicit
+positions are removed. *Identity and constraints* says how a constraint enters canonicalization:
+an inline constraint through the color of its entity, a frame-relative one through the key of a
+leaf, a molecule-level one by selecting the complete search. *Aggregate canonicalization*
+describes the search by the content of the aggregate, the colors, the frame-relative values and
+the two generator checks, and the canonical form as the leaf of minimum key among the leaves of
+the search; the paragraph on stereo-sensitive and para-stereo refinement is removed. The order of
+colors and keys is stated as the derived order of their types.
+
+In the nomenclature guide, *Canonical and canonicalize* defines a color as the frame-independent
+part of a normal form and the integer it is ranked into, and *Normalize* no longer names
+`Normalized<T>`. Five further entries stated the earlier rule or named deleted types and are
+brought in line: *Constraint*, *Description level*, *Equality ladder*, and *Full* said that
+constraints do not distinguish orbits or that Full holds the inline constraints; *Non-stereo* and
+*Structural domain* named `StructuralDomainPosition` and `EntityBlockPosition`. Two sentences of
+the documentation of `Canonicalize` no longer speak of a comparison schema. The documentation of
+`Incidence` and of the two `incidence_graph` functions did not refer to the schema and is
+unchanged.
+
 ### S11 — Para-stereo setting
 
-#### S11a — Remove the setting
+#### S11a — Remove the setting **Done**
 
 Remove `para_stereo` from `CanonicalizeContext`. `umol-graph` stops passing
 `StereoModel::para_stereo` to it, and the `umol-py` binding, the tests, the properties, and the
@@ -2709,6 +2743,28 @@ public API (red→green). [dep: S8a]
 
 **Tests:** `test_canonicalize_config_context` of `umol-graph` and `test_canonicalize_context` of
 `umol-py` lose their `para_stereo` rows. The Python suite is rerun.
+
+`CanonicalizeContext` holds `automorphism_algorithm` only. Two public signatures follow from it.
+`CanonicalizeConfig::context` of `umol-graph` takes no stereo model. In `umol-py`, `canonicalize`,
+`tracked_canonicalize`, and `canonical_eq` of `Molecule`, `ReactionSpan`, and `Reaction` lose the
+keyword `stereo_model`, whose only use was to carry the setting; they keep `config`.
+`StereoModel::para_stereo` is untouched.
+
+The benchmark groups `canonicalize/complete/without_para_stereo` and `with_para_stereo` become one
+group, `canonicalize/complete/canonicalize`. In S12a it is compared with the group
+`without_para_stereo` of the reference checkout.
+
+Tests. `test_canonicalize_config_context` and `test_canonicalize_context` have one case each.
+Three tests of `ir/canonicalize/tests.rs` that ran under both settings run once. Nine rows of the
+Python test `test_public_operation_signature` expected `(self, /, *, stereo_model=None,
+config=None)` or `(self, /, other, *, stereo_model=None, config=None)` and expect the same
+without `stereo_model=None`. The data-type guide, the Python API guide, the operations guide, and
+four comments of `umol-graph/src/export.rs` no longer name the setting.
+
+The tests of the workspace with `umol-py`, the properties of `umol-graph-ir` and `umol-graph`,
+and the Python suite pass, and clippy reports nothing on any target. The reference comparison
+reports no mismatch on the 10,028 pairs; its program gives both answer columns of the pair file
+the one context that is left.
 
 ### S12 — Closeout
 
@@ -2735,18 +2791,33 @@ After every stage: the canonicalization and reaction-span unit tests, the `canon
 `reaction_span` integration tests, the canonicalization properties, graph-IR clippy, and the
 reference comparison. Stages that change representatives also run the two Python test files.
 
-From S7 on, the gate also runs the break list. Each break is made temporarily, the library tests
-are run, and the file is restored. Every break must make at least one test fail; a break that no
-test notices is reported as a gap in the tests before the stage closes.
+From S7 on, the gate also runs the break list. A break is a change of one place in the source
+that puts one known error into the code. It is made in the working tree for the length of one run
+of the library tests and then undone: the file is copied aside, the text is replaced,
+`cargo test -p umol-graph-ir --lib` is run, the failing tests are listed, and the copy is put back
+and compared with the file. Neither a break nor a script for it is kept in the tree, and no break
+is committed. Every break must make at least one test fail; a break that no test notices is
+reported as a gap in the tests before the stage closes.
 
-- The pruning treats every candidate of a cell as one orbit.
-- `retain_stereo_preserving_generators` keeps every generator.
-- `retain_preserving_generators` keeps every generator.
-- The incidence colors leave out the electron counts.
-- The color of an aromatic system leaves out its charge.
-- From S9: the span's `retain_stereo_preserving_generators` and `retain_preserving_generators`
-  keep every generator, the span's incidence colors leave out the electron counts, and the color
-  of an added entity is read as unchanged.
+The breaks, with the text replaced. The first five are run from S7, the next four from S9, and
+the last one was run once, at S9a:
+
+| Break | File and function | Original text | Replacement |
+| --- | --- | --- | --- |
+| The pruning treats every candidate of a cell as one orbit | `ir/canonicalize.rs`, `search_partition` | `.entry(orbits[candidate.index()])` | `.entry(orbits[candidate.index()].min(NodeId(0)))` |
+| The molecule's `retain_stereo_preserving_generators` keeps every generator | `ir/canonicalize/molecule.rs`, `retain_stereo_preserving_generators` | the statement `generators.retain(...)` | `let _ = (molecule, incidence_graph, &generators);` |
+| The molecule's `retain_preserving_generators` keeps every generator | `ir/canonicalize/molecule.rs`, `retain_preserving_generators` | the statement `generators.retain(...)` | `let _ = (molecule, incidence_graph, &generators);` |
+| The molecule's incidence colors leave out the electron counts | `ir/canonicalize/molecule.rs`, `initial_colors` | `electrons.at(AtomPosition::from(atom_position))` | the same expression followed by `.and(None::<i64>)` |
+| The color of an aromatic system leaves out its charge | `ir/aromatic.rs`, `as_color` of `AromaticSystemForm` | `charge: &self.charge,` | `charge: &NO_CHARGE,`, with `static NO_CHARGE: NumForm = NumForm::Undetermined;` before the struct literal |
+| The span's `retain_stereo_preserving_generators` keeps every generator | `ir/canonicalize/reaction_span.rs`, `retain_stereo_preserving_generators` | the statement `generators.retain(...)` | `let _ = (span, incidence_graph, &generators);` |
+| The span's `retain_preserving_generators` keeps every generator | `ir/canonicalize/reaction_span.rs`, `retain_preserving_generators` | the statement `generators.retain(...)` | `let _ = (span, incidence_graph, &generators);` |
+| The span's incidence colors leave out the electron counts | `ir/canonicalize/reaction_span.rs`, `initial_colors` | `form.electrons.at(atom_position)`, at both places | the same expression followed by `.and(None::<i64>)` |
+| The color of an added entity is read as unchanged | `ir/span.rs`, `as_color` of `EntitySpan<T>` | `Self::Added(value) => EntitySpan::Added(value.as_color()),` | `Self::Added(value) => EntitySpan::Unchanged(value.as_color()),` |
+| The electron count of a removed side is read as unchanged | `ir/canonicalize/reaction_span.rs`, `initial_colors` | `[Some(lhs), None] => EntitySpan::Removed(lhs),` | `[Some(lhs), None] => EntitySpan::Unchanged(lhs),` |
+
+The tests that fail under each break are listed in the results of S7b, S8a, S8b, S9a, S9b, and
+S9c. The runs show that the tests of that day notice these errors. They are not repeated by
+anything in the tree. The list is not run from S10 on.
 
 At S7 the first four were run: 14, 9, 6, and 9 tests fail, among them 5, 1, 4, and 5 rows of
 `test_molecule_canonicalize_placement`.

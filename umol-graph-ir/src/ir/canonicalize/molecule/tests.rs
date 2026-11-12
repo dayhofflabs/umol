@@ -13,11 +13,12 @@ use super::super::*;
 use super::*;
 use crate::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Constraint, DativeBondForm, DativeBondId, Entity, IncidenceLevel, MoleculeCorrespondence,
-    MoleculeEntries, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm,
-    NoncovalentBondId, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm,
-    StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandPair,
-    Topicity, TopicityForm, TopicityRelationForm,
+    Constraint, DativeBondForm, DativeBondId, Entity, IncidenceLevel, MoleculeConstraint,
+    MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NumForm,
+    StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 #[fixture]
@@ -261,10 +262,7 @@ fn test_canonicalize_structure_para_stereo(
     let renumbered = para_stereo_canonicalization_molecule
         .clone()
         .remap(&remapping);
-    let context = CanonicalizeContext {
-        para_stereo: true,
-        ..canonicalize_context
-    };
+    let context = canonicalize_context;
     let (canonical, remapping) = canonicalize_structure(
         para_stereo_canonicalization_molecule.clone(),
         &context,
@@ -536,7 +534,6 @@ fn test_canonicalize_structure_renumbering(
 #[case::nauty(AutomorphismAlgorithm::Nauty)]
 fn test_canonicalize_structure_search_options(
     symmetric_stereo_canonicalization_molecule: Molecule,
-    canonicalize_context: CanonicalizeContext,
     #[case] algorithm: AutomorphismAlgorithm,
 ) {
     let canonicalize = |options: CanonicalSearchOptions| {
@@ -544,7 +541,6 @@ fn test_canonicalize_structure_search_options(
             symmetric_stereo_canonicalization_molecule.clone(),
             &CanonicalizeContext {
                 automorphism_algorithm: algorithm,
-                ..canonicalize_context
             },
             options,
         )

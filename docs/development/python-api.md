@@ -690,7 +690,7 @@ a second public data model.
 
 `Molecule`, `Reaction`, and `ReactionSpan` expose complete-only `canonicalize`,
 `tracked_canonicalize`, and `canonical_eq`. Each accepts the same optional
-`StereoModel` and `CanonicalizeConfig`; canonicalization of an intrinsically contradictory value
+`CanonicalizeConfig`; canonicalization of an intrinsically contradictory value
 raises `ContradictionError`. Python does not expose `DescriptionLevel`, a molecule
 `description_level` query, or level-parameterized `*_by` operations. Topology, constitution, and
 structure remain private search prefixes rather than reduced public comparison surfaces.

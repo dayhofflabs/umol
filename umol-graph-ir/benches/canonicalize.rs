@@ -1005,50 +1005,35 @@ fn bench_remapping(c: &mut Criterion) {
 fn bench_canonicalize(c: &mut Criterion) {
     let corpus = corpus();
 
-    for (name, context) in [
-        (
-            "without_para_stereo",
-            CanonicalizeContext {
-                para_stereo: false,
-                automorphism_algorithm: ALGORITHM,
-            },
-        ),
-        (
-            "with_para_stereo",
-            CanonicalizeContext {
-                para_stereo: true,
-                automorphism_algorithm: ALGORITHM,
-            },
-        ),
-    ] {
-        let mut group = c.benchmark_group(format!("canonicalize/complete/{name}"));
-        for case in &corpus {
-            let counts = molecule_counts(&case.molecule)
-                .into_iter()
-                .map(|count| count.to_string())
-                .collect::<Vec<_>>()
-                .join("_");
-            group.bench_function(BenchmarkId::new(case.name, counts), |b| {
-                b.iter_batched(
-                    || case.molecule.clone(),
-                    |molecule| {
-                        black_box(
-                            molecule
-                                .canonicalize(&context)
-                                .expect("benchmark corpus canonicalizes"),
-                        )
-                    },
-                    BatchSize::SmallInput,
-                )
-            });
-        }
-        group.finish();
+    let context = CanonicalizeContext {
+        automorphism_algorithm: ALGORITHM,
+    };
+    let mut group = c.benchmark_group("canonicalize/complete/canonicalize");
+    for case in &corpus {
+        let counts = molecule_counts(&case.molecule)
+            .into_iter()
+            .map(|count| count.to_string())
+            .collect::<Vec<_>>()
+            .join("_");
+        group.bench_function(BenchmarkId::new(case.name, counts), |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize(&context)
+                            .expect("benchmark corpus canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
     }
+    group.finish();
 }
 
 fn bench_retained_scaling_cases(c: &mut Criterion) {
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: ALGORITHM,
     };
     let cases = retained_scaling_corpus()
@@ -1142,7 +1127,6 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
 
 fn bench_topology_path_scaling(c: &mut Criterion) {
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: ALGORITHM,
     };
     let cases = [8, 16, 32, 64, 77, 128].map(|atom_count| (atom_count, carbon_path(atom_count)));
@@ -1227,7 +1211,6 @@ fn bench_reframe(c: &mut Criterion) {
 
 fn bench_reaction_canonical_eq(c: &mut Criterion) {
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: ALGORITHM,
     };
     let reaction = |lhs: Molecule, element: Element| {
@@ -1286,7 +1269,6 @@ fn bench_reaction_canonical_eq(c: &mut Criterion) {
 
 fn bench_complete_comparison(c: &mut Criterion) {
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: ALGORITHM,
     };
     let cases = corpus()
@@ -1324,7 +1306,6 @@ fn bench_complete_comparison(c: &mut Criterion) {
 
 fn bench_reaction_span(c: &mut Criterion) {
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: ALGORITHM,
     };
     let cases = corpus()
@@ -1400,7 +1381,6 @@ fn bench_reaction_span(c: &mut Criterion) {
 
 fn bench_inline_constraint(c: &mut Criterion) {
     let context = CanonicalizeContext {
-        para_stereo: false,
         automorphism_algorithm: ALGORITHM,
     };
     let cases = inline_constraint_corpus()

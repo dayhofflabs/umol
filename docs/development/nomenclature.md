@@ -320,9 +320,9 @@ graph-IR value; do not extend `attributes` to values that are not complete entit
 **Canonicalize** selects a canonical entity-id and participant frame for a complete indexed graph IR
 modulo the admissible remappings. It uses canonical labeling, transports every entity and reference
 through the selected frame, applies the corresponding participant actions, and normalizes the
-carried forms. The operation takes an explicit canonicalization context. The library's typed order
-defines the selected frame; backend canonical labels may guide and prune the search but do not
-define that order.
+carried forms. The operation takes an explicit canonicalization context. The selected frame is the
+leaf of minimum key among the leaves of the search; backend canonical labels may guide and prune
+the search but do not define the order of the keys.
 
 **Canonical equality** compares the complete canonical forms produced under the same context. It is
 the search-based counterpart of `framed_eq_under`: the caller does not supply a remapping because
@@ -331,12 +331,13 @@ canonicalization selects the frame.
 The public operation is complete-only: topology, constitution, and structure are private search
 prefixes, not caller-selectable canonicalization levels. For a fixed umol release and context,
 canonicalization is deterministic. During the 0.x
-series, its typed order and canonical representatives may change between releases. A canonical form
+series, its key order and canonical representatives may change between releases. A canonical form
 is therefore not a persistent identifier unless a future API supplies an explicitly versioned
 canonicalization profile.
 
-Automorphism **colors** are opaque equality labels supplied to the graph algorithm. Canonicalization
-uses `Color` in code for these labels and the normalized keys ranked into them. They are distinct
+A **color** is the frame-independent part of a normal form, read by `AsColor::as_color`.
+Canonicalization ranks the colors of each entity kind into integers and supplies the integers to
+the graph algorithm as equality labels; the integer is also called a color. Colors are distinct
 from the cells or equivalence classes of a refined partition and from a stereo class.
 
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
@@ -501,9 +502,9 @@ constraints, which do not contribute to structural identity.
 
 A **constraint** is a possibly non-ground assertion represented by the constraint forms. This is
 the public repository term. A constraint restricts the states admitted by an entity or molecule but
-does not contribute to its identity. It therefore does not distinguish structural automorphism
-orbits or select a canonical entity frame. It remains part of the complete IR assertion and is
-transported and, where required, compared after a structural correspondence has been established.
+does not contribute to its identity. It is part of the complete IR assertion: every semantic
+comparison includes it, remapping transports it, and canonicalization reads an inline constraint
+with the form of its entity and a molecule-level constraint in the complete search.
 
 **Not:** `projection`, `predicate`, or `representation`, when naming the stored object or an
 operation over it. Not an inherent field, which does contribute to identity.
@@ -689,8 +690,9 @@ projection, a molecule property, or a reduced canonicalization surface: public c
 always includes every present entity and constraint.
 
 `Topology` contains the topology domain. `Constitution = Topology + NonStereo`, and
-`Structure = Constitution + Stereo`. `Full` adds inline and molecule-level constraints. The domains
-are disjoint groups of entity kinds; the levels are their cumulative prefixes.
+`Structure = Constitution + Stereo`. `Full` adds molecule-level constraints; an inline constraint
+belongs to the level of its entity. The domains are disjoint groups of entity kinds; the levels are
+their cumulative prefixes.
 
 **Not:** *model*, which decides semantic acceptance; *features*, which are independently combinable
 switches; *domain*, which names a compositional entity group; *scope*, which does not express the
@@ -823,11 +825,9 @@ For integrity-valid inputs whose complete canonicalization succeeds, `canonical_
 when a remapping exists under which `framed_eq_under` holds. Equality
 totalization for two intrinsic contradictions does not require such a witness.
 
-Structural canonical labeling initially establishes automorphism orbits from inherent fields and
-incidence without constraints. Complete aggregate canonicalization then uses normalized
-constraints to select among structurally equivalent frames. This distinction is especially
-important for patterns: constraints do not define the underlying structural orbits, but they remain
-meaningful parts of the canonical IR assertion.
+Every equality of the ladder includes constraints. Canonicalization reads an inline constraint with
+the form of its entity and a molecule-level constraint in the complete search. This is especially
+important for patterns, where constraints are not redundant with the structural description.
 
 **Not:** each other. Reaching for `==` when `normalized_eq` or `framed_eq` is meant is the common
 error, because `==` exists on everything and silently answers a different question.
@@ -884,8 +884,8 @@ because they are complete graph-model objects, not lattice values. Role-bearing 
 
 ### Full
 
-**Full** is the private terminal description level: the complete molecular structure plus inline
-and molecule-level constraints. It is not a public canonicalization selector.
+**Full** is the private terminal description level: the complete molecular structure plus
+molecule-level constraints. It is not a public canonicalization selector.
 
 `IncidenceLevel::Full` has a narrower carrier-specific use: it means every structural entity is
 present in the incidence graph. Constraints are not incidence entities, so this carrier corresponds
@@ -1282,7 +1282,8 @@ noncovalent bonds. It excludes topology (AB) and stereo entities (SS). Constitut
 non-stereo; overlays are non-stereo plus stereo.
 
 **Not:** constitution, which also includes topology; overlays, which also include stereo.
-**In code:** the `NonStereo` position in the canonical comparison schema.
+**In code:** no dedicated name; `DescriptionLevel::Constitution` and
+`IncidenceLevel::Constitution` add this domain to topology.
 
 ### Normalize
 
@@ -1293,13 +1294,11 @@ fixed-frame transformation values such as `Deltas`. It is context-free, idempote
 values, and returns `Err(Contradiction)` for an unsatisfiable represented value.
 
 **Normalized equality** is `normalized_eq`: two values are equal in the current frame when their
-normal forms are structurally equal. `Normalized<T>` carries the guarantee that normalization has
-already run, so its derived `Eq`, `Hash`, and `Ord` operate on normal forms and can be used for
-semantic deduplication.
+normal forms are structurally equal.
 
 **Not:** aggregate canonicalization, which selects an entity and participant frame and requires an
 explicit context. Not chemical standardization, resolution, validation, or repair.
-**In code:** `Normalize`, `normalize`, `Normalized<T>`, `Normalize::normalized_eq`.
+**In code:** `Normalize`, `normalize`, `Normalize::normalized_eq`.
 
 ### Normalizer
 
@@ -1733,14 +1732,13 @@ The structure levels are cumulative prefixes of these domains:
 Topology     = topology
 Constitution = topology + non-stereo
 Structure    = topology + non-stereo + stereo
-Full         = structure + constraints
+Full         = structure + molecule-level constraints
 Overlays     = non-stereo + stereo
 ```
 
 **Not:** a structure level. `NonStereo` excludes topology even though `Constitution` includes both;
 `Stereo` excludes constitution even though `Structure` includes both.
-**In code:** `StructuralDomainPosition` and the `domain` field of `EntityBlockPosition` in the
-canonical comparison schema.
+**In code:** no dedicated type; the description levels are the cumulative prefixes of the domains.
 
 ### Structure
 
