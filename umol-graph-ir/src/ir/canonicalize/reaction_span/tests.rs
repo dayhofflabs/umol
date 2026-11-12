@@ -1,6 +1,6 @@
 //! Unit tests for reaction-span and reaction canonicalization.
 
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 
 use super::super::tests::{canonicalize_context, initial_color_molecule};
@@ -750,6 +750,475 @@ fn test_initial_color_keys_error(#[case] span: ReactionSpan) {
 
     assert_eq!(
         initial_color_keys(&span, &incidence_graph),
+        Err(Contradiction)
+    );
+}
+
+#[fixture]
+fn initial_color_span() -> ReactionSpan {
+    let carbon = AtomForm::from_element(Element::C);
+    let nitrogen = AtomForm::from_element(Element::N);
+    let ligand = StereoLigand::new;
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Added(carbon.clone()),
+            EntitySpan::Removed(carbon.clone()),
+            EntitySpan::Modified {
+                lhs: carbon.clone(),
+                rhs: nitrogen.clone(),
+            },
+            EntitySpan::Modified {
+                lhs: carbon.clone(),
+                rhs: nitrogen.clone(),
+            },
+            EntitySpan::Modified {
+                lhs: nitrogen,
+                rhs: carbon.clone(),
+            },
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Unchanged(carbon.clone()),
+            EntitySpan::Unchanged(carbon),
+        ],
+        bonds: vec![
+            (
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(7),
+                AtomId(8),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Added(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(1),
+                AtomId(3),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(4),
+                AtomId(5),
+                EntitySpan::Modified {
+                    lhs: BondForm::from_order(1),
+                    rhs: BondForm::from_order(2),
+                },
+            ),
+            (
+                AtomId(5),
+                AtomId(6),
+                EntitySpan::Modified {
+                    lhs: BondForm::from_order(1),
+                    rhs: BondForm::from_order(2),
+                },
+            ),
+            (
+                AtomId(9),
+                AtomId(10),
+                EntitySpan::Modified {
+                    lhs: BondForm::from_order(2),
+                    rhs: BondForm::from_order(1),
+                },
+            ),
+            (
+                AtomId(7),
+                AtomId(11),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(8),
+                AtomId(12),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(0),
+                AtomId(9),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+        ],
+        dative: vec![
+            (
+                vec![AtomId(0)],
+                AtomId(7),
+                EntitySpan::Unchanged(DativeBondForm::from_order(1)),
+            ),
+            (
+                vec![AtomId(1)],
+                AtomId(8),
+                EntitySpan::Unchanged(DativeBondForm::from_order(1)),
+            ),
+            (
+                vec![AtomId(9)],
+                AtomId(10),
+                EntitySpan::Added(DativeBondForm::from_order(1)),
+            ),
+        ],
+        aromatic: vec![
+            (
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![1, 2])),
+            ),
+            (
+                vec![AtomId(7), AtomId(8)],
+                EntitySpan::Modified {
+                    lhs: AromaticSystemForm::from_electrons(vec![1, 2]),
+                    rhs: AromaticSystemForm::from_electrons(vec![2, 1]),
+                },
+            ),
+            (
+                vec![AtomId(9), AtomId(10)],
+                EntitySpan::Modified {
+                    lhs: AromaticSystemForm::from_electrons(vec![1, 2]),
+                    rhs: AromaticSystemForm::from_electrons(vec![1, 2]).with_charge(1_i64),
+                },
+            ),
+            (
+                vec![AtomId(11), AtomId(12)],
+                EntitySpan::Added(AromaticSystemForm::from_electrons(vec![1, 2])),
+            ),
+        ],
+        multicenter: vec![
+            (
+                vec![AtomId(0), AtomId(7)],
+                EntitySpan::Unchanged(MulticenterBondForm::from_electrons(vec![1, 2])),
+            ),
+            (
+                vec![AtomId(1), AtomId(8)],
+                EntitySpan::Modified {
+                    lhs: MulticenterBondForm::from_electrons(vec![1, 2]),
+                    rhs: MulticenterBondForm::from_electrons(vec![2, 1]),
+                },
+            ),
+            (
+                vec![AtomId(9), AtomId(11)],
+                EntitySpan::Removed(MulticenterBondForm::from_electrons(vec![1, 2])),
+            ),
+        ],
+        noncovalent: vec![
+            (
+                [AtomId(0), AtomId(8)],
+                EntitySpan::Unchanged(NoncovalentBondForm::from_kind(
+                    NoncovalentBondKind::HydrogenBond,
+                )),
+            ),
+            (
+                [AtomId(1), AtomId(7)],
+                EntitySpan::Unchanged(NoncovalentBondForm::from_kind(
+                    NoncovalentBondKind::HydrogenBond,
+                )),
+            ),
+            (
+                [AtomId(9), AtomId(12)],
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                    rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+                },
+            ),
+        ],
+        stereo_atoms: vec![
+            (
+                AtomId(7),
+                vec![
+                    ligand(AtomId(8), StereoLigandKind::Atom),
+                    ligand(AtomId(11), StereoLigandKind::Atom),
+                    ligand(AtomId(7), StereoLigandKind::ImplicitHydrogen),
+                    ligand(AtomId(7), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+            (
+                AtomId(8),
+                vec![
+                    ligand(AtomId(7), StereoLigandKind::Atom),
+                    ligand(AtomId(12), StereoLigandKind::Atom),
+                    ligand(AtomId(8), StereoLigandKind::ImplicitHydrogen),
+                    ligand(AtomId(8), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                },
+            ),
+            (
+                AtomId(0),
+                vec![
+                    ligand(AtomId(1), StereoLigandKind::Atom),
+                    ligand(AtomId(9), StereoLigandKind::Atom),
+                    ligand(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    ligand(AtomId(0), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+            ),
+        ],
+        stereo_bonds: vec![
+            (
+                BondId(1),
+                vec![
+                    ligand(AtomId(11), StereoLigandKind::Atom),
+                    ligand(AtomId(7), StereoLigandKind::ImplicitHydrogen),
+                    ligand(AtomId(12), StereoLigandKind::Atom),
+                    ligand(AtomId(8), StereoLigandKind::ImplicitHydrogen),
+                ],
+                EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, 0u32)),
+            ),
+            (
+                BondId(0),
+                vec![
+                    ligand(AtomId(9), StereoLigandKind::Atom),
+                    ligand(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    ligand(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    ligand(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+                    rhs: StereoBondForm::new(StereoKind::CisTrans, 1u32),
+                },
+            ),
+        ],
+        ..Default::default()
+    })
+}
+
+#[rstest]
+#[case::atom_unchanged(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
+#[case::atom_added(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+#[case::atom_removed(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
+#[case::atom_added_removed(Entity::Atom(AtomId(2)), Entity::Atom(AtomId(3)), false)]
+#[case::atom_modified(Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)), true)]
+#[case::atom_modified_reversed(Entity::Atom(AtomId(4)), Entity::Atom(AtomId(6)), false)]
+#[case::bond_unchanged(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), true)]
+#[case::bond_added(Entity::Bond(BondId(0)), Entity::Bond(BondId(2)), false)]
+#[case::bond_removed(Entity::Bond(BondId(0)), Entity::Bond(BondId(3)), false)]
+#[case::bond_modified(Entity::Bond(BondId(4)), Entity::Bond(BondId(5)), true)]
+#[case::bond_modified_reversed(Entity::Bond(BondId(4)), Entity::Bond(BondId(6)), false)]
+#[case::dative_unchanged(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(1)),
+    true
+)]
+#[case::dative_added(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(2)),
+    false
+)]
+#[case::aromatic_modified_electrons(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    true
+)]
+#[case::aromatic_modified_charge(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(2)),
+    false
+)]
+#[case::aromatic_added(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(3)),
+    false
+)]
+#[case::multicenter_modified_electrons(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(1)),
+    true
+)]
+#[case::multicenter_removed(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(2)),
+    false
+)]
+#[case::noncovalent_unchanged(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(1)),
+    true
+)]
+#[case::noncovalent_modified(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(2)),
+    false
+)]
+#[case::stereo_atom_modified_configuration(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(1)),
+    true
+)]
+#[case::stereo_atom_added(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(2)),
+    false
+)]
+#[case::stereo_bond_modified_configuration(
+    Entity::StereoBond(StereoBondId(0)),
+    Entity::StereoBond(StereoBondId(1)),
+    true
+)]
+#[case::entity_kind(Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+fn test_initial_colors(
+    initial_color_span: ReactionSpan,
+    #[case] lhs: Entity,
+    #[case] rhs: Entity,
+    #[case] expected: bool,
+) {
+    let span = initial_color_span
+        .normalize()
+        .expect("fixed span normalizes");
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure)
+        .expect("fixed span has colors");
+
+    assert_eq!(
+        colors.entities[incidence_graph.node_of(lhs).index()]
+            == colors.entities[incidence_graph.node_of(rhs).index()],
+        expected
+    );
+}
+
+#[rstest]
+#[case::aromatic_unchanged(
+    [Entity::AromaticSystem(AromaticSystemId(0)), Entity::Atom(AtomId(0))],
+    [Entity::AromaticSystem(AromaticSystemId(2)), Entity::Atom(AtomId(9))],
+    true
+)]
+#[case::aromatic_position(
+    [Entity::AromaticSystem(AromaticSystemId(0)), Entity::Atom(AtomId(0))],
+    [Entity::AromaticSystem(AromaticSystemId(0)), Entity::Atom(AtomId(1))],
+    false
+)]
+#[case::aromatic_modified(
+    [Entity::AromaticSystem(AromaticSystemId(0)), Entity::Atom(AtomId(0))],
+    [Entity::AromaticSystem(AromaticSystemId(1)), Entity::Atom(AtomId(7))],
+    false
+)]
+#[case::aromatic_modified_reversed(
+    [Entity::AromaticSystem(AromaticSystemId(1)), Entity::Atom(AtomId(7))],
+    [Entity::AromaticSystem(AromaticSystemId(1)), Entity::Atom(AtomId(8))],
+    false
+)]
+#[case::aromatic_added(
+    [Entity::AromaticSystem(AromaticSystemId(0)), Entity::Atom(AtomId(0))],
+    [Entity::AromaticSystem(AromaticSystemId(3)), Entity::Atom(AtomId(11))],
+    false
+)]
+#[case::multicenter_removed(
+    [Entity::MulticenterBond(MulticenterBondId(0)), Entity::Atom(AtomId(0))],
+    [Entity::MulticenterBond(MulticenterBondId(2)), Entity::Atom(AtomId(9))],
+    false
+)]
+#[case::role(
+    [Entity::AromaticSystem(AromaticSystemId(1)), Entity::Atom(AtomId(7))],
+    [Entity::MulticenterBond(MulticenterBondId(1)), Entity::Atom(AtomId(1))],
+    false
+)]
+#[case::bond_endpoint(
+    [Entity::Bond(BondId(0)), Entity::Atom(AtomId(0))],
+    [Entity::Bond(BondId(2)), Entity::Atom(AtomId(1))],
+    true
+)]
+#[case::dative_role(
+    [Entity::DativeBond(DativeBondId(0)), Entity::Atom(AtomId(0))],
+    [Entity::DativeBond(DativeBondId(0)), Entity::Atom(AtomId(7))],
+    false
+)]
+fn test_initial_colors_incidence(
+    initial_color_span: ReactionSpan,
+    #[case] lhs: [Entity; 2],
+    #[case] rhs: [Entity; 2],
+    #[case] expected: bool,
+) {
+    let span = initial_color_span
+        .normalize()
+        .expect("fixed span normalizes");
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure)
+        .expect("fixed span has colors");
+    let color = |[owner, atom]: [Entity; 2]| {
+        let nodes = [owner, atom].map(|entity| incidence_graph.node_of(entity));
+        let (edge, _) = incidence_graph
+            .incidences()
+            .find(|&(edge, _)| {
+                let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+                nodes == [first, second] || nodes == [second, first]
+            })
+            .expect("the case names an incidence of the fixed span");
+        colors.incidences[edge.index()]
+    };
+
+    assert_eq!(color(lhs) == color(rhs), expected);
+}
+
+#[rstest]
+#[case::aromatic_electron_count_length(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![2, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution
+)]
+#[case::multicenter_electron_count_length(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::B, Element::H, Element::B]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            EntitySpan::Added(MulticenterBondForm::from_electrons(vec![1, 0, 1, 0])),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution
+)]
+#[case::stereo_atom_coset_range(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (
+                    AtomId(0),
+                    AtomId(ligand),
+                    EntitySpan::Unchanged(BondForm::from_order(1)),
+                )
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 2u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure
+)]
+fn test_initial_colors_error(#[case] span: ReactionSpan, #[case] level: DescriptionLevel) {
+    let incidence_graph = span.incidence_graph(match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    });
+
+    assert_eq!(
+        initial_colors(&span, &incidence_graph, level),
         Err(Contradiction)
     );
 }

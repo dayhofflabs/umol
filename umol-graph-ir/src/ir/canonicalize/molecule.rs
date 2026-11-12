@@ -31,7 +31,7 @@ use super::{
 /// The key of a leaf: the molecule in the entity order of the leaf, with each form as the integer
 /// of its color.
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-struct CanonicalComparisonKey {
+struct ColorKey {
     /// The integer of each atom.
     atoms: Vec<u32>,
     /// The two endpoint images and the integer of each bond.
@@ -577,10 +577,10 @@ fn color_key(
     incidence_graph: &IncidenceGraph,
     colors: &InitialColors,
     entity_order: &[NodeId],
-) -> CanonicalComparisonKey {
+) -> ColorKey {
     let mut atom_images = vec![0_u32; incidence_graph.entity_count(EntityKind::Atom)];
     let mut bond_images = vec![0_u32; incidence_graph.entity_count(EntityKind::Bond)];
-    let mut key = CanonicalComparisonKey {
+    let mut key = ColorKey {
         atoms: Vec::with_capacity(atom_images.len()),
         bonds: Vec::with_capacity(bond_images.len()),
         dative: Vec::new(),

@@ -2436,12 +2436,12 @@ committed search on the 20,056 pairs. `para_stereo_cascade` and
 
 ### S9 — Reaction spans and reactions
 
-#### S9a — Span colors and key rows
+#### S9a — Span colors and key rows **Done**
 
 **Module:** `ir/canonicalize/reaction_span.rs`.
 
-Add `initial_colors`, `color_key`, and the span submodule's own `CanonicalComparisonKey`, the
-counterparts of the molecule's.
+Add `initial_colors`, `color_key`, and the span submodule's own `ColorKey`, the counterparts of
+the molecule's.
 The color of a span entity is the color of its `EntitySpan` of forms, and the positional part of an
 incidence is lifted through the span in the same way. A stereo row holds the `EntitySpan` of the
 transported forms. Additive (green). [dep: S6g, S6k]
@@ -2451,6 +2451,67 @@ transported forms. Additive (green). [dep: S6g, S6k]
 `test_reaction_span_canonicalize_placement`, the counterpart of the molecule table: the same kinds
 of datum on symmetric carriers, each as an unchanged, an added, a removed, and a modified entity,
 and a constraint on one side of a span only. Its rows hold before and after S9b and S9c.
+
+The key of a leaf is named `ColorKey` in both submodules: the molecule's struct, which was
+`CanonicalComparisonKey` since S6j, is renamed, and the span submodule has its own. `color_key`
+builds it. The name `CanonicalComparisonKey` is left to the encoded key, which S10a removes. A
+`ColorKey` is compared between the leaves of one search only.
+
+The span's `ColorKey` has the rows of the molecule's. The row of an aromatic system or a
+multicenter bond holds the `EntitySpan` of the electron counts of each side in the order of the
+sorted atoms, and the row of a stereo entity the `EntitySpan` of the forms transported into the
+frame of the leaf and normalized.
+
+`initial_colors` ranks the color of each entity span per kind and returns `InitialColors`, without
+incidence integers at Topology. The color of an incidence is its role and, for an atom of an
+aromatic system or a multicenter bond, the `EntitySpan` of the electron count of that atom on each
+side, with equal sides giving `Unchanged`. The length of the electron counts, the stereo kind, and
+the identity frame action are checked on each side. `color_key` builds the key of a leaf from the
+entity order, as the molecule's does.
+
+Nothing calls the three before S9b. The library build reports three more dead-code warnings, for
+the struct and the two functions, beside the two of S7a, and `color_key` has no test until the
+search uses it.
+
+Tests. `test_initial_colors` has 24 rows over the new fixture `initial_color_span`, which holds
+every entity kind in several span variants. Each row names two entities and whether they share an
+integer: two unchanged atoms do, an unchanged and an added or a removed atom do not, two atoms
+modified alike do, two modified in opposite directions do not. A `Modified` aromatic system or
+multicenter bond whose sides differ in the electron counts only, and a `Modified` stereo entity
+whose sides differ in the configuration only, share the integer of the unchanged entity.
+`test_initial_colors_incidence` has 9 rows of two incidences each: they share an integer exactly
+when the role and the span of the electron count agree. `test_initial_colors_error` has 3 rows: an
+electron list of the wrong length on the rhs of a `Modified` aromatic system and on an added
+multicenter bond, and a coset out of range on the rhs of a `Modified` stereo atom.
+
+`test_reaction_span_canonicalize_placement` has 110 rows of two spans in the DSL each. Thirteen
+kinds of datum have 8 rows: an atom charge, an atom constraint, a bond order, a bond constraint, a
+dative bond, the electron counts, the charge, and the constraint of an aromatic system, the
+electron counts of a multicenter bond, a noncovalent bond, a stereo configuration, a
+stereogenicity constraint, and a topicity constraint. Each kind stands on a symmetric carrier as
+an unchanged, a modified, an added, and a removed entity, with one row of two equal spans and one
+of two different ones per variant; the different spans exchange the two sides, reverse a
+modification, move the datum to an inequivalent place, or leave it out. Six rows hold a constraint
+span that is unchanged, added, or removed. The test asserts that the canonical forms are equal and
+that `canonical_eq` holds exactly on the rows of equal spans, and that these have equal canonical
+hashes. The expected values follow from the symmetry of the carriers; all 110 rows pass on the
+search as it stands.
+
+Five temporary changes confirm the tests:
+
+| Change | Failing tests |
+| --- | --- |
+| The color of an added entity is read as unchanged | 5 rows of `test_initial_colors`, `test_entity_span_as_color` |
+| The incidence colors of a span leave out the electron counts | 3 rows of `test_initial_colors_incidence` |
+| The electron count of a removed side is read as unchanged | 1 row of `test_initial_colors_incidence` |
+| The pruning treats every candidate of a cell as one orbit | 16 tests, among them 2 rows of the span table |
+| The span's `retain_stereo_preserving_generators` keeps every generator | 9 tests, among them 2 rows of the span table |
+
+The first three change code that only the unit tests reach before S9b.
+
+The 12,319 library tests, the integration tests of the crate, the 555 properties, and the default
+tests of the workspace without `umol-py` pass. Clippy on the crate reports the five dead-code
+warnings and nothing else.
 
 #### S9b — Span search on colors
 
@@ -2496,8 +2557,8 @@ table of S9a holds before and after.
 Delete `CanonicalKeyValue`, the encoded `CanonicalComparisonKey`, the positioned keys and their
 positions, the span key and its tag positions, the encoding functions, `atom_inherent_fields`,
 `bond_inherent_fields`, `InitialColorKey`, `rank_initial_colors`,
-`constitution_partition_descriptors`, and the span key helpers, with their tests. The key type of
-each aggregate keeps the name `CanonicalComparisonKey`. No behavior changes (green). [dep: S9c]
+`constitution_partition_descriptors`, and the span key helpers, with their tests. No behavior
+changes (green). [dep: S9c]
 
 **Tests:** the library tests, the property suite, and the integration tests pass.
 

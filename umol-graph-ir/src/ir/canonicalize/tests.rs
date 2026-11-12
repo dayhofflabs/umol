@@ -1655,6 +1655,1012 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
     assert!(!left_contradiction.canonical_eq(&valid, &canonicalize_context));
 }
 
+#[rstest]
+#[case::atom_charge_unchanged(
+    r#"{:atoms ["C#c+" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C#c+" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_charge_unchanged_absent(
+    r#"{:atoms ["C#c+" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_charge_modified(
+    r#"{:atoms [{:modify ["C" "C#c+"]} "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" {:modify ["C" "C#c+"]} "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_charge_modified_reversed(
+    r#"{:atoms [{:modify ["C" "C#c+"]} "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms [{:modify ["C#c+" "C"]} "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_charge_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#c+"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#c+"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [3 6 "1"]}]}"#,
+    true
+)]
+#[case::atom_charge_added_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#c+"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    false
+)]
+#[case::atom_charge_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:remove "C#c+"}]
+          :bonds
+          [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:remove [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:remove "C#c+"}]
+          :bonds
+          [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:remove [3 6 "1"]}]}"#,
+    true
+)]
+#[case::atom_charge_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:remove "C#c+"}]
+          :bonds
+          [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:remove [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#c+"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    false
+)]
+#[case::atom_constraint_unchanged(
+    r#"{:atoms ["C#v4" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C#v4" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_constraint_unchanged_absent(
+    r#"{:atoms ["C#v4" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_constraint_modified(
+    r#"{:atoms [{:modify ["C" "C#v4"]} "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" {:modify ["C" "C#v4"]} "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::atom_constraint_modified_reversed(
+    r#"{:atoms [{:modify ["C" "C#v4"]} "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms [{:modify ["C#v4" "C"]} "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::atom_constraint_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#v4"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#v4"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [3 6 "1"]}]}"#,
+    true
+)]
+#[case::atom_constraint_added_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#v4"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    false
+)]
+#[case::atom_constraint_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:remove "C#v4"}]
+          :bonds
+          [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:remove [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:remove "C#v4"}]
+          :bonds
+          [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:remove [3 6 "1"]}]}"#,
+    true
+)]
+#[case::atom_constraint_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:remove "C#v4"}]
+          :bonds
+          [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:remove [0 6 "1"]}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C" {:add "C#v4"}]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"] {:add [0 6 "1"]}]}"#,
+    false
+)]
+#[case::bond_order_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "2"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_order_unchanged_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_order_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:modify [0 1 ["1" "2"]]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:modify [3 4 ["1" "2"]]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_order_modified_reversed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:modify [0 1 ["1" "2"]]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:modify [0 1 ["2" "1"]]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_order_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "2"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:add [3 4 "2"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_order_added_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "2"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_order_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:remove [0 1 "2"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:remove [3 4 "2"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_order_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:remove [0 1 "2"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "2"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_constraint_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1#a"] [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_constraint_unchanged_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_constraint_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:modify [0 1 ["1" "1#a"]]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:modify [3 4 ["1" "1#a"]]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_constraint_modified_reversed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:modify [0 1 ["1" "1#a"]]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:modify [0 1 ["1#a" "1"]]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_constraint_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1#a"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:add [3 4 "1#a"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_constraint_added_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1#a"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::bond_constraint_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:remove [0 1 "1#a"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] {:remove [3 4 "1#a"]} [4 5 "1"] [0 5 "1"]]}"#,
+    true
+)]
+#[case::bond_constraint_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:remove [0 1 "1#a"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [{:add [0 1 "1#a"]} [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]}"#,
+    false
+)]
+#[case::dative_bond_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 3 :attrs "1"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [1] :acceptor 4 :attrs "1"}]}"#,
+    true
+)]
+#[case::dative_bond_unchanged_distance(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 3 :attrs "1"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:donors [0] :acceptor 2 :attrs "1"}]}"#,
+    false
+)]
+#[case::dative_bond_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:modify {:donors [0] :acceptor 3 :attrs ["1" "2"]}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:modify {:donors [1] :acceptor 4 :attrs ["1" "2"]}}]}"#,
+    true
+)]
+#[case::dative_bond_modified_reversed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:modify {:donors [0] :acceptor 3 :attrs ["1" "2"]}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:modify {:donors [0] :acceptor 3 :attrs ["2" "1"]}}]}"#,
+    false
+)]
+#[case::dative_bond_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:add {:donors [0] :acceptor 3 :attrs "1"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:add {:donors [1] :acceptor 4 :attrs "1"}}]}"#,
+    true
+)]
+#[case::dative_bond_added_distance(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:add {:donors [0] :acceptor 3 :attrs "1"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:add {:donors [0] :acceptor 2 :attrs "1"}}]}"#,
+    false
+)]
+#[case::dative_bond_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:remove {:donors [0] :acceptor 3 :attrs "1"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:remove {:donors [1] :acceptor 4 :attrs "1"}}]}"#,
+    true
+)]
+#[case::dative_bond_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:remove {:donors [0] :acceptor 3 :attrs "1"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :dative-bonds [{:add {:donors [0] :acceptor 3 :attrs "1"}}]}"#,
+    false
+)]
+#[case::aromatic_electron_counts_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,2,1,1]"}]}"#,
+    true
+)]
+#[case::aromatic_electron_counts_unchanged_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,2,1,1,1,1]"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,2,1,1]"}]}"#,
+    false
+)]
+#[case::aromatic_electron_counts_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2 3 4 5] :attrs ["[1,1,1,1,1,1]" "[2,1,1,1,1,1]"]}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2 3 4 5] :attrs ["[1,1,1,1,1,1]" "[1,1,1,2,1,1]"]}}]}"#,
+    true
+)]
+#[case::aromatic_electron_counts_modified_shift(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2 3 4 5] :attrs ["[2,1,1,1,1,1]" "[1,2,1,1,1,1]"]}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2 3 4 5] :attrs ["[2,1,1,1,1,1]" "[1,1,1,2,1,1]"]}}]}"#,
+    false
+)]
+#[case::aromatic_electron_counts_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2 3 4 5] :attrs "[1,1,1,2,1,1]"}}]}"#,
+    true
+)]
+#[case::aromatic_electron_counts_added_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2 3 4 5] :attrs "[2,2,1,1,1,1]"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2 3 4 5] :attrs "[2,1,1,2,1,1]"}}]}"#,
+    false
+)]
+#[case::aromatic_electron_counts_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:remove {:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:remove {:atoms [0 1 2 3 4 5] :attrs "[1,1,1,2,1,1]"}}]}"#,
+    true
+)]
+#[case::aromatic_electron_counts_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:remove {:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}}]}"#,
+    false
+)]
+#[case::aromatic_system_charge_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#c-"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*#c-"}]}"#,
+    true
+)]
+#[case::aromatic_system_charge_unchanged_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#c-"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_charge_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2] :attrs ["*" "*#c-"]}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:atoms [0 1 2] :attrs "*"} {:modify {:atoms [3 4 5] :attrs ["*" "*#c-"]}}]}"#,
+    true
+)]
+#[case::aromatic_system_charge_modified_reversed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2] :attrs ["*" "*#c-"]}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2] :attrs ["*#c-" "*"]}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_charge_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*#c-"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:add {:atoms [3 4 5] :attrs "*#c-"}}]}"#,
+    true
+)]
+#[case::aromatic_system_charge_added_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*#c-"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_charge_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:remove {:atoms [0 1 2] :attrs "*#c-"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:atoms [0 1 2] :attrs "*"} {:remove {:atoms [3 4 5] :attrs "*#c-"}}]}"#,
+    true
+)]
+#[case::aromatic_system_charge_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:remove {:atoms [0 1 2] :attrs "*#c-"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*#c-"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_constraint_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#e2"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*#e2"}]}"#,
+    true
+)]
+#[case::aromatic_system_constraint_unchanged_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*#e2"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_constraint_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2] :attrs ["*" "*#e2"]}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:atoms [0 1 2] :attrs "*"} {:modify {:atoms [3 4 5] :attrs ["*" "*#e2"]}}]}"#,
+    true
+)]
+#[case::aromatic_system_constraint_modified_reversed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2] :attrs ["*" "*#e2"]}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:modify {:atoms [0 1 2] :attrs ["*#e2" "*"]}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_constraint_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*#e2"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:atoms [0 1 2] :attrs "*"} {:add {:atoms [3 4 5] :attrs "*#e2"}}]}"#,
+    true
+)]
+#[case::aromatic_system_constraint_added_absent(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*#e2"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::aromatic_system_constraint_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:remove {:atoms [0 1 2] :attrs "*#e2"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:atoms [0 1 2] :attrs "*"} {:remove {:atoms [3 4 5] :attrs "*#e2"}}]}"#,
+    true
+)]
+#[case::aromatic_system_constraint_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems
+          [{:remove {:atoms [0 1 2] :attrs "*#e2"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"] [3 4 "1"] [4 5 "1"] [3 5 "1"]]
+          :aromatic-systems [{:add {:atoms [0 1 2] :attrs "*#e2"}} {:atoms [3 4 5] :attrs "*"}]}"#,
+    false
+)]
+#[case::multicenter_electron_counts_unchanged(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[0,0,2]"}]}"#,
+    true
+)]
+#[case::multicenter_electron_counts_unchanged_distinct(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,1,0]"}]}"#,
+    false
+)]
+#[case::multicenter_electron_counts_modified(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:modify {:atoms [0 1 2] :attrs ["[2,0,0]" "[0,2,0]"]}}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:modify {:atoms [0 1 2] :attrs ["[0,0,2]" "[2,0,0]"]}}]}"#,
+    true
+)]
+#[case::multicenter_electron_counts_modified_distinct(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:modify {:atoms [0 1 2] :attrs ["[2,0,0]" "[0,2,0]"]}}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:modify {:atoms [0 1 2] :attrs ["[2,0,0]" "[1,1,0]"]}}]}"#,
+    false
+)]
+#[case::multicenter_electron_counts_added(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:add {:atoms [0 1 2] :attrs "[2,0,0]"}}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:add {:atoms [0 1 2] :attrs "[0,0,2]"}}]}"#,
+    true
+)]
+#[case::multicenter_electron_counts_added_distinct(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:add {:atoms [0 1 2] :attrs "[2,0,0]"}}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:add {:atoms [0 1 2] :attrs "[1,1,0]"}}]}"#,
+    false
+)]
+#[case::multicenter_electron_counts_removed(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:remove {:atoms [0 1 2] :attrs "[2,0,0]"}}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:remove {:atoms [0 1 2] :attrs "[0,0,2]"}}]}"#,
+    true
+)]
+#[case::multicenter_electron_counts_removed_added(
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:remove {:atoms [0 1 2] :attrs "[2,0,0]"}}]}"#,
+    r#"{:atoms ["B" "B" "B"]
+          :multicenter-bonds [{:add {:atoms [0 1 2] :attrs "[2,0,0]"}}]}"#,
+    false
+)]
+#[case::noncovalent_bond_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [0 3] :attrs "Hbd"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [1 4] :attrs "Hbd"}]}"#,
+    true
+)]
+#[case::noncovalent_bond_unchanged_distance(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [0 3] :attrs "Hbd"}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:atoms [0 2] :attrs "Hbd"}]}"#,
+    false
+)]
+#[case::noncovalent_bond_modified(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:modify {:atoms [0 3] :attrs ["Hbd" "Xbd"]}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:modify {:atoms [1 4] :attrs ["Hbd" "Xbd"]}}]}"#,
+    true
+)]
+#[case::noncovalent_bond_modified_reversed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:modify {:atoms [0 3] :attrs ["Hbd" "Xbd"]}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:modify {:atoms [0 3] :attrs ["Xbd" "Hbd"]}}]}"#,
+    false
+)]
+#[case::noncovalent_bond_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:add {:atoms [0 3] :attrs "Hbd"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:add {:atoms [1 4] :attrs "Hbd"}}]}"#,
+    true
+)]
+#[case::noncovalent_bond_added_distance(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:add {:atoms [0 3] :attrs "Hbd"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:add {:atoms [0 2] :attrs "Hbd"}}]}"#,
+    false
+)]
+#[case::noncovalent_bond_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:remove {:atoms [0 3] :attrs "Hbd"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:remove {:atoms [1 4] :attrs "Hbd"}}]}"#,
+    true
+)]
+#[case::noncovalent_bond_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:remove {:atoms [0 3] :attrs "Hbd"}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :noncovalent-bonds [{:add {:atoms [0 3] :attrs "Hbd"}}]}"#,
+    false
+)]
+#[case::stereo_configuration_unchanged(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    true
+)]
+#[case::stereo_configuration_unchanged_distinct(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    false
+)]
+#[case::stereo_configuration_modified(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th1"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:modify {:site 4 :ligands [5 6 7 0] :attrs ["Th0" "Th1"]}}]}"#,
+    true
+)]
+#[case::stereo_configuration_modified_reversed(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th1"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th1" "Th0"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_configuration_added(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}
+                         {:add {:site 4 :ligands [5 6 7 0] :attrs "Th0"}}]}"#,
+    true
+)]
+#[case::stereo_configuration_added_distinct(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th1"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    false
+)]
+#[case::stereo_configuration_removed(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:remove {:site 0 :ligands [1 2 3 4] :attrs "Th0"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}
+                         {:remove {:site 4 :ligands [5 6 7 0] :attrs "Th0"}}]}"#,
+    true
+)]
+#[case::stereo_configuration_removed_added(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:remove {:site 0 :ligands [1 2 3 4] :attrs "Th0"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th1"}]}"#,
+    false
+)]
+#[case::stereo_stereogenicity_unchanged(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0#g/"}]}"#,
+    true
+)]
+#[case::stereo_stereogenicity_unchanged_absent(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_stereogenicity_modified(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th0#g/"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:modify {:site 4 :ligands [5 6 7 0] :attrs ["Th0" "Th0#g/"]}}]}"#,
+    true
+)]
+#[case::stereo_stereogenicity_modified_reversed(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th0#g/"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0#g/" "Th0"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_stereogenicity_added(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:add {:site 4 :ligands [5 6 7 0] :attrs "Th0#g/"}}]}"#,
+    true
+)]
+#[case::stereo_stereogenicity_added_absent(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_stereogenicity_removed(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:remove {:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:remove {:site 4 :ligands [5 6 7 0] :attrs "Th0#g/"}}]}"#,
+    true
+)]
+#[case::stereo_stereogenicity_removed_added(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:remove {:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_topicity_unchanged(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0#o(0,1)'"}]}"#,
+    true
+)]
+#[case::stereo_topicity_unchanged_pair(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,2)'"}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_topicity_modified(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th0#o(0,1)'"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:modify {:site 4 :ligands [5 6 7 0] :attrs ["Th0" "Th0#o(0,1)'"]}}]}"#,
+    true
+)]
+#[case::stereo_topicity_modified_pair(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th0#o(0,1)'"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th0#o(0,2)'"]}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_topicity_added(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:add {:site 4 :ligands [5 6 7 0] :attrs "Th0#o(0,1)'"}}]}"#,
+    true
+)]
+#[case::stereo_topicity_added_pair(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,2)'"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::stereo_topicity_removed(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:remove {:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                         {:remove {:site 4 :ligands [5 6 7 0] :attrs "Th0#o(0,1)'"}}]}"#,
+    true
+)]
+#[case::stereo_topicity_removed_added(
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:remove {:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    r#"{:atoms ["C" "F" "Cl" "Br" "C" "F" "Cl" "Br"]
+          :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]]
+          :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4] :attrs "Th0#o(0,1)'"}}
+                         {:site 4 :ligands [5 6 7 0] :attrs "Th0"}]}"#,
+    false
+)]
+#[case::constraint_unchanged(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [3] :sum 0}}]}"#,
+    true
+)]
+#[case::constraint_unchanged_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 1] :sum 0}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:charge-sum {:atoms [0 3] :sum 0}}]}"#,
+    false
+)]
+#[case::constraint_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:add {:charge-sum {:atoms [0] :sum 0}}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:add {:charge-sum {:atoms [3] :sum 0}}}]}"#,
+    true
+)]
+#[case::constraint_added_pair(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:add {:charge-sum {:atoms [0 1] :sum 0}}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:add {:charge-sum {:atoms [0 3] :sum 0}}}]}"#,
+    false
+)]
+#[case::constraint_removed(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:remove {:charge-sum {:atoms [0] :sum 0}}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:remove {:charge-sum {:atoms [3] :sum 0}}}]}"#,
+    true
+)]
+#[case::constraint_removed_added(
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:remove {:charge-sum {:atoms [0] :sum 0}}}]}"#,
+    r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+          :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [0 5 "1"]]
+          :constraints [{:add {:charge-sum {:atoms [0] :sum 0}}}]}"#,
+    false
+)]
+fn test_reaction_span_canonicalize_placement(
+    canonicalize_context: CanonicalizeContext,
+    #[case] left: &str,
+    #[case] right: &str,
+    #[case] expected: bool,
+) {
+    let [left, right] =
+        [left, right].map(|source| ReactionSpan::from_edn_str(source).expect("case span parses"));
+
+    assert_eq!(
+        left.clone().canonicalize(&canonicalize_context)
+            == right.clone().canonicalize(&canonicalize_context),
+        expected
+    );
+    assert_eq!(left.canonical_eq(&right, &canonicalize_context), expected);
+    if expected {
+        assert_eq!(
+            left.canonical_hash(&canonicalize_context),
+            right.canonical_hash(&canonicalize_context),
+        );
+    }
+}
+
 fn reaction_canonicalization_fixture() -> Reaction {
     let atom = AtomForm::from_element(Element::C).with_charge(0_i64);
     Reaction::new(
