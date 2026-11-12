@@ -564,7 +564,7 @@ values that differ; their expected value and their hash clause are changed as th
 As in S1a no separate property for the implication was added. The tests of `umol-graph-ir` pass
 with all features.
 
-#### S1c — Guides
+#### S1c — Guides **Done**
 
 **Module:** `docs/development/data-types.md`, `docs/development/nomenclature.md`,
 `docs/development/property-tests.md`.
@@ -573,6 +573,20 @@ Rewrite the passages on the totalization of equality for two intrinsic contradic
 rule of the Contradictions section. The property-tests guide states the old rule in its section
 on the standardization pipeline. `python-api.md` and `operations.md` are read for statements of
 the old rule. No code. [dep: S1b]
+
+The data types guide states the rule after its sentence on `framed_eq_under` and in its paragraph
+on the totality of equality. The nomenclature guide states it under the equality ladder, where
+`framed_eq_under` is now named for `Molecule` and `ReactionSpan`. The property-tests guide states
+it in the section on the standardization pipeline. `python-api.md` and `operations.md` say
+nothing about the equality of contradictory values and are unchanged. The sentence of the data
+types guide on edit removal, which compares stored entries with `framed_eq`, is unchanged, since
+entries keep the default rule.
+
+Two sentences of the rustdoc of the `Canonicalize` trait that spoke of failure totalization were
+reworded with the guides. No behavior changed in this subitem.
+
+Stage gate of S1: the tests of S1b on unchanged code, clippy with all targets, and the Python
+tests, 3,420 passed.
 
 ### S2 — Two changes to existing canonicalization code
 

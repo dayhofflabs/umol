@@ -478,10 +478,18 @@ The equality operations form the same nested quotient pipeline:
   participant frames and entity ids rather than receiving an id witness from the caller.
 
 For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
-when an admissible total dense correspondence exists under which `framed_eq_under` holds. Two
-intrinsic contradictions still compare equal under canonical equality's failure-totalization rule,
-but that convention does not require a correspondence witness. `framed_eq_under` is the explicit
-entity-id-witness form of `framed_eq`, not another quotient level.
+when an admissible total dense correspondence exists under which `framed_eq_under` holds.
+`framed_eq_under` is the explicit entity-id-witness form of `framed_eq`, not another quotient level.
+
+An aggregate that fails at one stage of the pipeline has no form of that stage and is compared by
+the equality of the stage before. Two aggregates whose canonicalizations both fail are compared by
+`framed_eq`, two that both fail to reframe by `normalized_eq`, and two that both fail to normalize
+are equal only when they are structurally equal. An aggregate that passes a stage is unequal to one
+that fails it. Each of the three equalities is reflexive, symmetric, and transitive on all
+integrity-valid aggregates, and each implies the next. `Molecule` and `ReactionSpan` compare their
+entity counts first, so two values with different counts are unequal under all three. Entity forms
+and their containers keep the default of `Normalize` and `Reframe`, under which two unsatisfiable
+values are equal.
 
 The context-bearing trait has the semantic shape
 
@@ -519,10 +527,10 @@ remapping alone need not do so.
 Use one concrete context for `Molecule`, `ReactionSpan`, and `Reaction` unless an
 implementation establishes a real need for distinct context types. Canonical-form construction is
 fallible; equality is total. Structurally equal inputs compare equal immediately. Two successfully
-canonicalized inputs compare by structural equality, and two intrinsic contradictions compare
-equal because both denote the empty semantic value. One contradiction and one successful form do
-not compare equal. Integrity failures never make distinct inputs equal; callers that need the
-diagnostic invoke `canonicalize` directly.
+canonicalized inputs compare by structural equality of their canonical forms. One contradiction and
+one successful form do not compare equal, and two contradictions compare by `framed_eq`, as stated
+above. Integrity failures never make distinct inputs equal; callers that need the diagnostic invoke
+`canonicalize` directly.
 
 The public operation is complete-only. Callers cannot select topology, constitution, or structure
 as a reduced comparison surface, and a molecule does not publish a description-level query.

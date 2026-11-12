@@ -290,4 +290,4 @@ the statuses recorded here remain authoritative.
 | [242-stereo-transformers-2026-10-29.md](242-stereo-transformers-2026-10-29.md)                                 | Completed     | 2026-10-30   | |
 | [243-stereo-site-assertions-2026-11-07.md](243-stereo-site-assertions-2026-11-07.md)                                 | Completed     | 2026-11-09   | |
 | [244-reaction-span-canonicalization-2026-11-09.md](244-reaction-span-canonicalization-2026-11-09.md)             | Completed     | 2026-11-12   | |
-| [245-canonical-eq-cost-2026-11-12.md](245-canonical-eq-cost-2026-11-12.md)                                     | In Progress   | 2026-11-12   | S1b done; S1c next. |
+| [245-canonical-eq-cost-2026-11-12.md](245-canonical-eq-cost-2026-11-12.md)                                     | In Progress   | 2026-11-12   | S1 done; S2a next. |

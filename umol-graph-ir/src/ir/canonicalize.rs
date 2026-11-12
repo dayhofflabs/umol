@@ -101,7 +101,7 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
 /// participant-frame selection, and canonicalization additionally selects entity ids. It preserves
 /// the represented aggregate, transports every reference and position-sensitive value, and
 /// normalizes carried forms in the selected frame. Construction of the canonical form is fallible;
-/// canonical equality totalizes those failures according to the aggregate's semantic contract.
+/// canonical equality is total and compares two values that both fail by framed equality.
 ///
 /// # Semantic properties
 ///
@@ -109,8 +109,8 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
 ///
 /// - successful complete canonicalization is exactly idempotent and invariant under valid dense
 ///   entity remapping;
-/// - `canonical_eq` is reflexive, symmetric, and transitive under its documented failure
-///   totalization;
+/// - `canonical_eq` is reflexive, symmetric, and transitive, including on values whose
+///   canonicalization fails;
 /// - successful canonical hashes are invariant under valid dense entity remapping, and canonical
 ///   equality implies equal canonical hashes when both hash operations succeed.
 ///

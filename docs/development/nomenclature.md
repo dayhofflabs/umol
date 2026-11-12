@@ -815,15 +815,16 @@ level.
   Deliberately *not* chemical identity, so it stays cheap on the hot path.
 - **`normalized_eq`** — equality of normal forms in the current entity-id and participant frame.
 - **`framed_eq`** — equality after normalization and participant-frame selection.
-  **`Molecule::framed_eq_under`** first remaps entity ids through an explicitly supplied
-  `MoleculeRemapping`, then performs framed equality.
+  **`framed_eq_under`** of `Molecule` and `ReactionSpan` first remaps entity ids through an
+  explicitly supplied `MoleculeRemapping`, then performs framed equality.
 - **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
   implementation selects participant frames and entity ids rather than receiving an id witness
   from the caller.
 
 For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
-when a remapping exists under which `framed_eq_under` holds. Equality
-totalization for two intrinsic contradictions does not require such a witness.
+when a remapping exists under which `framed_eq_under` holds. An aggregate that fails at one stage is
+compared by the equality of the stage before: two failed canonicalizations compare by `framed_eq`,
+two failed reframings by `normalized_eq`, and two failed normalizations by `==`.
 
 Every equality of the ladder includes constraints. Canonicalization reads an inline constraint with
 the form of its entity and a molecule-level constraint in the complete search. This is especially
