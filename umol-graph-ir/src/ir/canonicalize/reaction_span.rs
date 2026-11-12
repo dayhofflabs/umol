@@ -25,10 +25,9 @@ use super::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
     hash_value, molecule_remapping, rank_colors, reaction_canonicalize_level,
     reaction_span_canonicalize_level, reaction_span_counts, AutomorphismAdapter, AutomorphismColor,
-    BranchOrdering, CanonicalCandidate, CanonicalSearchOptions, CanonicalSearchResult,
-    Canonicalize, CanonicalizeContext, DeferredKey, DescriptionLevel, InitialColors,
-    OrderedPartition, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
-    TopologySearchInput,
+    CanonicalCandidate, CanonicalSearchResult, Canonicalize, CanonicalizeContext, DeferredKey,
+    DescriptionLevel, InitialColors, OrderedPartition, ReactionCanonicalizeError,
+    ReactionSpanCanonicalizeError, TopologySearchInput,
 };
 
 /// The key of a leaf: the span in the entity order of the leaf, with each entity span as the
@@ -853,7 +852,6 @@ fn canonical_candidate(
     span: &ReactionSpan,
     level: DescriptionLevel,
     context: &CanonicalizeContext,
-    options: CanonicalSearchOptions,
 ) -> Result<CanonicalSearchResult<Option<ColorKey>>, Contradiction> {
     let incidence_level = match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
@@ -880,7 +878,6 @@ fn canonical_candidate(
                 &adapter,
                 initial_partition,
                 context.automorphism_algorithm,
-                options,
                 &leaf_candidate,
             )
         }
@@ -890,7 +887,6 @@ fn canonical_candidate(
                 &adapter,
                 &adapter.colors,
                 context.automorphism_algorithm,
-                options,
                 &leaf_candidate,
             )
         }
@@ -903,7 +899,6 @@ fn canonical_candidate(
                 &adapter,
                 &adapter.colors,
                 context.automorphism_algorithm,
-                options,
                 &leaf_candidate,
                 &filter_generators,
             )
@@ -917,7 +912,6 @@ fn canonical_candidate(
                 &adapter,
                 &adapter.colors,
                 context.automorphism_algorithm,
-                options,
                 &leaf_candidate,
                 &filter_generators,
             )
@@ -941,12 +935,8 @@ impl ReactionSpan {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), ReactionSpanCanonicalizeError> {
-        let options = CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        };
         let normalized = self.normalize()?;
-        let candidate = canonical_candidate(&normalized, level, context, options)?.candidate;
+        let candidate = canonical_candidate(&normalized, level, context)?.candidate;
         let incidence_level = match level {
             DescriptionLevel::Topology => IncidenceLevel::Topology,
             DescriptionLevel::Constitution => IncidenceLevel::Constitution,

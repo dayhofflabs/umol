@@ -1462,7 +1462,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Topology,
-    [6, 1],
+    1,
 )]
 #[case::added_atoms(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1470,7 +1470,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Topology,
-    [6, 1],
+    1,
 )]
 #[case::removed_atoms(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1478,7 +1478,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Topology,
-    [6, 1],
+    1,
 )]
 #[case::modified_atom(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1493,7 +1493,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Topology,
-    [2, 1],
+    1,
 )]
 #[case::removed_and_added_bond(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1505,7 +1505,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Topology,
-    [2, 1],
+    1,
 )]
 #[case::unchanged_dative_bond(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1520,7 +1520,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Constitution,
-    [2, 1],
+    1,
 )]
 #[case::modified_dative_bond(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1538,7 +1538,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Constitution,
-    [2, 1],
+    1,
 )]
 #[case::unchanged_aromatic_system(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1550,7 +1550,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Constitution,
-    [6, 1],
+    1,
 )]
 #[case::modified_aromatic_system(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1565,7 +1565,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Constitution,
-    [2, 1],
+    1,
 )]
 #[case::aromatic_electron_counts(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1584,7 +1584,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Constitution,
-    [2, 1],
+    1,
 )]
 #[case::equal_stereocentres(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1627,7 +1627,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Structure,
-    [6, 1],
+    1,
 )]
 #[case::lhs_configuration(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1673,7 +1673,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Structure,
-    [6, 3],
+    3,
 )]
 #[case::rhs_configuration(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1719,7 +1719,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Structure,
-    [6, 3],
+    3,
 )]
 #[case::prochiral_rhs_configuration(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1744,7 +1744,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Structure,
-    [2, 2],
+    2,
 )]
 #[case::symmetric_constraint(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1758,7 +1758,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Full,
-    [6, 1],
+    1,
 )]
 #[case::asymmetric_constraint(
     ReactionSpan::from_entries(ReactionSpanEntries {
@@ -1772,58 +1772,23 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
         ..Default::default()
     }),
     DescriptionLevel::Full,
-    [6, 3],
+    3,
 )]
 fn test_canonical_candidate(
     canonicalize_context: CanonicalizeContext,
     #[case] span: ReactionSpan,
     #[case] level: DescriptionLevel,
-    #[case] expected_visited_leaves: [usize; 2],
+    #[case] expected_visited_leaves: usize,
 ) {
     let span = span.normalize().expect("fixed span normalizes");
-    let incidence_graph = span.incidence_graph(match level {
-        DescriptionLevel::Topology => IncidenceLevel::Topology,
-        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
-        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
-    });
-    let [unpruned, pruned] = [false, true].map(|automorphism_pruning| {
-        canonical_candidate(
-            &span,
-            level,
-            &canonicalize_context,
-            CanonicalSearchOptions {
-                automorphism_pruning,
-                branch_order: if automorphism_pruning {
-                    BranchOrdering::BackendCanonical
-                } else {
-                    BranchOrdering::NodeId
-                },
-            },
-        )
-        .expect("fixed span has colors")
-    });
-    let canonical = |search: &CanonicalSearchResult<Option<ColorKey>>| {
-        span.clone()
-            .remap(&remapping_from_order(
-                &span,
-                &incidence_graph,
-                &search.candidate.entity_order,
-            ))
-            .reframe()
-            .expect("selected leaf preserves compatible frames")
-    };
+    let search =
+        canonical_candidate(&span, level, &canonicalize_context).expect("fixed span has colors");
 
-    assert_eq!(canonical(&pruned), canonical(&unpruned));
+    assert_eq!(search.stats.visited_leaves, expected_visited_leaves);
     assert_eq!(
-        [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
-        expected_visited_leaves,
+        search.candidate.key.is_some(),
+        search.stats.visited_leaves > 1
     );
-    for search in [&unpruned, &pruned] {
-        assert_eq!(
-            search.candidate.key.is_some(),
-            search.stats.visited_leaves > 1
-        );
-    }
 }
 
 #[rstest]

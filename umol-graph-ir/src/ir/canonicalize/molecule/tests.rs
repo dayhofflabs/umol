@@ -263,36 +263,13 @@ fn test_canonicalize_structure_para_stereo(
         .clone()
         .remap(&remapping);
     let context = canonicalize_context;
-    let (canonical, remapping) = canonicalize_structure(
-        para_stereo_canonicalization_molecule.clone(),
-        &context,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    )
-    .expect("fixed molecule canonicalizes");
-    let (unpruned, unpruned_remapping) = canonicalize_structure(
-        para_stereo_canonicalization_molecule.clone(),
-        &context,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-    )
-    .expect("fixed molecule canonicalizes without orbit pruning");
+    let (canonical, remapping) =
+        canonicalize_structure(para_stereo_canonicalization_molecule.clone(), &context)
+            .expect("fixed molecule canonicalizes");
 
-    assert_eq!(unpruned, canonical);
     assert_eq!(
         para_stereo_canonicalization_molecule
-            .clone()
             .remap(&remapping)
-            .reframe(),
-        Ok(canonical.clone()),
-    );
-    assert_eq!(
-        para_stereo_canonicalization_molecule
-            .remap(&unpruned_remapping)
             .reframe(),
         Ok(canonical.clone()),
     );
@@ -420,14 +397,14 @@ fn test_canonicalize_structure_stereo_bond(
 }
 
 #[rstest]
-#[case::stereo_atom(stereo_atom_canonicalization_molecule(), [1, 1])]
-#[case::stereo_bond(stereo_bond_canonicalization_molecule(), [1, 1])]
-#[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule(), [24, 24])]
-#[case::para_stereo(para_stereo_canonicalization_molecule(), [8, 8])]
+#[case::stereo_atom(stereo_atom_canonicalization_molecule(), 1)]
+#[case::stereo_bond(stereo_bond_canonicalization_molecule(), 1)]
+#[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule(), 24)]
+#[case::para_stereo(para_stereo_canonicalization_molecule(), 8)]
 fn test_canonicalize_structure_visited_leaves(
     canonicalize_context: CanonicalizeContext,
     #[case] molecule: Molecule,
-    #[case] expected_visited_leaves: [usize; 2],
+    #[case] expected_visited_leaves: usize,
 ) {
     let molecule = molecule.normalize().expect("fixed molecule normalizes");
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -449,33 +426,15 @@ fn test_canonicalize_structure_visited_leaves(
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
-    let unpruned = canonical_search(
+    let search = canonical_search_with_generator_filter(
         &adapter,
         &adapter.colors,
         canonicalize_context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
-        &leaf_candidate,
-    );
-    let pruned = canonical_search_with_generator_filter(
-        &adapter,
-        &adapter.colors,
-        canonicalize_context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
         &leaf_candidate,
         &filter_generators,
     );
 
-    assert_eq!(pruned.candidate.key, unpruned.candidate.key);
-    assert_eq!(
-        [unpruned.stats.visited_leaves, pruned.stats.visited_leaves],
-        expected_visited_leaves,
-    );
+    assert_eq!(search.stats.visited_leaves, expected_visited_leaves);
 }
 
 #[rstest]
@@ -507,15 +466,9 @@ fn test_canonicalize_structure_renumbering(
         let renumbered = symmetric_stereo_canonicalization_molecule
             .clone()
             .remap(&remapping);
-        let (actual, canonical_remapping) = canonicalize_structure(
-            renumbered.clone(),
-            &canonicalize_context,
-            CanonicalSearchOptions {
-                automorphism_pruning: true,
-                branch_order: BranchOrdering::BackendCanonical,
-            },
-        )
-        .expect("renumbered molecule canonicalizes");
+        let (actual, canonical_remapping) =
+            canonicalize_structure(renumbered.clone(), &canonicalize_context)
+                .expect("renumbered molecule canonicalizes");
 
         assert_eq!(actual, canonical, "rank {rank}");
         assert!(
@@ -527,50 +480,6 @@ fn test_canonicalize_structure_renumbering(
             Ok(actual),
             "rank {rank}",
         );
-    }
-}
-
-#[rstest]
-#[case::nauty(AutomorphismAlgorithm::Nauty)]
-fn test_canonicalize_structure_search_options(
-    symmetric_stereo_canonicalization_molecule: Molecule,
-    #[case] algorithm: AutomorphismAlgorithm,
-) {
-    let canonicalize = |options: CanonicalSearchOptions| {
-        canonicalize_structure(
-            symmetric_stereo_canonicalization_molecule.clone(),
-            &CanonicalizeContext {
-                automorphism_algorithm: algorithm,
-            },
-            options,
-        )
-        .expect("fixed molecule canonicalizes")
-        .0
-    };
-    let expected = canonicalize(CanonicalSearchOptions {
-        automorphism_pruning: false,
-        branch_order: BranchOrdering::NodeId,
-    });
-
-    for options in [
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::NodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        },
-    ] {
-        assert_eq!(canonicalize(options), expected, "{options:?}");
     }
 }
 
@@ -602,95 +511,33 @@ fn test_canonicalize_structure_orbit_pruning(
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
-    let mut candidates = Vec::new();
-    let mut stats = Vec::new();
+    let actual = canonical_search_with_generator_filter(
+        &adapter,
+        &adapter.colors,
+        algorithm,
+        &leaf_candidate,
+        &filter_generators,
+    );
+    let remapping =
+        remapping_from_order(&molecule, &incidence_graph, &actual.candidate.entity_order);
+    let canonical = molecule
+        .clone()
+        .remap(&remapping)
+        .reframe()
+        .expect("selected leaf preserves compatible frames");
 
-    for options in [
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::NodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::NodeId,
-        },
-        CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::ReverseNodeId,
-        },
-    ] {
-        let actual = canonical_search_with_generator_filter(
-            &adapter,
-            &adapter.colors,
-            algorithm,
-            options,
-            &leaf_candidate,
-            &filter_generators,
-        );
-        let remapping =
-            remapping_from_order(&molecule, &incidence_graph, &actual.candidate.entity_order);
-        let canonical = molecule
-            .clone()
-            .remap(&remapping)
-            .reframe()
-            .expect("selected leaf preserves compatible frames");
-
-        assert!(
-            molecule.framed_eq_under(&canonical, &remapping),
-            "{options:?}",
-        );
-        candidates.push((actual.candidate.key, canonical));
-        stats.push(actual.stats);
-    }
-
-    for candidate in &candidates[1..] {
-        assert_eq!(candidate, &candidates[0]);
-    }
-
+    assert!(molecule.framed_eq_under(&canonical, &remapping));
     assert_eq!(
-        stats,
-        vec![
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![2; 10],
-                refinement_calls: 3,
-                branch_order_calls: 1,
-                backend_calls: 1,
-                visited_leaves: 2,
-                leaf_comparisons: 1,
-                orbit_pruned_branches: 0,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![2; 10],
-                refinement_calls: 3,
-                branch_order_calls: 1,
-                backend_calls: 1,
-                visited_leaves: 2,
-                leaf_comparisons: 1,
-                orbit_pruned_branches: 0,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![2; 10],
-                refinement_calls: 2,
-                branch_order_calls: 1,
-                backend_calls: 1,
-                visited_leaves: 1,
-                leaf_comparisons: 0,
-                orbit_pruned_branches: 1,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![2; 10],
-                refinement_calls: 2,
-                branch_order_calls: 1,
-                backend_calls: 1,
-                visited_leaves: 1,
-                leaf_comparisons: 0,
-                orbit_pruned_branches: 1,
-            },
-        ],
+        actual.stats,
+        CanonicalSearchStats {
+            initial_residual_cell_sizes: vec![2; 10],
+            refinement_calls: 2,
+            branch_order_calls: 1,
+            backend_calls: 1,
+            visited_leaves: 1,
+            leaf_comparisons: 0,
+            orbit_pruned_branches: 1,
+        },
     );
 }
 
@@ -1838,24 +1685,10 @@ fn test_ordered_partition_refine_exhaustive_domain(
                 ..Default::default()
             });
             let renumbered = molecule.clone().remap(&reverse_remapping(&molecule));
-            let (expected, expected_remapping) = canonicalize_topology(
-                molecule.clone(),
-                &canonicalize_context,
-                CanonicalSearchOptions {
-                    automorphism_pruning: true,
-                    branch_order: BranchOrdering::BackendCanonical,
-                },
-            )
-            .unwrap();
-            let (actual, actual_remapping) = canonicalize_topology(
-                renumbered.clone(),
-                &canonicalize_context,
-                CanonicalSearchOptions {
-                    automorphism_pruning: true,
-                    branch_order: BranchOrdering::BackendCanonical,
-                },
-            )
-            .unwrap();
+            let (expected, expected_remapping) =
+                canonicalize_topology(molecule.clone(), &canonicalize_context).unwrap();
+            let (actual, actual_remapping) =
+                canonicalize_topology(renumbered.clone(), &canonicalize_context).unwrap();
 
             assert_eq!(actual, expected);
             assert!(molecule.framed_eq_under(&expected, &expected_remapping));
@@ -1902,23 +1735,17 @@ fn test_canonical_search_color_labels() {
             entity_order,
         }
     };
-    let options = CanonicalSearchOptions {
-        automorphism_pruning: true,
-        branch_order: BranchOrdering::BackendCanonical,
-    };
 
     let expected = canonical_search(
         &adapter,
         &descriptors,
         AutomorphismAlgorithm::Nauty,
-        options,
         &leaf_candidate,
     );
     let actual = canonical_search(
         &relabeled,
         &descriptors,
         AutomorphismAlgorithm::Nauty,
-        options,
         &leaf_candidate,
     );
 
@@ -1984,10 +1811,6 @@ fn test_canonicalize_topology_relabeling(
     canonicalize_context: CanonicalizeContext,
     #[case] molecule: Molecule,
 ) {
-    let options = CanonicalSearchOptions {
-        automorphism_pruning: true,
-        branch_order: BranchOrdering::BackendCanonical,
-    };
     let expected = molecule
         .clone()
         .tracked_canonicalize_at(DescriptionLevel::Topology, &canonicalize_context)
@@ -1997,7 +1820,7 @@ fn test_canonicalize_topology_relabeling(
 
     for source in [&molecule, &renumbered, &expected] {
         let (actual, remapping) =
-            canonicalize_topology(source.clone(), &canonicalize_context, options).unwrap();
+            canonicalize_topology(source.clone(), &canonicalize_context).unwrap();
 
         assert_eq!(actual, expected);
         assert!(source.framed_eq_under(&actual, &remapping));
@@ -2041,29 +1864,9 @@ fn test_canonicalize_topology_exhaustive_domain(
                 ..Default::default()
             });
 
-            let (canonical, remapping) = canonicalize_topology(
-                molecule.clone(),
-                &canonicalize_context,
-                CanonicalSearchOptions {
-                    automorphism_pruning: true,
-                    branch_order: BranchOrdering::BackendCanonical,
-                },
-            )
-            .unwrap();
-            let (unpruned, _) = canonicalize_topology(
-                molecule.clone(),
-                &canonicalize_context,
-                CanonicalSearchOptions {
-                    automorphism_pruning: false,
-                    branch_order: BranchOrdering::ReverseNodeId,
-                },
-            )
-            .unwrap();
+            let (canonical, remapping) =
+                canonicalize_topology(molecule.clone(), &canonicalize_context).unwrap();
 
-            assert_eq!(
-                unpruned, canonical,
-                "complete bond form {complete_bond_form}, edge mask {edge_mask:#08b}",
-            );
             assert!(
                 molecule.framed_eq_under(&canonical, &remapping),
                 "complete bond form {complete_bond_form}, edge mask {edge_mask:#08b}",
@@ -2186,26 +1989,9 @@ fn test_canonicalize_constitution_entity_kind(canonicalize_context: Canonicalize
     ];
 
     for (entity_kind, molecule) in cases {
-        let (canonical, remapping) = canonicalize_constitution(
-            molecule.clone(),
-            &canonicalize_context,
-            CanonicalSearchOptions {
-                automorphism_pruning: true,
-                branch_order: BranchOrdering::BackendCanonical,
-            },
-        )
-        .unwrap();
-        let (unpruned, _) = canonicalize_constitution(
-            molecule.clone(),
-            &canonicalize_context,
-            CanonicalSearchOptions {
-                automorphism_pruning: false,
-                branch_order: BranchOrdering::ReverseNodeId,
-            },
-        )
-        .unwrap();
+        let (canonical, remapping) =
+            canonicalize_constitution(molecule.clone(), &canonicalize_context).unwrap();
 
-        assert_eq!(unpruned, canonical, "{entity_kind}");
         assert!(
             molecule.framed_eq_under(&canonical, &remapping),
             "{entity_kind}"

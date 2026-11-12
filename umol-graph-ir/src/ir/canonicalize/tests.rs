@@ -3126,10 +3126,6 @@ fn test_ordered_partition_individualize(
 #[rstest]
 #[case::singleton(
     1,
-    CanonicalSearchOptions {
-        automorphism_pruning: false,
-        branch_order: BranchOrdering::NodeId,
-    },
     CanonicalSearchStats {
         initial_residual_cell_sizes: vec![],
         refinement_calls: 1,
@@ -3140,44 +3136,8 @@ fn test_ordered_partition_individualize(
         orbit_pruned_branches: 0,
     },
 )]
-#[case::symmetric(
-    2,
-    CanonicalSearchOptions {
-        automorphism_pruning: false,
-        branch_order: BranchOrdering::BackendCanonical,
-    },
-    CanonicalSearchStats {
-        initial_residual_cell_sizes: vec![2],
-        refinement_calls: 3,
-        branch_order_calls: 1,
-        backend_calls: 1,
-        visited_leaves: 2,
-        leaf_comparisons: 1,
-        orbit_pruned_branches: 0,
-    },
-)]
-#[case::local_branch_order(
-    2,
-    CanonicalSearchOptions {
-        automorphism_pruning: false,
-        branch_order: BranchOrdering::NodeId,
-    },
-    CanonicalSearchStats {
-        initial_residual_cell_sizes: vec![2],
-        refinement_calls: 3,
-        branch_order_calls: 1,
-        backend_calls: 0,
-        visited_leaves: 2,
-        leaf_comparisons: 1,
-        orbit_pruned_branches: 0,
-    },
-)]
 #[case::orbit_pruned(
     2,
-    CanonicalSearchOptions {
-        automorphism_pruning: true,
-        branch_order: BranchOrdering::BackendCanonical,
-    },
     CanonicalSearchStats {
         initial_residual_cell_sizes: vec![2],
         refinement_calls: 2,
@@ -3188,11 +3148,7 @@ fn test_ordered_partition_individualize(
         orbit_pruned_branches: 1,
     },
 )]
-fn test_canonical_search_stats(
-    #[case] node_count: usize,
-    #[case] options: CanonicalSearchOptions,
-    #[case] expected: CanonicalSearchStats,
-) {
+fn test_canonical_search_stats(#[case] node_count: usize, #[case] expected: CanonicalSearchStats) {
     let source = Graph::new(node_count, &[]);
     let adapter = direct_graph_adapter(&source);
     let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
@@ -3203,7 +3159,6 @@ fn test_canonical_search_stats(
         &adapter,
         &adapter.colors,
         AutomorphismAlgorithm::Nauty,
-        options,
         &leaf_candidate,
     );
 

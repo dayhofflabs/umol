@@ -595,51 +595,6 @@ impl OrderedPartition {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BranchOrdering {
-    BackendCanonical,
-    #[cfg(test)]
-    NodeId,
-    #[cfg(test)]
-    ReverseNodeId,
-}
-
-impl BranchOrdering {
-    fn requires_automorphisms(self) -> bool {
-        self == Self::BackendCanonical
-    }
-
-    fn order(
-        self,
-        adapter: &AutomorphismAdapter,
-        automorphisms: Option<&AutomorphismAdapterOutput>,
-        candidates: &mut [NodeId],
-    ) {
-        match self {
-            Self::BackendCanonical => {
-                let labels = &automorphisms
-                    .expect("backend branch order requested automorphisms")
-                    .source_canonical_labels;
-                let mut ranks = vec![0; adapter.source_node_count];
-                for (rank, node) in labels.iter().enumerate() {
-                    ranks[node.index()] = rank;
-                }
-                candidates.sort_unstable_by_key(|node| ranks[node.index()]);
-            }
-            #[cfg(test)]
-            Self::NodeId => candidates.sort_unstable(),
-            #[cfg(test)]
-            Self::ReverseNodeId => candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs)),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-struct CanonicalSearchOptions {
-    automorphism_pruning: bool,
-    branch_order: BranchOrdering,
-}
-
 #[cfg(test)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct CanonicalSearchStats {
@@ -667,13 +622,13 @@ struct CanonicalSearchResult<K> {
 
 /// Minimize a typed leaf candidate over an exact partition ordered by semantic descriptors.
 ///
-/// Adapter colors are opaque equality labels and do not order the partition. Automorphism pruning
-/// requires the leaf key to be invariant under adapter automorphisms.
+/// Adapter colors are opaque equality labels and do not order the partition. The search prunes with
+/// the automorphisms of the adapter and visits the candidates of a cell in the order of the backend
+/// canonical labels, so the leaf key must be invariant under adapter automorphisms.
 fn canonical_search<K, Descriptor, LeafCandidate>(
     adapter: &AutomorphismAdapter,
     partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
-    options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
 ) -> CanonicalSearchResult<K>
 where
@@ -685,7 +640,6 @@ where
         adapter,
         OrderedPartition::from_descriptors(partition_descriptors),
         algorithm,
-        options,
         leaf_candidate,
         false,
         &|_| {},
@@ -696,7 +650,6 @@ fn canonical_search_from_partition<K, LeafCandidate>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
-    options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
 ) -> CanonicalSearchResult<K>
 where
@@ -707,7 +660,6 @@ where
         adapter,
         partition,
         algorithm,
-        options,
         leaf_candidate,
         false,
         &|_| {},
@@ -718,7 +670,6 @@ fn canonical_search_with_generator_filter<K, Descriptor, LeafCandidate, FilterGe
     adapter: &AutomorphismAdapter,
     partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
-    options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
     filter_generators: &FilterGenerators,
 ) -> CanonicalSearchResult<K>
@@ -732,7 +683,6 @@ where
         adapter,
         OrderedPartition::from_descriptors(partition_descriptors),
         algorithm,
-        options,
         leaf_candidate,
         true,
         filter_generators,
@@ -743,7 +693,6 @@ fn canonical_search_impl<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     initial: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
-    options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
     apply_generator_filter: bool,
     filter_generators: &FilterGenerators,
@@ -776,7 +725,6 @@ where
         adapter,
         initial,
         algorithm,
-        options,
         leaf_candidate,
         apply_generator_filter,
         filter_generators,
@@ -797,7 +745,6 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
-    options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
     apply_generator_filter: bool,
     filter_generators: &FilterGenerators,
@@ -832,50 +779,42 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     };
 
     let mut candidates = partition.cells[cell_index].clone();
-    let automorphisms = (options.automorphism_pruning
-        || apply_generator_filter
-        || options.branch_order.requires_automorphisms())
-    .then(|| {
-        #[cfg(test)]
-        {
-            stats.backend_calls += 1;
-        }
-        let mut output = adapter.automorphisms_for_partition(&partition, algorithm);
-        if apply_generator_filter {
-            filter_generators(&mut output.source_generators);
-            output.source_orbits =
-                source_orbits_from_generators(adapter.source_node_count, &output.source_generators);
-        }
-        output
-    });
-
-    if options.automorphism_pruning {
-        let orbits = &automorphisms
-            .as_ref()
-            .expect("automorphisms requested for orbit pruning")
-            .source_orbits;
-        let mut representatives = BTreeMap::<NodeId, NodeId>::new();
-        for candidate in candidates {
-            representatives
-                .entry(orbits[candidate.index()])
-                .and_modify(|representative| *representative = (*representative).min(candidate))
-                .or_insert(candidate);
-        }
-        #[cfg(test)]
-        {
-            stats.orbit_pruned_branches +=
-                partition.cells[cell_index].len() - representatives.len();
-        }
-        candidates = representatives.into_values().collect();
+    #[cfg(test)]
+    {
+        stats.backend_calls += 1;
     }
+    let mut automorphisms = adapter.automorphisms_for_partition(&partition, algorithm);
+    if apply_generator_filter {
+        filter_generators(&mut automorphisms.source_generators);
+        automorphisms.source_orbits = source_orbits_from_generators(
+            adapter.source_node_count,
+            &automorphisms.source_generators,
+        );
+    }
+
+    let orbits = &automorphisms.source_orbits;
+    let mut representatives = BTreeMap::<NodeId, NodeId>::new();
+    for candidate in candidates {
+        representatives
+            .entry(orbits[candidate.index()])
+            .and_modify(|representative| *representative = (*representative).min(candidate))
+            .or_insert(candidate);
+    }
+    #[cfg(test)]
+    {
+        stats.orbit_pruned_branches += partition.cells[cell_index].len() - representatives.len();
+    }
+    candidates = representatives.into_values().collect();
 
     #[cfg(test)]
     {
         stats.branch_order_calls += 1;
     }
-    options
-        .branch_order
-        .order(adapter, automorphisms.as_ref(), &mut candidates);
+    let mut ranks = vec![0; adapter.source_node_count];
+    for (rank, node) in automorphisms.source_canonical_labels.iter().enumerate() {
+        ranks[node.index()] = rank;
+    }
+    candidates.sort_unstable_by_key(|node| ranks[node.index()]);
 
     for candidate in candidates {
         #[cfg(test)]
@@ -889,7 +828,6 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
             adapter,
             child,
             algorithm,
-            options,
             leaf_candidate,
             apply_generator_filter,
             filter_generators,

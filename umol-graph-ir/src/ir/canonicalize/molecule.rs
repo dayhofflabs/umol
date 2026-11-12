@@ -23,9 +23,9 @@ use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
     hash_value, molecule_canonicalize_level, molecule_counts, molecule_remapping, rank_colors,
-    AutomorphismAdapter, AutomorphismColor, BranchOrdering, CanonicalCandidate,
-    CanonicalSearchOptions, Canonicalize, CanonicalizeContext, DeferredKey, DescriptionLevel,
-    InitialColors, MoleculeCanonicalizeError, OrderedPartition, TopologySearchInput,
+    AutomorphismAdapter, AutomorphismColor, CanonicalCandidate, Canonicalize, CanonicalizeContext,
+    DeferredKey, DescriptionLevel, InitialColors, MoleculeCanonicalizeError, OrderedPartition,
+    TopologySearchInput,
 };
 
 /// The key of a leaf: the molecule in the entity order of the leaf, with each form as the integer
@@ -737,7 +737,6 @@ fn color_key(
 fn canonicalize_topology(
     molecule: Molecule,
     context: &CanonicalizeContext,
-    options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
@@ -763,7 +762,6 @@ fn canonicalize_topology(
         &adapter,
         initial_partition,
         context.automorphism_algorithm,
-        options,
         &leaf_candidate,
     )
     .candidate
@@ -776,7 +774,6 @@ fn canonicalize_topology(
 fn canonicalize_constitution(
     molecule: Molecule,
     context: &CanonicalizeContext,
-    options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
@@ -799,7 +796,6 @@ fn canonicalize_constitution(
         &adapter,
         &adapter.colors,
         context.automorphism_algorithm,
-        options,
         &leaf_candidate,
     )
     .candidate
@@ -813,7 +809,6 @@ fn canonicalize_constitution(
 fn canonicalize_structure(
     molecule: Molecule,
     context: &CanonicalizeContext,
-    options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -839,7 +834,6 @@ fn canonicalize_structure(
         &adapter,
         &adapter.colors,
         context.automorphism_algorithm,
-        options,
         &leaf_candidate,
         &filter_generators,
     )
@@ -854,7 +848,6 @@ fn canonicalize_structure(
 fn canonicalize_full(
     molecule: Molecule,
     context: &CanonicalizeContext,
-    options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -875,7 +868,6 @@ fn canonicalize_full(
         &adapter,
         &adapter.colors,
         context.automorphism_algorithm,
-        options,
         &leaf_candidate,
         &filter_generators,
     )
@@ -893,15 +885,11 @@ impl Molecule {
         level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeRemapping), MoleculeCanonicalizeError> {
-        let options = CanonicalSearchOptions {
-            automorphism_pruning: true,
-            branch_order: BranchOrdering::BackendCanonical,
-        };
         match level {
-            DescriptionLevel::Topology => canonicalize_topology(self, context, options),
-            DescriptionLevel::Constitution => canonicalize_constitution(self, context, options),
-            DescriptionLevel::Structure => canonicalize_structure(self, context, options),
-            DescriptionLevel::Full => canonicalize_full(self, context, options),
+            DescriptionLevel::Topology => canonicalize_topology(self, context),
+            DescriptionLevel::Constitution => canonicalize_constitution(self, context),
+            DescriptionLevel::Structure => canonicalize_structure(self, context),
+            DescriptionLevel::Full => canonicalize_full(self, context),
         }
     }
 }

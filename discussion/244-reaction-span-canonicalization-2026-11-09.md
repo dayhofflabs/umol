@@ -2768,22 +2768,122 @@ the one context that is left.
 
 ### S12 — Closeout
 
-#### S12a — Final comparison and measurements
+#### S12a — Final comparison and measurements **Done**
 
 The reference comparison runs on the full pair file. The benchmark groups of S0a run in the
 reference checkout and in the tree back to back. The table is recorded here. [dep: S11a]
 
-#### S12b — Gates
+The reference comparison ran at S11a, on the code that S12 leaves unchanged: no mismatch on the
+10,028 pairs, and `canonical_eq` and the equality of `canonical_hash` of molecules give the same
+answer as the committed search on the 20,056 pairs.
+
+Criterion medians with a 1-second warm-up and 3 seconds of measurement, one run in the reference
+checkout at commit 5049b9796 followed by one run in the tree, on the 16 cases that the benchmark
+file of the reference checkout holds. Every case is faster in the tree in every group:
+
+| Group | Ratio of tree to reference over the 16 cases | Largest ratio at |
+| --- | ---: | --- |
+| Molecule `canonicalize` | 0.18 to 0.78 | `symmetry_heavy_radicals` |
+| Molecule `canonical_hash` | 0.001 to 0.87 | `symmetry_heavy_radicals` |
+| Molecule `canonical_eq` | 0.001 to 0.91 | `symmetry_heavy_radicals` |
+| Span `canonicalize` | 0.001 to 0.51 | `para_stereo_cascade` |
+| Span `canonical_hash` | 0.001 to 0.54 | `para_stereo_trichloropentane` |
+| Span `canonical_eq` | 0.001 to 0.56 | `para_stereo_trichloropentane` |
+| Modified span `canonicalize` | 0.001 to 0.51 | `para_stereo_cascade` |
+| Modified span `canonical_eq` | 0.001 to 0.56 | `para_stereo_cascade` |
+| Reaction `canonical_eq`, equal | 0.001 to 0.69 | `tetrahedral_stereo` |
+| Reaction `canonical_eq`, unequal | 0.001 to 0.70 | `tetrahedral_stereo` |
+
+| Case | Molecule `canonicalize`, reference | Tree | Molecule `canonical_eq`, reference | Tree | Span `canonicalize`, reference | Tree | Span `canonical_eq`, reference | Tree | Modified span `canonicalize`, reference | Tree |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 21.3 µs | 12.3 µs | 34.5 µs | 24.9 µs | 72.7 µs | 14.6 µs | 132.6 µs | 30.1 µs | 29.7 µs | 9.1 µs |
+| `disconnected_rings` | 33.5 µs | 23.4 µs | 58.6 µs | 47.2 µs | 4.38 ms | 26.3 µs | 8.79 ms | 53.7 µs | 396.7 µs | 19.7 µs |
+| `overlay_heavy` | 92.4 µs | 18.6 µs | 168.5 µs | 38.4 µs | 55.6 µs | 20.9 µs | 91.6 µs | 43.3 µs | 57.2 µs | 21.3 µs |
+| `tetrahedral_stereo` | 40.7 µs | 8.0 µs | 72.0 µs | 16.8 µs | 24.2 µs | 8.7 µs | 36.1 µs | 18.5 µs | 25.9 µs | 9.2 µs |
+| `cis_trans_stereo_bond` | 33.6 µs | 8.5 µs | 57.5 µs | 17.5 µs | 27.3 µs | 9.9 µs | 41.9 µs | 20.0 µs | 27.9 µs | 9.6 µs |
+| `mixed_atom_and_bond_stereo` | 72.6 µs | 14.2 µs | 133.8 µs | 29.3 µs | 46.2 µs | 16.3 µs | 73.3 µs | 33.4 µs | 47.1 µs | 16.3 µs |
+| `frame_relative_stereo_constraint` | 47.7 µs | 8.5 µs | 86.8 µs | 17.7 µs | 25.9 µs | 9.6 µs | 42.1 µs | 20.1 µs | 27.7 µs | 10.1 µs |
+| `meso_dichlorobutane` | 68.8 µs | 19.5 µs | 125.1 µs | 39.9 µs | 46.5 µs | 20.9 µs | 77.7 µs | 42.8 µs | 33.1 µs | 12.5 µs |
+| `para_stereo_trichloropentane` | 130.9 µs | 27.2 µs | 240.2 µs | 54.6 µs | 61.6 µs | 28.6 µs | 104.1 µs | 58.2 µs | 44.6 µs | 16.6 µs |
+| `para_stereo_cascade` | 418.0 µs | 251.2 µs | 782.5 µs | 512.9 µs | 508.0 µs | 261.1 µs | 998.2 µs | 543.2 µs | 293.6 µs | 149.4 µs |
+| `symmetric_stereo_triisopropanolamine` | 136.6 µs | 35.7 µs | 519.6 µs | 71.4 µs | 171.8 µs | 37.7 µs | 320.9 µs | 76.6 µs | 175.4 µs | 58.3 µs |
+| `symmetric_stereo_butanol` | 120.6 µs | 56.4 µs | 2.54 ms | 115.0 µs | 1.46 ms | 58.9 µs | 2.83 ms | 121.2 µs | 1.47 ms | 61.5 µs |
+| `symmetric_stereo_dimethylbutanol` | 240.5 µs | 149.9 µs | 324.31 ms | 309.9 µs | 194.03 ms | 154.2 µs | 386.05 ms | 314.8 µs | 201.71 ms | 150.2 µs |
+| `feature_free_connected` | 37.9 µs | 25.2 µs | 72.0 µs | 52.7 µs | 2.23 ms | 28.0 µs | 4.39 ms | 58.5 µs | 380.7 µs | 20.9 µs |
+| `feature_free_disconnected` | 40.9 µs | 28.5 µs | 74.6 µs | 58.9 µs | 2.83 ms | 31.1 µs | 5.61 ms | 64.5 µs | 707.2 µs | 23.9 µs |
+| `symmetry_heavy_radicals` | 32.6 µs | 25.4 µs | 57.8 µs | 52.4 µs | 11.17 ms | 27.6 µs | 22.09 ms | 56.8 µs | 1.82 ms | 20.5 µs |
+
+The cases with `#v1` on every hydrogen reach Full in the reference checkout and Topology in the
+tree:
+
+| Case with `#v1` | Molecule `canonicalize`, reference | Tree | Molecule `canonical_eq`, reference | Tree | Span `canonicalize`, reference | Tree | Span `canonical_eq`, reference | Tree |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 2.11 ms | 25.5 µs | 4.28 ms | 53.2 µs | 2.58 ms | 28.4 µs | 5.14 ms | 59.1 µs |
+| `feature_free_disconnected` | 2.75 ms | 28.6 µs | 5.53 ms | 59.4 µs | 3.32 ms | 31.1 µs | 6.68 ms | 64.9 µs |
+| `symmetry_heavy_radicals` | 11.23 ms | 25.7 µs | 22.32 ms | 52.4 µs | 13.67 ms | 27.8 µs | 27.44 ms | 57.0 µs |
+
+Four cases were added to the corpus at S6h.1, after the reference checkout was set up, and have
+no reference median. In the tree they take:
+
+| Case | Molecule `canonicalize` | Molecule `canonical_eq` | Span `canonicalize` | Span `canonical_eq` |
+| --- | ---: | ---: | ---: | ---: |
+| `overlay_unconstrained` | 13.1 µs | 27.5 µs | 14.4 µs | 30.1 µs |
+| `aromatic_electron_counts` | 11.8 µs | 24.3 µs | 12.7 µs | 26.1 µs |
+| `symmetric_charge_sum` | 21.8 µs | 44.0 µs | 23.2 µs | 47.7 µs |
+| `asymmetric_charge_sum` | 138.3 µs | 273.0 µs | 147.6 µs | 297.4 µs |
+
+`asymmetric_charge_sum` is the one case that this work made slower: its constraint breaks the
+symmetry of the ring, so the generator checks of Full cost time and prune little. Its medians
+before the Full search were 125.0 µs for molecule `canonicalize` (S7b) and 131.5 µs for span
+`canonicalize` (S9b).
+
+#### S12b — Gates **Done**
 
 `cargo +nightly fmt --all`; `cargo clippy --workspace --all-targets -- -D warnings`;
 `cargo test --workspace` with all features; the graph-IR property suite; the Python suite under the
 python-build skill. [dep: S12a]
 
-#### S12c — Remove the reference setup
+The formatting check and clippy report nothing. `cargo test --workspace --all-features`, which
+includes `umol-py` and the property suites, passes with 45,711 tests and 10 ignored, and the
+Python suite with 3,420. The gates ran before S12b.1.
+
+#### S12b.1 — One search path **Done**
+
+**Module:** `ir/canonicalize.rs`, `ir/canonicalize/molecule.rs`,
+`ir/canonicalize/reaction_span.rs`.
+
+`CanonicalSearchOptions` and `BranchOrdering` are removed. The code set them in two places, both
+to pruning and to backend canonical order; only tests passed anything else, and two of the three
+branch orders were compiled for tests alone. `search_partition` now always asks the backend for
+the automorphisms, prunes by their orbits, and visits the candidates of a cell in the order of the
+backend canonical labels. The four per-level functions of the molecule, `canonical_candidate`, and
+the three search entry points lose the parameter. The search statistics, which exist in test
+builds only, stay: the visited-leaf counts are what shows where the pruning gains nothing.
+
+Tests. `test_canonicalize_structure_search_options` compared the options with each other and is
+removed. Five tests lose their unpruned search and the comparison with it:
+`test_canonicalize_structure_para_stereo`, `test_canonicalize_structure_visited_leaves`,
+`test_canonicalize_topology_exhaustive_domain`, `test_canonicalize_constitution_entity_kind`, and
+`test_canonical_candidate`. The rows of the two leaf-count tests hold the count of the one search,
+which is the pruned count they held before: 1, 1, 24, and 8 for the molecule fixtures, and the
+second number of each span row. `test_canonicalize_structure_orbit_pruning` ran four option sets
+and asserts the statistics of the one search, which are those of its two pruned runs.
+`test_canonical_search_stats` keeps its singleton row and its pruned row. No expected value
+changed.
+
+The tests of `umol-graph-ir` with all features pass, 12,828 in all, and clippy on the crate
+reports nothing.
+
+#### S12c — Remove the reference setup **Done**
 
 Remove `/Users/dr/.cargo-target-244`, `/Users/dr/.cargo-target-244-1`, `scratch/244-compare`,
 `scratch/244-compare-1`, and the pair file. The three worktrees are removed by the user.
 [dep: S12b]
+
+`/Users/dr/.cargo-target-244`, `scratch/244-compare` with the pair file and the baseline medians,
+and `scratch/244-compare-1` are removed; `/Users/dr/.cargo-target-244-1` was removed before S12a.
+The worktrees `scratch/244-canonicalization-reaction-span`,
+`scratch/244-canonicalization-molecule-structure`, and `scratch/244-color-trial` remain.
 
 ### Stage gate
 
