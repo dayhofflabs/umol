@@ -20,6 +20,7 @@ use crate::ir::{
     StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
     StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
+use crate::mol_dsl;
 
 #[fixture]
 fn symmetric_stereo_canonicalization_molecule() -> Molecule {
@@ -599,6 +600,85 @@ fn test_canonicalize_structure_stereo_frame(
             .tracked_canonicalize_at(DescriptionLevel::Structure, &canonicalize_context)
             .map(|(canonical, _)| canonical),
     );
+}
+
+#[rstest]
+#[case::bond_endpoint(
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+    Entity::Bond(BondId(0)),
+    AtomId(0),
+    (Incidence::BondEndpoint, None)
+)]
+#[case::dative_donor(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    Entity::DativeBond(DativeBondId(0)),
+    AtomId(0),
+    (Incidence::DativeDonor, None)
+)]
+#[case::dative_acceptor(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    Entity::DativeBond(DativeBondId(0)),
+    AtomId(1),
+    (Incidence::DativeAcceptor, None)
+)]
+#[case::aromatic_atom_oxygen(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(2))
+)]
+#[case::aromatic_atom_carbon(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(1),
+    (Incidence::AromaticAtom, Some(1))
+)]
+#[case::aromatic_atom_without_counts(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+            AromaticSystemForm::default(),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, None)
+)]
+#[case::multicenter_atom(
+    mol_dsl!(
+        r#"{:atoms ["B" "B" "H"] :multicenter-bonds [{:atoms [0 2 1] :attrs "[1,1,0]"}]}"#
+    ),
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    AtomId(1),
+    (Incidence::MulticenterAtom, Some(0))
+)]
+fn test_incidence_color(
+    #[case] molecule: Molecule,
+    #[case] owner: Entity,
+    #[case] atom: AtomId,
+    #[case] expected: (Incidence, Option<i64>),
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+    let edge = incidence_graph
+        .graph()
+        .find_edge(
+            incidence_graph.node_of(owner),
+            incidence_graph.node_of(Entity::Atom(atom)),
+        )
+        .unwrap();
+    let (incidence, electron_count) = incidence_color(&molecule, &incidence_graph, edge);
+
+    assert_eq!((incidence.clone(), electron_count), expected);
 }
 
 #[rstest]

@@ -1,6 +1,6 @@
 //! Molecule canonicalization.
 
-use umol_graph_core::{Graph, NodeId, SubdivisionNodeSource};
+use umol_graph_core::{EdgeId, Graph, NodeId, SubdivisionNodeSource};
 use umol_perm::Permutation;
 
 use super::super::aromatic::aromatic_system_representative_action;
@@ -146,6 +146,53 @@ fn retain_preserving_generators(
     });
 }
 
+/// The color of the incidence at `edge`: its role and, for an atom of an aromatic system or a
+/// multicenter bond, the electron count of that atom.
+fn incidence_color<'a>(
+    molecule: &Molecule,
+    incidence_graph: &'a IncidenceGraph,
+    edge: EdgeId,
+) -> (&'a Incidence, Option<i64>) {
+    let incidence = incidence_graph.incidence(edge);
+    let electron_count = match incidence {
+        Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+            let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+            let (owner, atom) = match (
+                incidence_graph.entity(first),
+                incidence_graph.entity(second),
+            ) {
+                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                _ => {
+                    unreachable!("an electron contribution connects an overlay to an atom")
+                }
+            };
+            let (atom_position, electrons) = match owner {
+                Entity::AromaticSystem(id) => (
+                    molecule
+                        .aromatic_system(id)
+                        .atom_ids()
+                        .position(|id| id == atom),
+                    &molecule.aromatic_system(id).attributes().electrons,
+                ),
+                Entity::MulticenterBond(id) => (
+                    molecule
+                        .multicenter_bond(id)
+                        .atom_ids()
+                        .position(|id| id == atom),
+                    &molecule.multicenter_bond(id).attributes().electrons,
+                ),
+                _ => unreachable!(
+                    "electron contributions belong to aromatic or multicenter entities"
+                ),
+            };
+            let atom_position = atom_position.expect("incidence atom belongs to its overlay");
+            electrons.at(AtomPosition::from(atom_position))
+        }
+        _ => None,
+    };
+    (incidence, electron_count)
+}
+
 /// The integers of the colors of a normalized molecule at `level`: one per entity, by incidence
 /// node, and one per incidence, by incidence edge.
 ///
@@ -280,45 +327,11 @@ fn initial_colors(
 
     let incidence_colors = incidence_graph
         .incidences()
-        .map(|(edge, incidence)| {
-            let electron_count = match incidence {
-                Incidence::AromaticAtom | Incidence::MulticenterAtom => {
-                    let [first, second] = incidence_graph.graph().edge_endpoints(edge);
-                    let (owner, atom) = match (
-                        incidence_graph.entity(first),
-                        incidence_graph.entity(second),
-                    ) {
-                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
-                        _ => {
-                            unreachable!("an electron contribution connects an overlay to an atom")
-                        }
-                    };
-                    let (atom_position, electrons) = match owner {
-                        Entity::AromaticSystem(id) => (
-                            molecule
-                                .aromatic_system(id)
-                                .atom_ids()
-                                .position(|id| id == atom),
-                            &molecule.aromatic_system(id).attributes().electrons,
-                        ),
-                        Entity::MulticenterBond(id) => (
-                            molecule
-                                .multicenter_bond(id)
-                                .atom_ids()
-                                .position(|id| id == atom),
-                            &molecule.multicenter_bond(id).attributes().electrons,
-                        ),
-                        _ => unreachable!(
-                            "electron contributions belong to aromatic or multicenter entities"
-                        ),
-                    };
-                    let atom_position =
-                        atom_position.expect("incidence atom belongs to its overlay");
-                    electrons.at(AtomPosition::from(atom_position))
-                }
-                _ => None,
-            };
-            ((incidence, electron_count), edge.index())
+        .map(|(edge, _)| {
+            (
+                incidence_color(molecule, incidence_graph, edge),
+                edge.index(),
+            )
         })
         .collect();
     let mut incidences = vec![0; incidence_graph.graph().edge_count()];

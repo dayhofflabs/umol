@@ -921,6 +921,150 @@ fn initial_color_span() -> ReactionSpan {
 }
 
 #[rstest]
+#[case::bond_endpoint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        bonds: vec![(
+            AtomId(0),
+            AtomId(1),
+            EntitySpan::Unchanged(BondForm::from_order(1)),
+        )],
+        ..Default::default()
+    }),
+    Entity::Bond(BondId(0)),
+    AtomId(0),
+    (Incidence::BondEndpoint, None)
+)]
+#[case::aromatic_atom_unchanged(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Unchanged(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(EntitySpan::Unchanged(Some(2))))
+)]
+#[case::aromatic_atom_modified(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (
+        Incidence::AromaticAtom,
+        Some(EntitySpan::Modified {
+            lhs: Some(2),
+            rhs: Some(1),
+        })
+    )
+)]
+#[case::aromatic_atom_equal_sides(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1]),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1]),
+            },
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(1),
+    (Incidence::AromaticAtom, Some(EntitySpan::Unchanged(Some(1))))
+)]
+#[case::aromatic_atom_added(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Added(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(EntitySpan::Added(Some(2))))
+)]
+#[case::aromatic_atom_removed(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+            EntitySpan::Removed(AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])),
+        )],
+        ..Default::default()
+    }),
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    AtomId(0),
+    (Incidence::AromaticAtom, Some(EntitySpan::Removed(Some(2))))
+)]
+fn test_incidence_color(
+    #[case] span: ReactionSpan,
+    #[case] owner: Entity,
+    #[case] atom: AtomId,
+    #[case] expected: (Incidence, Option<EntitySpan<Option<i64>>>),
+) {
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Constitution);
+    let edge = incidence_graph
+        .graph()
+        .find_edge(
+            incidence_graph.node_of(owner),
+            incidence_graph.node_of(Entity::Atom(atom)),
+        )
+        .unwrap();
+    let (incidence, electron_count) = incidence_color(&span, &incidence_graph, edge);
+
+    assert_eq!((incidence.clone(), electron_count), expected);
+}
+
+#[rstest]
 #[case::atom_unchanged(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
 #[case::atom_added(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
 #[case::atom_removed(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]

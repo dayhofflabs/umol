@@ -592,7 +592,7 @@ tests, 3,420 passed.
 
 No result changes in this stage.
 
-#### S2a — `incidence_color`
+#### S2a — `incidence_color` **Done**
 
 **Module:** both submodules.
 
@@ -603,6 +603,14 @@ The color of one incidence, its role and electron count, moves out of the closur
 **Tests:** `test_incidence_color` in both submodules, with a bond endpoint, an aromatic atom with
 an electron count, and for spans an atom whose electron count differs between the sides. The
 tests of `initial_colors` are unchanged.
+
+`incidence_color(value, incidence_graph, edge)` returns the role and the electron count; the
+body is the former closure, moved without change. The molecule test has seven rows: a bond
+endpoint of ethane, the donor and the acceptor of ammonia borane, the oxygen and a carbon of
+furan, an aromatic atom of a system without literal counts, and a boron of a three-center bond.
+The span test has six rows on furan: a bond endpoint, and the oxygen of an aromatic system that
+is unchanged, modified, added, and removed, and a carbon whose count is equal on both sides of a
+modified system. The tests of `umol-graph-ir` pass with all features.
 
 #### S2b — `remapping_preserves_stereo`
 

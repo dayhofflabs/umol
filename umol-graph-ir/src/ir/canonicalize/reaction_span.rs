@@ -207,6 +207,66 @@ fn retain_preserving_generators(
     });
 }
 
+/// The color of the incidence at `edge`: its role and, for an atom of an aromatic system or a
+/// multicenter bond, the span of the electron counts of that atom on each side.
+fn incidence_color<'a>(
+    span: &ReactionSpan,
+    incidence_graph: &'a IncidenceGraph,
+    edge: EdgeId,
+) -> (&'a Incidence, Option<EntitySpan<Option<i64>>>) {
+    let incidence = incidence_graph.incidence(edge);
+    let electron_count = match incidence {
+        Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+            let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+            let (owner, atom) = match (
+                incidence_graph.entity(first),
+                incidence_graph.entity(second),
+            ) {
+                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                _ => {
+                    unreachable!("an electron contribution connects an overlay to an atom")
+                }
+            };
+            let sides = match owner {
+                Entity::AromaticSystem(id) => {
+                    let atom_position = AtomPosition::from(
+                        span.aromatic_systems()
+                            .atoms(id)
+                            .position(|id| id == atom)
+                            .expect("incidence atom belongs to its overlay"),
+                    );
+                    let attributes = span.aromatic_systems().attributes(id);
+                    [attributes.lhs(), attributes.rhs()]
+                        .map(|form| form.map(|form| form.electrons.at(atom_position)))
+                }
+                Entity::MulticenterBond(id) => {
+                    let atom_position = AtomPosition::from(
+                        span.multicenter_bonds()
+                            .atoms(id)
+                            .position(|id| id == atom)
+                            .expect("incidence atom belongs to its overlay"),
+                    );
+                    let attributes = span.multicenter_bonds().attributes(id);
+                    [attributes.lhs(), attributes.rhs()]
+                        .map(|form| form.map(|form| form.electrons.at(atom_position)))
+                }
+                _ => unreachable!(
+                    "electron contributions belong to aromatic or multicenter entities"
+                ),
+            };
+            Some(match sides {
+                [Some(lhs), Some(rhs)] if lhs == rhs => EntitySpan::Unchanged(lhs),
+                [Some(lhs), Some(rhs)] => EntitySpan::Modified { lhs, rhs },
+                [Some(lhs), None] => EntitySpan::Removed(lhs),
+                [None, Some(rhs)] => EntitySpan::Added(rhs),
+                [None, None] => unreachable!("an entity span is present on a side"),
+            })
+        }
+        _ => None,
+    };
+    (incidence, electron_count)
+}
+
 /// The integers of the colors of a normalized span at `level`: one per entity, by incidence node,
 /// and one per incidence, by incidence edge.
 ///
@@ -346,58 +406,7 @@ fn initial_colors(
 
     let incidence_colors = incidence_graph
         .incidences()
-        .map(|(edge, incidence)| {
-            let electron_count = match incidence {
-                Incidence::AromaticAtom | Incidence::MulticenterAtom => {
-                    let [first, second] = incidence_graph.graph().edge_endpoints(edge);
-                    let (owner, atom) = match (
-                        incidence_graph.entity(first),
-                        incidence_graph.entity(second),
-                    ) {
-                        (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
-                        _ => {
-                            unreachable!("an electron contribution connects an overlay to an atom")
-                        }
-                    };
-                    let sides = match owner {
-                        Entity::AromaticSystem(id) => {
-                            let atom_position = AtomPosition::from(
-                                span.aromatic_systems()
-                                    .atoms(id)
-                                    .position(|id| id == atom)
-                                    .expect("incidence atom belongs to its overlay"),
-                            );
-                            let attributes = span.aromatic_systems().attributes(id);
-                            [attributes.lhs(), attributes.rhs()]
-                                .map(|form| form.map(|form| form.electrons.at(atom_position)))
-                        }
-                        Entity::MulticenterBond(id) => {
-                            let atom_position = AtomPosition::from(
-                                span.multicenter_bonds()
-                                    .atoms(id)
-                                    .position(|id| id == atom)
-                                    .expect("incidence atom belongs to its overlay"),
-                            );
-                            let attributes = span.multicenter_bonds().attributes(id);
-                            [attributes.lhs(), attributes.rhs()]
-                                .map(|form| form.map(|form| form.electrons.at(atom_position)))
-                        }
-                        _ => unreachable!(
-                            "electron contributions belong to aromatic or multicenter entities"
-                        ),
-                    };
-                    Some(match sides {
-                        [Some(lhs), Some(rhs)] if lhs == rhs => EntitySpan::Unchanged(lhs),
-                        [Some(lhs), Some(rhs)] => EntitySpan::Modified { lhs, rhs },
-                        [Some(lhs), None] => EntitySpan::Removed(lhs),
-                        [None, Some(rhs)] => EntitySpan::Added(rhs),
-                        [None, None] => unreachable!("an entity span is present on a side"),
-                    })
-                }
-                _ => None,
-            };
-            ((incidence, electron_count), edge.index())
-        })
+        .map(|(edge, _)| (incidence_color(span, incidence_graph, edge), edge.index()))
         .collect();
     let mut incidences = vec![0; incidence_graph.graph().edge_count()];
     rank_colors(incidence_colors, next, &mut incidences);
