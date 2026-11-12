@@ -363,7 +363,7 @@ generated remappings: a span is equal to its remapped copy under the remapping; 
 the result is that of `framed_eq`; inverting the remapping reverses the comparison; and two
 successive remappings compose. The tests of `umol-graph-ir` pass with all features.
 
-#### S0c — Benchmark pairs and baseline
+#### S0c — Benchmark pairs and baseline **Done**
 
 **Module:** `benches/canonicalize.rs`.
 
@@ -373,7 +373,114 @@ case; and the three pairs of carbon skeletons with different constitution for mo
 pair is asserted against `canonical_eq` when the benchmark starts. The groups are run once and the
 times recorded here as the baseline. Additive (green). [dep: S0a]
 
-The run uses `--warm-up-time 0.5 --measurement-time 1.5` on the new groups, about five minutes.
+The run uses `--warm-up-time 0.5 --measurement-time 1.5`.
+
+The pairs are in `bench_canonical_eq_unequal`, in seven groups: `canonical_eq_unequal_counts`,
+`_colors`, `_constitution`, and `_stereo` under `canonicalize/complete`, and
+`canonical_eq_unequal_counts`, `_colors`, and `_stereo` under
+`canonicalize/reaction_span_modified`. The equal pairs are the existing `canonical_eq_equal`
+groups. The stage gate passes: the tests of S0b on unchanged sources, and clippy with all
+targets.
+
+Baseline, in µs, from one run of every group whose name contains `canonical_eq`, 215 benchmarks:
+
+```text
+cargo bench -p umol-graph-ir --bench canonicalize -- \
+    --warm-up-time 0.5 --measurement-time 1.5 --save-baseline pre-245 'canonical_eq'
+```
+
+Criterion keeps the run as the baseline `pre-245` in the cargo target directory.
+
+Molecules, `canonicalize/complete`:
+
+| Case | Equal | Counts | Colors | Stereo |
+| --- | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 25.8 | 25.6 | 19.2 |  |
+| `disconnected_rings` | 47.5 | 48.2 | 41.6 |  |
+| `overlay_heavy` | 38.3 | 38.1 | 37.4 | 37.7 |
+| `overlay_unconstrained` | 27.3 | 27.6 | 26.9 |  |
+| `aromatic_electron_counts` | 24.3 | 24.8 | 20.8 |  |
+| `symmetric_charge_sum` | 43.8 | 44.7 | 35.0 |  |
+| `asymmetric_charge_sum` | 275.5 | 275.4 | 162.4 |  |
+| `tetrahedral_stereo` | 16.7 | 16.8 | 16.6 | 16.6 |
+| `cis_trans_stereo_bond` | 17.6 | 17.9 | 17.5 |  |
+| `mixed_atom_and_bond_stereo` | 29.7 | 29.4 | 29.3 | 29.7 |
+| `frame_relative_stereo_constraint` | 17.5 | 17.7 | 17.8 | 17.5 |
+| `meso_dichlorobutane` | 39.5 | 39.7 | 31.2 | 36.1 |
+| `para_stereo_trichloropentane` | 54.1 | 55.1 | 42.4 | 56.6 |
+| `para_stereo_cascade` | 515.8 | 525.1 | 513.9 | 518.4 |
+| `symmetric_stereo_triisopropanolamine` | 71.4 | 74.0 | 63.6 | 90.1 |
+| `symmetric_stereo_butanol` | 115.3 | 117.5 | 115.3 | 115.3 |
+| `symmetric_stereo_dimethylbutanol` | 313.0 | 320.7 | 322.7 | 319.2 |
+| `feature_free_connected` | 52.9 | 53.3 | 53.2 |  |
+| `feature_free_disconnected` | 62.5 | 59.5 | 53.9 |  |
+| `symmetry_heavy_radicals` | 52.3 | 53.6 | 46.2 |  |
+
+Molecules with different constitution, `canonicalize/complete/canonical_eq_unequal_constitution`:
+
+| Case | Time |
+| --- | ---: |
+| `hexane_2_methylpentane` | 13.5 |
+| `cyclohexane_two_cyclopropanes` | 26.2 |
+| `decalin_bicyclo_5_3_0_decane` | 21.8 |
+
+Reaction spans, `canonicalize/reaction_span_modified`:
+
+| Case | Equal | Counts | Colors | Stereo |
+| --- | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 18.3 | 23.8 | 17.7 |  |
+| `disconnected_rings` | 40.4 | 46.9 | 35.6 |  |
+| `overlay_heavy` | 44.2 | 43.5 | 44.3 | 44.2 |
+| `overlay_unconstrained` | 29.8 | 30.0 | 29.5 |  |
+| `aromatic_electron_counts` | 25.6 | 25.6 | 21.8 |  |
+| `symmetric_charge_sum` | 28.9 | 38.0 | 22.7 |  |
+| `asymmetric_charge_sum` | 55.2 | 176.5 | 35.9 |  |
+| `tetrahedral_stereo` | 19.2 | 18.6 | 19.1 | 19.4 |
+| `cis_trans_stereo_bond` | 20.3 | 20.1 | 20.1 |  |
+| `mixed_atom_and_bond_stereo` | 33.3 | 33.1 | 33.0 | 33.9 |
+| `frame_relative_stereo_constraint` | 21.3 | 20.4 | 21.2 | 21.3 |
+| `meso_dichlorobutane` | 25.8 | 33.8 | 25.6 | 25.7 |
+| `para_stereo_trichloropentane` | 34.7 | 46.0 | 33.6 | 35.0 |
+| `para_stereo_cascade` | 305.6 | 419.8 | 304.9 | 304.9 |
+| `symmetric_stereo_triisopropanolamine` | 118.7 | 98.2 | 95.0 | 118.1 |
+| `symmetric_stereo_butanol` | 126.8 | 124.1 | 128.4 | 125.5 |
+| `symmetric_stereo_dimethylbutanol` | 310.4 | 319.4 | 315.7 | 310.5 |
+| `feature_free_connected` | 43.6 | 50.4 | 43.9 |  |
+| `feature_free_disconnected` | 49.6 | 56.5 | 45.6 |  |
+| `symmetry_heavy_radicals` | 43.0 | 49.4 | 37.1 |  |
+
+Reactions, `canonicalize/reaction`, and their spans, `canonicalize/reaction_span`:
+
+| Case | Reaction, equal | Reaction, unequal | Span, equal |
+| --- | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 46.2 | 47.3 | 30.2 |
+| `disconnected_rings` | 70.3 | 71.3 | 53.6 |
+| `overlay_heavy` | 80.6 | 78.5 | 43.5 |
+| `overlay_unconstrained` | 55.8 | 53.2 | 30.2 |
+| `aromatic_electron_counts` | 41.4 | 41.3 | 26.7 |
+| `symmetric_charge_sum` | 64.9 | 63.1 | 47.4 |
+| `asymmetric_charge_sum` | 325.8 | 315.6 | 297.4 |
+| `tetrahedral_stereo` | 33.0 | 32.7 | 18.6 |
+| `cis_trans_stereo_bond` | 35.6 | 35.4 | 20.0 |
+| `mixed_atom_and_bond_stereo` | 56.2 | 56.7 | 33.3 |
+| `frame_relative_stereo_constraint` | 37.4 | 37.2 | 20.2 |
+| `meso_dichlorobutane` | 60.8 | 60.2 | 43.2 |
+| `para_stereo_trichloropentane` | 79.4 | 79.3 | 58.5 |
+| `para_stereo_cascade` | 603.6 | 575.4 | 543.2 |
+| `symmetric_stereo_triisopropanolamine` | 101.2 | 100.6 | 77.0 |
+| `symmetric_stereo_butanol` | 143.2 | 141.2 | 121.3 |
+| `symmetric_stereo_dimethylbutanol` | 347.6 | 344.8 | 323.8 |
+| `feature_free_connected` | 74.1 | 72.9 | 58.6 |
+| `feature_free_disconnected` | 79.9 | 78.7 | 67.8 |
+| `symmetry_heavy_radicals` | 67.9 | 67.4 | 58.4 |
+
+Scaling cases and inline constraints:
+
+| Case | Scaling, equal | Scaling, unequal | Inline, molecule | Inline, span |
+| --- | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 53.2 | 53.0 | 54.8 | 59.3 |
+| `feature_free_disconnected` | 59.8 | 59.0 | 61.1 | 65.2 |
+| `symmetry_heavy_radicals` | 52.4 | 54.7 | 52.8 | 57.3 |
 
 ### S1 — Rule for contradictions and count comparison
 
@@ -524,8 +631,8 @@ raised.
 
 #### S5a — Final comparison
 
-Run the groups of S0c with the same times and record them beside the baseline of S0c. A pair
-that costs more than its baseline is raised before closeout. [dep: S4b]
+Run the groups of S0c with the same times and `--baseline pre-245`, and record them beside the
+baseline of S0c. A pair that costs more than its baseline is raised before closeout. [dep: S4b]
 
 #### S5b — Closeout
 

@@ -13,14 +13,15 @@ use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
     AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, Constraint, DativeBondForm,
-    DativeBondId, Delta, Deltas, IncidenceLevel, Molecule, MoleculeConstraint, MoleculeEntries,
-    MoleculeRemapping, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm,
-    NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, Reframe, StereoAtomConstraintForm,
-    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondDelta,
-    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity, TopicityForm,
-    TopicityRelationForm,
+    DativeBondId, Delta, Deltas, FrameTransport, IncidenceLevel, Molecule, MoleculeConstraint,
+    MoleculeEntries, MoleculeRemapping, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, Reframe,
+    StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId,
+    StereoBondDelta, StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
+    TopicityForm, TopicityRelationForm,
 };
+use umol_perm::Permutation;
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
 
@@ -1459,6 +1460,179 @@ fn bench_inline_constraint(c: &mut Criterion) {
     group.finish();
 }
 
+fn inverted_stereo_atom(mut molecule: Molecule) -> Molecule {
+    let id = StereoAtomId(0);
+    let degree = molecule.stereo_atom(id).ligand_ids().len();
+    let form = molecule.stereo_atom(id).attributes().clone();
+    let swap = Permutation::from_cycles(degree, &[vec![0, 1]]).unwrap();
+    *molecule.stereo_atom_mut(id).attributes_mut() = form
+        .reframe_by(&swap)
+        .expect("a stereo atom form accepts a permutation of its degree");
+    molecule
+}
+
+fn bench_unequal_pairs<T: Canonicalize>(
+    c: &mut Criterion,
+    group_name: &str,
+    pairs: &[(&'static str, T, T)],
+    context: &CanonicalizeContext,
+) {
+    let mut group = c.benchmark_group(group_name);
+    for (name, left, right) in pairs {
+        assert!(
+            !left.canonical_eq(right, context),
+            "{group_name}/{name} must be unequal"
+        );
+        group.bench_function(*name, |b| {
+            b.iter(|| black_box(left).canonical_eq(black_box(right), context))
+        });
+    }
+    group.finish();
+}
+
+fn bench_canonical_eq_unequal(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        automorphism_algorithm: ALGORITHM,
+    };
+    let additional_atom = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::O)],
+        ..Default::default()
+    });
+
+    let mut counts = Vec::new();
+    let mut colors = Vec::new();
+    let mut stereo = Vec::new();
+    let mut span_counts = Vec::new();
+    let mut span_colors = Vec::new();
+    let mut span_stereo = Vec::new();
+    for case in corpus() {
+        let remapping = reverse_remapping(&case.molecule);
+        let renumbered = case.molecule.clone().remap(&remapping);
+        counts.push((
+            case.name,
+            case.molecule.clone(),
+            Molecule::combine_all([&renumbered, &additional_atom]),
+        ));
+        let mut recolored = renumbered.clone();
+        recolored.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(1);
+        colors.push((case.name, case.molecule.clone(), recolored));
+        if case.molecule.stereo_atoms().count() > 0 {
+            stereo.push((
+                case.name,
+                case.molecule.clone(),
+                inverted_stereo_atom(renumbered),
+            ));
+        }
+
+        let modified = modification(case.molecule.clone())
+            .to_reaction_span()
+            .expect("benchmark modification materializes");
+        span_counts.push((
+            case.name,
+            modified.clone(),
+            atom_addition(case.molecule.clone(), Element::N)
+                .to_reaction_span()
+                .expect("benchmark addition materializes"),
+        ));
+        let mut recolored = case.molecule.clone();
+        let last = AtomId(recolored.atoms().count() as u32 - 1);
+        recolored.atom_mut(last).attributes_mut().charge = NumForm::Lit(-1);
+        span_colors.push((
+            case.name,
+            modified.clone(),
+            modification(recolored)
+                .to_reaction_span()
+                .expect("benchmark modification materializes")
+                .remap(&remapping),
+        ));
+        if case.molecule.stereo_atoms().count() > 0 {
+            span_stereo.push((
+                case.name,
+                modified,
+                modification(inverted_stereo_atom(case.molecule))
+                    .to_reaction_span()
+                    .expect("benchmark modification materializes")
+                    .remap(&remapping),
+            ));
+        }
+    }
+    let constitution = [
+        (
+            "hexane_2_methylpentane",
+            carbon_path(6),
+            carbon_graph(6, &[(0, 1), (1, 2), (2, 3), (3, 4), (1, 5)]),
+        ),
+        (
+            "cyclohexane_two_cyclopropanes",
+            carbon_graph(6, &[(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)]),
+            carbon_graph(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3)]),
+        ),
+        (
+            "decalin_bicyclo_5_3_0_decane",
+            ordinary_naphthalene(),
+            carbon_graph(
+                10,
+                &[
+                    (0, 1),
+                    (1, 2),
+                    (2, 3),
+                    (3, 4),
+                    (4, 5),
+                    (5, 6),
+                    (6, 0),
+                    (6, 7),
+                    (7, 8),
+                    (8, 9),
+                    (9, 0),
+                ],
+            ),
+        ),
+    ];
+
+    bench_unequal_pairs(
+        c,
+        "canonicalize/complete/canonical_eq_unequal_counts",
+        &counts,
+        &context,
+    );
+    bench_unequal_pairs(
+        c,
+        "canonicalize/complete/canonical_eq_unequal_colors",
+        &colors,
+        &context,
+    );
+    bench_unequal_pairs(
+        c,
+        "canonicalize/complete/canonical_eq_unequal_constitution",
+        &constitution,
+        &context,
+    );
+    bench_unequal_pairs(
+        c,
+        "canonicalize/complete/canonical_eq_unequal_stereo",
+        &stereo,
+        &context,
+    );
+    bench_unequal_pairs(
+        c,
+        "canonicalize/reaction_span_modified/canonical_eq_unequal_counts",
+        &span_counts,
+        &context,
+    );
+    bench_unequal_pairs(
+        c,
+        "canonicalize/reaction_span_modified/canonical_eq_unequal_colors",
+        &span_colors,
+        &context,
+    );
+    bench_unequal_pairs(
+        c,
+        "canonicalize/reaction_span_modified/canonical_eq_unequal_stereo",
+        &span_stereo,
+        &context,
+    );
+}
+
 criterion_group!(
     canonicalize,
     bench_incidence_construction,
@@ -1471,5 +1645,6 @@ criterion_group!(
     bench_complete_comparison,
     bench_reaction_span,
     bench_inline_constraint,
+    bench_canonical_eq_unequal,
 );
 criterion_main!(canonicalize);
