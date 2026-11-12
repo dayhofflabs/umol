@@ -737,7 +737,7 @@ is the stage gate of S3.
 
 ### S4 — Remapping search for reaction spans and reactions
 
-#### S4a — `ReactionSpan::canonical_eq_at`
+#### S4a — `ReactionSpan::canonical_eq_at` **Done**
 
 **Module:** `ir/canonicalize/reaction_span.rs`.
 
@@ -748,6 +748,36 @@ from `canonical_eq`. At Full the check is `framed_eq_under` of S0b. Changes no r
 **Tests:** the span counterparts of the tests of S3b, on the span cases of the trial. A test
 enumerates the remappings of small spans with `framed_eq_under`, as
 `test_molecule_canonical_eq_remapping_witness` does for molecules.
+
+The span flow has the shape of the molecule flow, with the span functions. Every test of the
+crate passed before a test was added or changed.
+
+`test_reaction_span_canonical_eq_compounds` asserts both directions. The step that decides each
+row was read once from temporary prints, since removed. "Unchanged" marks the span of a molecule
+without a change.
+
+| Row | Decided at | Result |
+| --- | --- | --- |
+| hydrolysis of fluoromethane, renumbered | single-node cells | true |
+| hydrolysis and thiolysis of fluoromethane | colors | false |
+| hydrolysis of fluoromethane and its reverse | colors | false |
+| hexane, 2-methylpentane, unchanged | cells | false |
+| inversion of bromochlorofluoroiodomethane, renumbered | single-node cells | true |
+| the same inversion and its reverse | single-node cells | false |
+| decalin, renumbered, unchanged | first path | true |
+| cuneane, renumbered, unchanged | search | true |
+| cubane, cuneane, unchanged | search | false |
+| meso-2,3-dichlorobutane, mirror image, unchanged | search | true |
+| the two enantiomers of 2,3-dichlorobutane, unchanged | search | false |
+| charge sum on two adjacent ring atoms, rotated, unchanged | search | true |
+| the same, against two atoms that are not adjacent | search | false |
+
+`test_reaction_span_canonical_eq_remapping_witness` has five of these rows, the ones with at most
+five atoms, and compares the result with the enumeration of every remapping under
+`framed_eq_under`. The enumeration helper of the tests now takes the entity counts and the
+comparison as a function, so that molecules and spans share it. `test_same_entity_color` runs the
+entity pairs of the span `test_initial_colors`, and `test_same_colors` has five rows. The tests of
+`umol-graph-ir` pass with all features.
 
 #### S4b — `Reaction::canonical_eq` through reaction spans
 
