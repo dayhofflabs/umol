@@ -440,8 +440,8 @@ Derived `==` compares the stored IR structure exactly, including constraints, id
 non-normal value encodings. `normalized_eq` compares normal forms in the current participant and
 entity-id frame. `framed_eq` additionally selects participant frames, while
 `framed_eq_under` first applies an explicitly supplied entity-id remapping and then performs
-framed equality. Aggregate `canonical_eq` compares complete canonical IR values after selecting
-participant frames and entity ids. Every semantic comparison includes constraints. This
+framed equality. Aggregate `canonical_eq` relates the aggregates whose complete canonical IR
+values are equal. Every semantic comparison includes constraints. This
 distinction matters for patterns, where constraints are not redundant with the structural
 description.
 
@@ -474,8 +474,9 @@ The equality operations form the same nested quotient pipeline:
 - `normalized_eq` compares normal forms in the current participant and entity-id frame;
 - `framed_eq` compares after selecting participant frames, while `framed_eq_under` first applies an
   explicitly supplied entity-id remapping and then performs framed equality; and
-- `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
-  participant frames and entity ids rather than receiving an id witness from the caller.
+- `canonical_eq` relates the aggregates whose complete canonical forms under a shared context are
+  equal. It finds the entity-id remapping itself rather than receiving an id witness from the
+  caller.
 
 For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
 when an admissible total dense correspondence exists under which `framed_eq_under` holds.
@@ -526,11 +527,11 @@ remapping alone need not do so.
 
 Use one concrete context for `Molecule`, `ReactionSpan`, and `Reaction` unless an
 implementation establishes a real need for distinct context types. Canonical-form construction is
-fallible; equality is total. Structurally equal inputs compare equal immediately. Two successfully
-canonicalized inputs compare by structural equality of their canonical forms. One contradiction and
-one successful form do not compare equal, and two contradictions compare by `framed_eq`, as stated
-above. Integrity failures never make distinct inputs equal; callers that need the diagnostic invoke
-`canonicalize` directly.
+fallible; equality is total. Structurally equal inputs compare equal immediately. Two inputs whose
+canonicalizations succeed are equal exactly when their canonical forms are structurally equal. One
+contradiction and one successful form do not compare equal, and two contradictions compare by
+`framed_eq`, as stated above. Integrity failures never make distinct inputs equal; callers that
+need the diagnostic invoke `canonicalize` directly.
 
 The public operation is complete-only. Callers cannot select topology, constitution, or structure
 as a reduced comparison surface, and a molecule does not publish a description-level query.
@@ -555,6 +556,16 @@ of a leaf, so the search separates entities that differ only in them. Orbit prun
 generator only when one frame action carries the whole form of every stereo entity, on each side
 of a reaction span, to the form of its image. In the complete search it uses a generator only
 when the generator carries the whole aggregate onto itself.
+
+`canonical_eq` decides whether two canonical forms are equal without constructing them.
+Different entity counts, different colors, and different cells of the two refined partitions each
+show that the forms differ. Otherwise it looks for an entity-id remapping under which
+`framed_eq_under` holds. When every cell holds one node, the cells give the only candidate. When
+cells with several nodes remain, it first tries the remapping along the first node of each such
+cell, and then searches the second aggregate and compares every leaf with that path. The search
+visits every leaf up to the automorphisms of the aggregate, so a remapping is found when one
+exists. Canonical forms are constructed and compared only for two aggregates that select
+different searches.
 
 Backend canonical labels are search inputs, not the numbering authority. The canonical form is the
 leaf of minimum key among the leaves of the search. It is the same for every renumbering of the

@@ -1,6 +1,6 @@
 # 245 — Cost of canonical equality
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-12
 Relates: [244](244-reaction-span-canonicalization-2026-11-09.md),
 [data types guide](../docs/development/data-types.md)
@@ -806,18 +806,147 @@ gate of S4.
 
 ### S5 — Final comparison and closeout
 
-#### S5a — Final comparison
+#### S5a — Final comparison **Done**
 
 Run the groups of S0c with the same times and `--baseline pre-245`, and record them beside the
 baseline of S0c. A pair that costs more than its baseline is raised before closeout. [dep: S4b]
 
-#### S5b — Closeout
+The run finished without error on the same 215 benchmarks. No benchmark costs more than its
+baseline. The ratio of the time after to the time before, by group:
+
+| Group | Benchmarks | Lowest | Median | Highest |
+| --- | ---: | ---: | ---: | ---: |
+| `canonicalize/complete/canonical_eq_equal` | 20 | 0.15 | 0.56 | 0.95 |
+| `canonicalize/complete/canonical_eq_unequal_colors` | 20 | 0.03 | 0.18 | 0.30 |
+| `canonicalize/complete/canonical_eq_unequal_constitution` | 3 | 0.37 | 0.41 | 0.70 |
+| `canonicalize/complete/canonical_eq_unequal_counts` | 20 | 0.00 | 0.00 | 0.00 |
+| `canonicalize/complete/canonical_eq_unequal_stereo` | 10 | 0.57 | 0.64 | 0.97 |
+| `canonicalize/inline_constraint/molecule/canonical_eq_equal` | 3 | 0.15 | 0.20 | 0.24 |
+| `canonicalize/inline_constraint/reaction_span/canonical_eq_equal` | 3 | 0.15 | 0.21 | 0.24 |
+| `canonicalize/reaction/canonical_eq_equal` | 20 | 0.25 | 0.61 | 0.84 |
+| `canonicalize/reaction/canonical_eq_unequal` | 20 | 0.05 | 0.31 | 0.52 |
+| `canonicalize/reaction_span/canonical_eq_equal` | 20 | 0.14 | 0.53 | 0.92 |
+| `canonicalize/reaction_span_modified/canonical_eq_equal` | 20 | 0.17 | 0.55 | 0.92 |
+| `canonicalize/reaction_span_modified/canonical_eq_unequal_colors` | 20 | 0.04 | 0.22 | 0.35 |
+| `canonicalize/reaction_span_modified/canonical_eq_unequal_counts` | 20 | 0.00 | 0.00 | 0.00 |
+| `canonicalize/reaction_span_modified/canonical_eq_unequal_stereo` | 10 | 0.54 | 0.65 | 0.94 |
+| `canonicalize/scaling/canonical_eq_equal` | 3 | 0.15 | 0.20 | 0.24 |
+| `canonicalize/scaling/canonical_eq_unequal` | 3 | 0.00 | 0.00 | 0.00 |
+
+Times in µs, before → after.
+
+Molecules, `canonicalize/complete`:
+
+| Case | Equal | Counts | Colors | Stereo |
+| --- | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 25.8 → 11.1 | 25.6 → 10 ns | 19.2 → 5.7 |  |
+| `disconnected_rings` | 47.5 → 14.6 | 48.2 → 10 ns | 41.6 → 6.2 |  |
+| `overlay_heavy` | 38.3 → 36.4 | 38.1 → 11 ns | 37.4 → 9.2 | 37.7 → 35.6 |
+| `overlay_unconstrained` | 27.3 → 15.9 | 27.6 → 11 ns | 26.9 → 6.6 |  |
+| `aromatic_electron_counts` | 24.3 → 12.5 | 24.8 → 11 ns | 20.8 → 4.5 |  |
+| `symmetric_charge_sum` | 43.8 → 14.3 | 44.7 → 12 ns | 35.0 → 4.4 |  |
+| `asymmetric_charge_sum` | 275.5 → 175.2 | 275.4 → 11 ns | 162.4 → 4.4 |  |
+| `tetrahedral_stereo` | 16.7 → 9.4 | 16.8 → 11 ns | 16.6 → 4.7 | 16.6 → 9.4 |
+| `cis_trans_stereo_bond` | 17.6 → 10.4 | 17.9 → 10 ns | 17.5 → 5.1 |  |
+| `mixed_atom_and_bond_stereo` | 29.7 → 18.7 | 29.4 → 12 ns | 29.3 → 7.7 | 29.7 → 18.4 |
+| `frame_relative_stereo_constraint` | 17.5 → 12.8 | 17.7 → 11 ns | 17.8 → 5.0 | 17.5 → 17.0 |
+| `meso_dichlorobutane` | 39.5 → 25.4 | 39.7 → 11 ns | 31.2 → 5.9 | 36.1 → 22.7 |
+| `para_stereo_trichloropentane` | 54.1 → 37.4 | 55.1 → 10 ns | 42.4 → 7.5 | 56.6 → 36.1 |
+| `para_stereo_cascade` | 515.8 → 320.8 | 525.1 → 11 ns | 513.9 → 20.8 | 518.4 → 314.4 |
+| `symmetric_stereo_triisopropanolamine` | 71.4 → 33.7 | 74.0 → 10 ns | 63.6 → 9.6 | 90.1 → 70.6 |
+| `symmetric_stereo_butanol` | 115.3 → 38.2 | 117.5 → 11 ns | 115.3 → 8.6 | 115.3 → 81.4 |
+| `symmetric_stereo_dimethylbutanol` | 313.0 → 66.0 | 320.7 → 10 ns | 322.7 → 11.7 | 319.2 → 199.4 |
+| `feature_free_connected` | 52.9 → 12.6 | 53.3 → 11 ns | 53.2 → 5.5 |  |
+| `feature_free_disconnected` | 62.5 → 12.0 | 59.5 → 11 ns | 53.9 → 5.4 |  |
+| `symmetry_heavy_radicals` | 52.3 → 7.7 | 53.6 → 11 ns | 46.2 → 3.4 |  |
+
+Molecules with different constitution:
+
+| Case | Time |
+| --- | ---: |
+| `hexane_2_methylpentane` | 13.5 → 5.5 |
+| `cyclohexane_two_cyclopropanes` | 26.2 → 18.4 |
+| `decalin_bicyclo_5_3_0_decane` | 21.8 → 8.0 |
+
+Reaction spans, `canonicalize/reaction_span_modified`:
+
+| Case | Equal | Counts | Colors | Stereo |
+| --- | ---: | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 18.3 → 9.8 | 23.8 → 9 ns | 17.7 → 6.2 |  |
+| `disconnected_rings` | 40.4 → 14.8 | 46.9 → 10 ns | 35.6 → 6.8 |  |
+| `overlay_heavy` | 44.2 → 40.8 | 43.5 → 17 ns | 44.3 → 11.3 | 44.2 → 40.0 |
+| `overlay_unconstrained` | 29.8 → 16.7 | 30.0 → 10 ns | 29.5 → 7.5 |  |
+| `aromatic_electron_counts` | 25.6 → 12.7 | 25.6 → 10 ns | 21.8 → 4.7 |  |
+| `symmetric_charge_sum` | 28.9 → 14.2 | 38.0 → 8 ns | 22.7 → 4.8 |  |
+| `asymmetric_charge_sum` | 55.2 → 43.5 | 176.5 → 9 ns | 35.9 → 4.9 |  |
+| `tetrahedral_stereo` | 19.2 → 10.4 | 18.6 → 10 ns | 19.1 → 5.5 | 19.4 → 10.5 |
+| `cis_trans_stereo_bond` | 20.3 → 11.1 | 20.1 → 9 ns | 20.1 → 6.0 |  |
+| `mixed_atom_and_bond_stereo` | 33.3 → 20.0 | 33.1 → 9 ns | 33.0 → 9.2 | 33.9 → 19.9 |
+| `frame_relative_stereo_constraint` | 21.3 → 14.4 | 20.4 → 9 ns | 21.2 → 6.2 | 21.3 → 19.9 |
+| `meso_dichlorobutane` | 25.8 → 14.9 | 33.8 → 9 ns | 25.6 → 6.7 | 25.7 → 14.7 |
+| `para_stereo_trichloropentane` | 34.7 → 21.6 | 46.0 → 10 ns | 33.6 → 8.8 | 35.0 → 21.2 |
+| `para_stereo_cascade` | 305.6 → 199.8 | 419.8 → 9 ns | 304.9 → 24.3 | 304.9 → 200.0 |
+| `symmetric_stereo_triisopropanolamine` | 118.7 → 74.8 | 98.2 → 9 ns | 95.0 → 11.8 | 118.1 → 74.6 |
+| `symmetric_stereo_butanol` | 126.8 → 38.5 | 124.1 → 10 ns | 128.4 → 10.2 | 125.5 → 86.9 |
+| `symmetric_stereo_dimethylbutanol` | 310.4 → 66.2 | 319.4 → 9 ns | 315.7 → 13.0 | 310.5 → 202.8 |
+| `feature_free_connected` | 43.6 → 12.2 | 50.4 → 9 ns | 43.9 → 6.1 |  |
+| `feature_free_disconnected` | 49.6 → 12.2 | 56.5 → 9 ns | 45.6 → 6.0 |  |
+| `symmetry_heavy_radicals` | 43.0 → 7.1 | 49.4 → 9 ns | 37.1 → 3.3 |  |
+
+Reactions, `canonicalize/reaction`, and their spans, `canonicalize/reaction_span`:
+
+| Case | Reaction, equal | Reaction, unequal | Span, equal |
+| --- | ---: | ---: | ---: |
+| `ordinary_naphthalene` | 46.2 → 24.2 | 47.3 → 19.1 | 30.2 → 12.1 |
+| `disconnected_rings` | 70.3 → 28.7 | 71.3 → 20.5 | 53.6 → 15.7 |
+| `overlay_heavy` | 80.6 → 67.8 | 78.5 → 39.4 | 43.5 → 39.9 |
+| `overlay_unconstrained` | 55.8 → 34.8 | 53.2 → 26.2 | 30.2 → 17.0 |
+| `aromatic_electron_counts` | 41.4 → 25.1 | 41.3 → 17.0 | 26.7 → 13.5 |
+| `symmetric_charge_sum` | 64.9 → 26.5 | 63.1 → 16.7 | 47.4 → 14.8 |
+| `asymmetric_charge_sum` | 325.8 → 204.8 | 315.6 → 17.1 | 297.4 → 192.8 |
+| `tetrahedral_stereo` | 33.0 → 21.4 | 32.7 → 16.9 | 18.6 → 9.9 |
+| `cis_trans_stereo_bond` | 35.6 → 23.4 | 35.4 → 18.2 | 20.0 → 11.2 |
+| `mixed_atom_and_bond_stereo` | 56.2 → 37.9 | 56.7 → 27.4 | 33.3 → 20.4 |
+| `frame_relative_stereo_constraint` | 37.4 → 27.2 | 37.2 → 19.2 | 20.2 → 13.9 |
+| `meso_dichlorobutane` | 60.8 → 40.4 | 60.2 → 20.4 | 43.2 → 26.6 |
+| `para_stereo_trichloropentane` | 79.4 → 54.4 | 79.3 → 24.8 | 58.5 → 38.8 |
+| `para_stereo_cascade` | 603.6 → 367.6 | 575.4 → 60.3 | 543.2 → 328.4 |
+| `symmetric_stereo_triisopropanolamine` | 101.2 → 53.5 | 100.6 → 30.5 | 77.0 → 35.2 |
+| `symmetric_stereo_butanol` | 143.2 → 56.9 | 141.2 → 27.8 | 121.3 → 40.0 |
+| `symmetric_stereo_dimethylbutanol` | 347.6 → 88.2 | 344.8 → 34.3 | 323.8 → 68.1 |
+| `feature_free_connected` | 74.1 → 27.0 | 72.9 → 18.7 | 58.6 → 14.3 |
+| `feature_free_disconnected` | 79.9 → 25.1 | 78.7 → 18.3 | 67.8 → 13.3 |
+| `symmetry_heavy_radicals` | 67.9 → 16.7 | 67.4 → 12.2 | 58.4 → 8.4 |
+
+Scaling cases and inline constraints:
+
+| Case | Scaling, equal | Scaling, unequal | Inline, molecule | Inline, span |
+| --- | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 53.2 → 12.5 | 53.0 → 10 ns | 54.8 → 13.0 | 59.3 → 14.4 |
+| `feature_free_disconnected` | 59.8 → 12.1 | 59.0 → 11 ns | 61.1 → 12.4 | 65.2 → 13.6 |
+| `symmetry_heavy_radicals` | 52.4 → 7.6 | 54.7 → 11 ns | 52.8 → 7.8 | 57.3 → 8.6 |
+
+The highest ratios are the cases at Full, `overlay_heavy` and `frame_relative_stereo_constraint`,
+where the check copies, remaps, and reframes.
+
+#### S5b — Closeout **Done**
 
 **Module:** `docs/development/data-types.md`, this document, `discussion/000-status.md`.
 
 The guide describes `canonical_eq` by the pairs it relates and no longer by the comparison of
 canonical forms. Run the workspace tests with all features, the Python tests, and clippy on the
 workspace. Set the status of this document and its index row. [dep: S5a]
+
+The data types guide says which pairs `canonical_eq` relates and has a paragraph on how it
+decides, beside its description of the search. The nomenclature guide says that the
+implementation finds the remapping itself, and names `ReactionSpan::framed_eq_under` in code.
+
+Final gate: the workspace tests with all features, 45,936 passed in 83 targets; the Python
+tests, 3,420 passed; clippy on the workspace with all targets, clean. The branch holds no
+temporary print and no name of the trial.
+
+The three costs that the design leaves in place are listed at the end of the Trial section. No
+plan exists for them.
 
 ### Stage gate
 

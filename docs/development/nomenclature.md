@@ -818,8 +818,8 @@ level.
   **`framed_eq_under`** of `Molecule` and `ReactionSpan` first remaps entity ids through an
   explicitly supplied `MoleculeRemapping`, then performs framed equality.
 - **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
-  implementation selects participant frames and entity ids rather than receiving an id witness
-  from the caller.
+  implementation finds the entity-id remapping itself rather than receiving an id witness from
+  the caller.
 
 For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
 when a remapping exists under which `framed_eq_under` holds. An aggregate that fails at one stage is
@@ -833,7 +833,7 @@ important for patterns, where constraints are not redundant with the structural 
 **Not:** each other. Reaching for `==` when `normalized_eq` or `framed_eq` is meant is the common
 error, because `==` exists on everything and silently answers a different question.
 **In code:** `PartialEq`, `Normalize::normalized_eq`, `Reframe::framed_eq`,
-`Molecule::framed_eq_under`, and `Canonicalize::canonical_eq`.
+`Molecule::framed_eq_under`, `ReactionSpan::framed_eq_under`, and `Canonicalize::canonical_eq`.
 
 ### Error
 
