@@ -2374,13 +2374,13 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
 }
 
 /// A leaf key that is built when it is first compared or read.
-struct DeferredKey<'a, Build> {
+struct DeferredKey<'a, K, Build> {
     order: Vec<NodeId>,
     build: &'a Build,
-    key: OnceCell<CanonicalComparisonKey>,
+    key: OnceCell<K>,
 }
 
-impl<'a, Build: Fn(&[NodeId]) -> CanonicalComparisonKey> DeferredKey<'a, Build> {
+impl<'a, K, Build: Fn(&[NodeId]) -> K> DeferredKey<'a, K, Build> {
     fn new(order: &[NodeId], build: &'a Build) -> Self {
         Self {
             order: order.to_vec(),
@@ -2389,37 +2389,37 @@ impl<'a, Build: Fn(&[NodeId]) -> CanonicalComparisonKey> DeferredKey<'a, Build> 
         }
     }
 
-    fn get(&self) -> &CanonicalComparisonKey {
+    fn get(&self) -> &K {
         self.key.get_or_init(|| (self.build)(&self.order))
     }
 
     /// The key, built now if no comparison built it.
-    fn into_key(self) -> CanonicalComparisonKey {
+    fn into_key(self) -> K {
         self.get();
         self.key.into_inner().expect("the key was built")
     }
 
     /// The key, if a comparison built it.
-    fn into_built(self) -> Option<CanonicalComparisonKey> {
+    fn into_built(self) -> Option<K> {
         self.key.into_inner()
     }
 }
 
-impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> PartialEq for DeferredKey<'_, Build> {
+impl<K: Ord, Build: Fn(&[NodeId]) -> K> PartialEq for DeferredKey<'_, K, Build> {
     fn eq(&self, other: &Self) -> bool {
         self.get() == other.get()
     }
 }
 
-impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> Eq for DeferredKey<'_, Build> {}
+impl<K: Ord, Build: Fn(&[NodeId]) -> K> Eq for DeferredKey<'_, K, Build> {}
 
-impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> PartialOrd for DeferredKey<'_, Build> {
+impl<K: Ord, Build: Fn(&[NodeId]) -> K> PartialOrd for DeferredKey<'_, K, Build> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<Build: Fn(&[NodeId]) -> CanonicalComparisonKey> Ord for DeferredKey<'_, Build> {
+impl<K: Ord, Build: Fn(&[NodeId]) -> K> Ord for DeferredKey<'_, K, Build> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.get().cmp(other.get())
     }
@@ -2518,6 +2518,27 @@ fn rank_initial_colors(
     InitialColors {
         entities: ranks,
         incidences,
+    }
+}
+
+/// Assign dense integers to the colors of one entity kind, in the order of the colors and starting
+/// at `first`. The integer of each node is written into `ranks`, and the integer after the last one
+/// used is returned.
+fn rank_colors<T: Ord>(mut colors: Vec<(T, NodeId)>, first: u32, ranks: &mut [u32]) -> u32 {
+    colors.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+    let mut rank = first;
+    let mut previous = None;
+    for (color, node) in &colors {
+        if previous.is_some_and(|previous| previous != color) {
+            rank += 1;
+        }
+        ranks[node.index()] = rank;
+        previous = Some(color);
+    }
+    if colors.is_empty() {
+        first
+    } else {
+        rank + 1
     }
 }
 

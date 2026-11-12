@@ -1861,7 +1861,7 @@ With this subitem `EntitySpan` and `ConstraintSpan` moved, with their implementa
 tests, from `ir/delta.rs` to the new module `ir/span.rs`. The text is unchanged, the public paths
 are unchanged, and every import inside the crate names `span`.
 
-#### S6h — Color ranking and the deferred key
+#### S6h — Color ranking and the deferred key **Done**
 
 **Module:** `ir/canonicalize.rs`.
 
@@ -1871,6 +1871,14 @@ type of its key. Additive (green). [dep: none]
 
 **Tests:** `test_rank_colors` with equal colors, distinct colors, an empty list, and a first integer
 above zero. The three `test_deferred_key_*` tests are rerun unchanged.
+
+`rank_colors` follows `rank_initial_colors`. It takes the colors of one kind, each with the node of
+its entity, the first integer, and the slice of integers by node, and it returns the integer after
+the last one used. `DeferredKey` takes the key type as a parameter, bounded by `Ord` where two
+keys are compared; its callers are unchanged. `test_rank_colors` has 4 rows, each with the slice
+before and after and the returned integer. The three `test_deferred_key_*` tests pass unchanged,
+and the 12,202 library tests pass. `rank_colors` has no caller until S6j, so the library build
+reports an eleventh dead-code warning.
 
 #### S6h.1 — Benchmark cases for Constitution and Full
 

@@ -1708,6 +1708,40 @@ fn test_rank_initial_colors(
 }
 
 #[rstest]
+#[case::empty(Vec::new(), 2, vec![0, 1], vec![0, 1], 2)]
+#[case::distinct(
+    vec![(20, NodeId(0)), (10, NodeId(1)), (30, NodeId(2))],
+    0,
+    vec![0, 0, 0],
+    vec![1, 0, 2],
+    3
+)]
+#[case::equal(
+    vec![(20, NodeId(0)), (10, NodeId(1)), (20, NodeId(2))],
+    0,
+    vec![0, 0, 0],
+    vec![1, 0, 1],
+    2
+)]
+#[case::first_above_zero(
+    vec![(20, NodeId(2)), (10, NodeId(3)), (20, NodeId(4))],
+    2,
+    vec![0, 1, 0, 0, 0],
+    vec![0, 1, 3, 2, 3],
+    4
+)]
+fn test_rank_colors(
+    #[case] colors: Vec<(i32, NodeId)>,
+    #[case] first: u32,
+    #[case] mut ranks: Vec<u32>,
+    #[case] expected_ranks: Vec<u32>,
+    #[case] expected_next: u32,
+) {
+    assert_eq!(rank_colors(colors, first, &mut ranks), expected_next);
+    assert_eq!(ranks, expected_ranks);
+}
+
+#[rstest]
 #[case::empty(
     4,
     Vec::new(),
