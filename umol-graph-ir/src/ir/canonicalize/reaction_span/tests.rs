@@ -395,7 +395,7 @@ fn test_remapping_from_generator(
         mol_dsl!(
             r#"{:atoms ["I" "Br" "Cl" "F" "C"]
                 :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
-                :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th2"}]}"#
+                :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
         ),
         Deltas::default(),
     )
@@ -443,7 +443,7 @@ fn test_remapping_from_generator(
         mol_dsl!(
             r#"{:atoms ["C" "C" "C" "C"]
                 :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct2"}]}"#
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#
         ),
         Deltas::default(),
     )

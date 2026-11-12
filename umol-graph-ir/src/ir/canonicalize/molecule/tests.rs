@@ -846,6 +846,149 @@ fn test_initial_colors_error(#[case] molecule: Molecule, #[case] level: Descript
 }
 
 #[rstest]
+#[case::atom_constraint(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), false)]
+#[case::atom_element(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+#[case::atom_charge(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
+#[case::normalized_bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), true)]
+#[case::bond_order(Entity::Bond(BondId(0)), Entity::Bond(BondId(2)), false)]
+#[case::normalized_dative(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(1)),
+    true
+)]
+#[case::dative_order(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(2)),
+    false
+)]
+#[case::aromatic_electrons(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    true
+)]
+#[case::aromatic_charge(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(2)),
+    false
+)]
+#[case::multicenter_electrons(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(1)),
+    true
+)]
+#[case::noncovalent_kind_equal(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(1)),
+    true
+)]
+#[case::noncovalent_kind_distinct(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(2)),
+    false
+)]
+#[case::stereo_atom_configuration(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(1)),
+    true
+)]
+#[case::stereo_atom_kind(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(2)),
+    false
+)]
+#[case::stereo_bond_configuration(
+    Entity::StereoBond(StereoBondId(0)),
+    Entity::StereoBond(StereoBondId(1)),
+    true
+)]
+#[case::entity_kind(Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+fn test_same_entity_color(
+    initial_color_molecule: Molecule,
+    #[case] entity: Entity,
+    #[case] image: Entity,
+    #[case] expected: bool,
+) {
+    let molecule = initial_color_molecule
+        .normalize()
+        .expect("fixed molecule normalizes");
+
+    assert_eq!(
+        same_entity_color(&molecule, entity, &molecule, image),
+        expected
+    );
+}
+
+#[rstest]
+#[case::renumbered(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"] [4 0 "1"]]}"#),
+    true
+)]
+#[case::different_element(
+    mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    false
+)]
+#[case::different_element_counts(
+    mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    false
+)]
+#[case::different_bond_order(
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+    false
+)]
+#[case::electron_counts_moved(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,2,1,1,1]"}]}"#
+    ),
+    true
+)]
+#[case::different_electron_counts(
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["O" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]}"#
+    ),
+    false
+)]
+fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] expected: bool) {
+    let source = source.normalize().unwrap();
+    let target = target.normalize().unwrap();
+    let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
+    let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
+    let source_colors =
+        initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap();
+    let target_colors =
+        initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap();
+
+    assert_eq!(
+        same_colors(
+            &source,
+            &source_incidence,
+            &source_colors,
+            &target,
+            &target_incidence,
+            &target_colors,
+        ),
+        expected,
+    );
+}
+
+#[rstest]
 #[case::incomplete_order_one(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 2],
@@ -1394,7 +1537,7 @@ fn test_automorphism_adapter_automorphisms() {
     mol_dsl!(
         r#"{:atoms ["I" "Br" "Cl" "F" "C"]
             :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
-            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th2"}]}"#
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
     ),
     vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
     false
@@ -1422,7 +1565,7 @@ fn test_automorphism_adapter_automorphisms() {
     mol_dsl!(
         r#"{:atoms ["C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct2"}]}"#
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#
     ),
     vec![0, 1, 2, 3, 4, 5, 6, 7],
     false

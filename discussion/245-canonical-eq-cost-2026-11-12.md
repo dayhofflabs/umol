@@ -683,7 +683,7 @@ A temporary print, removed again, showed that the last two rows reach the search
 four do not. The tests of `umol-graph-ir` pass with all features. The library build reports the
 four functions as unused until S3b.
 
-#### S3b — `Molecule::canonical_eq_at`
+#### S3b — `Molecule::canonical_eq_at` **Done**
 
 **Module:** `ir/canonicalize/molecule.rs`.
 
@@ -698,6 +698,42 @@ renumbered; meso-2,3-dichlorobutane renumbered and with one center inverted; cyc
 cyclopropanes; and a ring with a charge-sum constraint.
 `test_molecule_canonical_eq_remapping_witness` gains the rows small enough for its enumeration of
 remappings. The properties of S1b hold unchanged.
+
+`canonical_eq_at` normalizes both molecules and builds their colors. When both fail at either
+point it returns `self.framed_eq(other)`, and when one fails it returns false. A molecule that
+normalizes and has colors canonicalizes, which the leaf key already relies on, so no failure is
+left for the later steps. Every test of the crate passed before a test was added or changed.
+
+The compound rows are in a new table, `test_molecule_canonical_eq_compounds`, which asserts both
+directions. The step that decides each row was read once from temporary prints, since removed:
+
+| Row | Decided at | Result |
+| --- | --- | --- |
+| ethanol, ethylamine | colors | false |
+| hexane, 2-methylpentane | cells | false |
+| bromochlorofluoroiodomethane, renumbered | single-node cells | true |
+| bromochlorofluoroiodomethane, mirror image | single-node cells | false |
+| decalin, renumbered | first path | true |
+| cyclohexane, two cyclopropanes | search | false |
+| cuneane, renumbered | search | true |
+| cubane, cuneane | search | false |
+| meso-2,3-dichlorobutane, mirror image | search | true |
+| meso- and chiral 2,3-dichlorobutane | search | false |
+| the two enantiomers of 2,3-dichlorobutane | search | false |
+| cyclohexane with a charge sum on two adjacent atoms, rotated | search | true |
+| the same, against a charge sum on two atoms that are not adjacent | search | false |
+
+`test_molecule_canonical_eq_remapping_witness` is now a table of molecule pairs. Its two former
+rows are kept as literal pairs, and it gains ammonia borane renumbered, methoxyamine against
+N-methylhydroxylamine, and bromochlorofluoroiodomethane renumbered and against its mirror image.
+`test_same_entity_color` runs the entity pairs of `test_initial_colors`, and `test_same_colors`
+has six rows.
+
+Correction to S2b: its rows for the other configuration used `"Th2"` and `"Ct2"`, which are out
+of range and made those rows false for the wrong reason. They now use `"Th0"` and `"Ct0"`.
+
+The tests of `umol-graph-ir` pass with all features and clippy with all targets is clean, which
+is the stage gate of S3.
 
 ### S4 — Remapping search for reaction spans and reactions
 

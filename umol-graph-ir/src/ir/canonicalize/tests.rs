@@ -17,8 +17,8 @@ use crate::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
     AtomId, BondConstraintForm, BondDelta, BondFieldChange, BondForm, BondId, BooleanForm,
     Constraint, ConstraintDelta, ConstraintSpan, DativeBondConstraintForm, DativeBondDelta,
-    DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas, ElementForm, EntitySpan,
-    MoleculeConstraint, MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondDelta,
+    DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas, EntitySpan, MoleculeConstraint,
+    MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondDelta,
     MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId,
     NoncovalentBondConstraintForm, NoncovalentBondDelta, NoncovalentBondFieldChange,
     NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NumForm,
@@ -28,6 +28,7 @@ use crate::ir::{
     StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Stereogenicity,
     StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
+use crate::mol_dsl;
 
 impl AutomorphismAdapter {
     pub(super) fn automorphisms(
@@ -1356,6 +1357,216 @@ fn test_molecule_canonical_eq(
 }
 
 #[rstest]
+#[case::ethanol_ethylamine(
+    mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    false
+)]
+#[case::hexane_2_methylpentane(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"]]}"#),
+    false
+)]
+#[case::bromochlorofluoroiodomethane_renumbered(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
+    ),
+    true
+)]
+#[case::bromochlorofluoroiodomethane_mirror_image(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
+    ),
+    false
+)]
+#[case::decalin_renumbered(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[9 8 "1"] [8 7 "1"] [7 6 "1"] [6 5 "1"] [5 4 "1"] [4 9 "1"]
+                    [4 3 "1"] [3 2 "1"] [2 1 "1"] [1 0 "1"] [0 5 "1"]]}"#
+    ),
+    true
+)]
+#[case::cyclohexane_two_cyclopropanes(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"] [3 4 "1"] [4 5 "1"] [5 3 "1"]]}"#),
+    false
+)]
+#[case::cuneane_renumbered(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 0 "1"] [0 4 "1"] [1 3 "1"] [2 6 "1"] [5 7 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[7 6 "1"] [6 5 "1"] [5 4 "1"] [4 3 "1"] [3 2 "1"] [2 1 "1"]
+                    [1 0 "1"] [0 7 "1"] [7 3 "1"] [6 4 "1"] [5 1 "1"] [2 0 "1"]]}"#
+    ),
+    true
+)]
+#[case::cubane_cuneane(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 4 "1"] [0 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"]
+                    [6 7 "1"] [7 0 "1"] [0 4 "1"] [1 3 "1"] [2 6 "1"] [5 7 "1"]]}"#
+    ),
+    false
+)]
+#[case::meso_dichlorobutane_mirror_image(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [1 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 4 2 [:h 1]] :attrs "Th1"}
+                           {:site 2 :ligands [3 5 1 [:h 2]] :attrs "Th0"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [1 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 4 2 [:h 1]] :attrs "Th0"}
+                           {:site 2 :ligands [3 5 1 [:h 2]] :attrs "Th1"}]}"#
+    ),
+    true
+)]
+#[case::meso_and_chiral_dichlorobutane(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [1 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 4 2 [:h 1]] :attrs "Th1"}
+                           {:site 2 :ligands [3 5 1 [:h 2]] :attrs "Th0"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [1 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 4 2 [:h 1]] :attrs "Th1"}
+                           {:site 2 :ligands [3 5 1 [:h 2]] :attrs "Th1"}]}"#
+    ),
+    false
+)]
+#[case::dichlorobutane_enantiomers(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [1 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 4 2 [:h 1]] :attrs "Th1"}
+                           {:site 2 :ligands [3 5 1 [:h 2]] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [1 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{:site 1 :ligands [0 4 2 [:h 1]] :attrs "Th0"}
+                           {:site 2 :ligands [3 5 1 [:h 2]] :attrs "Th0"}]}"#
+    ),
+    false
+)]
+#[case::charge_sum_rotated(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0), AtomId(1)]),
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(3), AtomId(4)]),
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    true
+)]
+#[case::charge_sum_other_atoms(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0), AtomId(1)]),
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0), AtomId(2)]),
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    false
+)]
+fn test_molecule_canonical_eq_compounds(
+    canonicalize_context: CanonicalizeContext,
+    #[case] left: Molecule,
+    #[case] right: Molecule,
+    #[case] expected: bool,
+) {
+    assert_eq!(left.canonical_eq(&right, &canonicalize_context), expected);
+    assert_eq!(right.canonical_eq(&left, &canonicalize_context), expected);
+}
+
+#[rstest]
 #[case::same_frame([4, 2, 1, 3], 0, true)]
 #[case::odd_frame([2, 4, 1, 3], 1, true)]
 #[case::even_frame([2, 1, 4, 3], 0, true)]
@@ -1473,33 +1684,62 @@ fn test_molecule_canonical_eq_stereo_bond(
 }
 
 #[rstest]
-#[case::renumbering(false, true)]
-#[case::atom_form(true, false)]
+#[case::renumbering(
+    mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["N" "C"] :bonds [[0 1 "1"]]}"#),
+    true
+)]
+#[case::atom_form(
+    mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["F" "C"] :bonds [[0 1 "1"]]}"#),
+    false
+)]
+#[case::ammonia_borane_renumbered(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    mol_dsl!(r#"{:atoms ["B" "N"] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#),
+    true
+)]
+#[case::methoxyamine_methylhydroxylamine(
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+    mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 2 "1"] [2 1 "1"]]}"#),
+    false
+)]
+#[case::bromochlorofluoroiodomethane_renumbered(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
+    ),
+    true
+)]
+#[case::bromochlorofluoroiodomethane_mirror_image(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+    ),
+    mol_dsl!(
+        r#"{:atoms ["I" "Br" "Cl" "F" "C"]
+            :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
+            :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
+    ),
+    false
+)]
 fn test_molecule_canonical_eq_remapping_witness(
     canonicalize_context: CanonicalizeContext,
-    #[case] distinguish: bool,
+    #[case] left: Molecule,
+    #[case] right: Molecule,
     #[case] expected: bool,
 ) {
-    let left = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::N),
-        ],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-        ..Default::default()
-    });
-    let mut right = left.clone().remap(&reverse_remapping(&left));
-    if distinguish {
-        right.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Lit(Element::F);
-    }
-
     assert!(left.clone().canonicalize(&canonicalize_context).is_ok());
     assert!(right.clone().canonicalize(&canonicalize_context).is_ok());
     assert_eq!(explicitly_dense_equivalent(&left, &right), expected);
-    assert_eq!(
-        left.canonical_eq(&right, &canonicalize_context),
-        explicitly_dense_equivalent(&left, &right),
-    );
+    assert_eq!(left.canonical_eq(&right, &canonicalize_context), expected);
 }
 
 #[rstest]

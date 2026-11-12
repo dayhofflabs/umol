@@ -22,7 +22,8 @@ use super::super::stereo::{
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    hash_value, molecule_canonicalize_level, molecule_remapping, rank_colors, AutomorphismAdapter,
+    color_representatives, hash_value, molecule_canonicalize_level, molecule_remapping,
+    rank_colors, remapping_exists, remapping_preserves_incidences, AutomorphismAdapter,
     AutomorphismColor, CanonicalCandidate, Canonicalize, CanonicalizeContext, DeferredKey,
     DescriptionLevel, InitialColors, MoleculeCanonicalizeError, OrderedPartition,
     TopologySearchInput,
@@ -349,6 +350,78 @@ fn initial_colors(
     Ok(InitialColors {
         entities,
         incidences,
+    })
+}
+
+/// Whether an entity of `source` and an entity of `target` have the same color. Entities of two
+/// kinds do not.
+fn same_entity_color(source: &Molecule, entity: Entity, target: &Molecule, image: Entity) -> bool {
+    match (entity, image) {
+        (Entity::Atom(entity), Entity::Atom(image)) => {
+            source.atom(entity).attributes().as_color()
+                == target.atom(image).attributes().as_color()
+        }
+        (Entity::Bond(entity), Entity::Bond(image)) => {
+            source.bond(entity).attributes().as_color()
+                == target.bond(image).attributes().as_color()
+        }
+        (Entity::DativeBond(entity), Entity::DativeBond(image)) => {
+            source.dative_bond(entity).attributes().as_color()
+                == target.dative_bond(image).attributes().as_color()
+        }
+        (Entity::AromaticSystem(entity), Entity::AromaticSystem(image)) => {
+            source.aromatic_system(entity).attributes().as_color()
+                == target.aromatic_system(image).attributes().as_color()
+        }
+        (Entity::MulticenterBond(entity), Entity::MulticenterBond(image)) => {
+            source.multicenter_bond(entity).attributes().as_color()
+                == target.multicenter_bond(image).attributes().as_color()
+        }
+        (Entity::NoncovalentBond(entity), Entity::NoncovalentBond(image)) => {
+            source.noncovalent_bond(entity).attributes().as_color()
+                == target.noncovalent_bond(image).attributes().as_color()
+        }
+        (Entity::StereoAtom(entity), Entity::StereoAtom(image)) => {
+            source.stereo_atom(entity).attributes().as_color()
+                == target.stereo_atom(image).attributes().as_color()
+        }
+        (Entity::StereoBond(entity), Entity::StereoBond(image)) => {
+            source.stereo_bond(entity).attributes().as_color()
+                == target.stereo_bond(image).attributes().as_color()
+        }
+        _ => false,
+    }
+}
+
+/// Whether the color integers of two normalized molecules stand for the same colors, each equally
+/// often. The integers are those of `initial_colors` at one level.
+fn same_colors(
+    source: &Molecule,
+    source_incidence: &IncidenceGraph,
+    source_colors: &InitialColors,
+    target: &Molecule,
+    target_incidence: &IncidenceGraph,
+    target_colors: &InitialColors,
+) -> bool {
+    let Some(entities) = color_representatives(&source_colors.entities, &target_colors.entities)
+    else {
+        return false;
+    };
+    let Some(incidences) =
+        color_representatives(&source_colors.incidences, &target_colors.incidences)
+    else {
+        return false;
+    };
+    entities.into_iter().all(|(entity, image)| {
+        same_entity_color(
+            source,
+            source_incidence.entity(NodeId(entity as u32)),
+            target,
+            target_incidence.entity(NodeId(image as u32)),
+        )
+    }) && incidences.into_iter().all(|(edge, image)| {
+        incidence_color(source, source_incidence, EdgeId(edge as u32))
+            == incidence_color(target, target_incidence, EdgeId(image as u32))
     })
 }
 
@@ -918,6 +991,116 @@ impl Molecule {
             DescriptionLevel::Full => canonicalize_full(self, context),
         }
     }
+
+    /// Canonical equality at `level` of two molecules that both select `level` and have equal
+    /// entity counts.
+    ///
+    /// The colors of the two molecules, then their refined cells, decide unequal pairs. A
+    /// remapping that passes the check of `level` decides equal ones.
+    fn canonical_eq_at(
+        &self,
+        other: &Self,
+        level: DescriptionLevel,
+        context: &CanonicalizeContext,
+    ) -> bool {
+        let (source, target) = match (self.clone().normalize(), other.clone().normalize()) {
+            (Ok(source), Ok(target)) => (source, target),
+            (Err(_), Err(_)) => return self.framed_eq(other),
+            _ => return false,
+        };
+        let incidence_level = match level {
+            DescriptionLevel::Topology => IncidenceLevel::Topology,
+            DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+            DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+        };
+        let source_incidence = source.incidence_graph(incidence_level);
+        let target_incidence = target.incidence_graph(incidence_level);
+        let (source_colors, target_colors) = match (
+            initial_colors(&source, &source_incidence, level),
+            initial_colors(&target, &target_incidence, level),
+        ) {
+            (Ok(source_colors), Ok(target_colors)) => (source_colors, target_colors),
+            (Err(_), Err(_)) => return self.framed_eq(other),
+            _ => return false,
+        };
+        if !same_colors(
+            &source,
+            &source_incidence,
+            &source_colors,
+            &target,
+            &target_incidence,
+            &target_colors,
+        ) {
+            return false;
+        }
+
+        let search_input = |molecule: &Molecule, incidence_graph, colors: &InitialColors| {
+            if level == DescriptionLevel::Topology {
+                let TopologySearchInput {
+                    adapter,
+                    initial_partition,
+                } = topology_search_input(molecule, incidence_graph, &colors.entities);
+                (adapter, initial_partition)
+            } else {
+                let adapter = AutomorphismAdapter::new(incidence_graph, colors);
+                let partition = OrderedPartition::from_descriptors(&adapter.colors);
+                (adapter, partition)
+            }
+        };
+        let (source_adapter, source_partition) =
+            search_input(&source, &source_incidence, &source_colors);
+        let (target_adapter, target_partition) =
+            search_input(&target, &target_incidence, &target_colors);
+        let check = |images: &[NodeId]| {
+            remapping_preserves_incidences(&source_adapter, &target_adapter, images)
+                && match level {
+                    DescriptionLevel::Topology | DescriptionLevel::Constitution => true,
+                    DescriptionLevel::Structure => {
+                        remapping_preserves_stereo(&source, &target, &source_incidence, images)
+                    }
+                    DescriptionLevel::Full => source.framed_eq_under(
+                        &target,
+                        &remapping_from_generator(&source, &source_incidence, images),
+                    ),
+                }
+        };
+        match level {
+            DescriptionLevel::Topology | DescriptionLevel::Constitution => remapping_exists(
+                &source_adapter,
+                source_partition,
+                &target_adapter,
+                target_partition,
+                context.automorphism_algorithm,
+                &check,
+                false,
+                &|_: &mut Vec<Vec<NodeId>>| {},
+            ),
+            DescriptionLevel::Structure => remapping_exists(
+                &source_adapter,
+                source_partition,
+                &target_adapter,
+                target_partition,
+                context.automorphism_algorithm,
+                &check,
+                true,
+                &|generators: &mut Vec<Vec<NodeId>>| {
+                    retain_stereo_preserving_generators(&target, &target_incidence, generators);
+                },
+            ),
+            DescriptionLevel::Full => remapping_exists(
+                &source_adapter,
+                source_partition,
+                &target_adapter,
+                target_partition,
+                context.automorphism_algorithm,
+                &check,
+                true,
+                &|generators: &mut Vec<Vec<NodeId>>| {
+                    retain_preserving_generators(&target, &target_incidence, generators);
+                },
+            ),
+        }
+    }
 }
 
 impl Canonicalize for Molecule {
@@ -949,6 +1132,10 @@ impl Canonicalize for Molecule {
         }
         if self == other {
             return true;
+        }
+        let level = molecule_canonicalize_level(self);
+        if level == molecule_canonicalize_level(other) {
+            return self.canonical_eq_at(other, level, context);
         }
         match (
             self.clone().canonicalize(context),
