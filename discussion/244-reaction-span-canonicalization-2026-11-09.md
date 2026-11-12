@@ -1,6 +1,6 @@
 # 244 — Reaction-span canonicalization aligned with molecules
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-09
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
