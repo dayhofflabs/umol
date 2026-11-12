@@ -35,8 +35,8 @@ use super::delta::{
     apply_dative_bond_modification, apply_multicenter_bond_modification,
     apply_noncovalent_bond_modification, apply_stereo_atom_modification,
     apply_stereo_bond_modification, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
-    ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan, MulticenterBondDelta,
-    NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
+    DativeBondDelta, Delta, Deltas, EntityFold, MulticenterBondDelta, NoncovalentBondDelta,
+    StereoAtomDelta, StereoBondDelta,
 };
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
@@ -56,6 +56,7 @@ use super::noncovalent::{
 };
 use super::reaction::{normalize_reaction_deltas, Reaction};
 use super::remap::MoleculeRemapping;
+use super::span::{ConstraintSpan, EntitySpan};
 use super::stereo::{
     reframe_stereo_atom_spans_with, reframe_stereo_bond_spans_with, StereoAtomForm,
     StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,

@@ -30,6 +30,7 @@ pub(crate) mod reaction;
 pub(crate) mod reaction_span;
 pub(crate) mod remap;
 pub(crate) mod ring;
+pub(crate) mod span;
 pub(crate) mod spin;
 pub(crate) mod stereo;
 pub(crate) mod substructure;
@@ -67,9 +68,8 @@ pub use constraint::{
 pub use correspondence::{MoleculeCorrespondence, MoleculeCorrespondenceComposeError};
 pub use dative::{DativeBondFieldKind, DativeBondForm, DativeBondUpdate, DativeBonds};
 pub use delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
-    Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
-    StereoBondDelta,
+    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
+    MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
 pub use edit::{
     AddAromaticSystem, AddBond, AddMulticenterBond, AddStereoAtom, AddStereoBond,
@@ -126,6 +126,7 @@ pub use remap::MoleculeRemapping;
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };
+pub use span::{ConstraintSpan, EntitySpan};
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
     CisTransConfiguration, CisTransStereoForm, StereoAtomFieldKind, StereoAtomForm,

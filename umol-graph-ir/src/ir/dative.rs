@@ -13,11 +13,11 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
-use super::delta::EntitySpan;
 use super::error::Contradiction;
 use super::frame::DativeBondsFrameAction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
+use super::span::EntitySpan;
 use super::traits::{AsColor, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A dative bond's donor frame, acceptor, and attributes.

@@ -25,11 +25,11 @@ use super::constraint::{
     StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
     StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
 };
-use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoinError};
 use super::frame::{StereoAtomsFrameAction, StereoBondsFrameAction};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
+use super::span::EntitySpan;
 use super::traits::{AsColor, AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A stereo atom's site, ligand frame, and attributes.

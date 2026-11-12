@@ -1831,7 +1831,7 @@ table has the same rows without the row of two kinds, since a stereo bond has on
 library tests pass. The library build reports two more dead-code warnings, for the two colors,
 which end with S6k.
 
-#### S6g — Orders from the declaration
+#### S6g — Orders from the declaration **Done**
 
 **Module:** `ir/delta.rs`, `ir/incidence.rs`.
 
@@ -1844,6 +1844,22 @@ of `Incidence` equals the written one. [dep: S6d]
 
 **Tests:** `test_entity_span_cmp` with the four tags in order. `test_entity_span_as_color` with a
 row per variant and a `Modified` row with equal colors. `test_incidence_cmp` is rerun unchanged.
+
+The reason for the position of `Added` is a "Semantic properties" paragraph in the documentation
+of `EntitySpan`, since the derived order is public. The color of `EntitySpan<T>` is
+`EntitySpan<T::Color<'a>>`, and the implementation follows `superimpose`. `Incidence` loses
+`position` and its two written implementations, and its documentation states the declaration
+order. `test_entity_span_cmp` has 3 rows, one per adjacent pair of tags, each with the larger
+payload on the smaller tag. `test_entity_span_as_color` has 5 rows over spans of
+`AromaticSystemForm`. It compares two colors with `cmp`, so each row fixes the place of a variant
+in the order, and the `Modified` row with equal colors compares equal to `Unchanged`.
+`test_incidence_cmp` passes unchanged. No expected value changed: the 12,198 library tests, the
+integration tests of the crate, and the 555 properties pass. The library build reports the same
+ten dead-code warnings as after S6f.
+
+With this subitem `EntitySpan` and `ConstraintSpan` moved, with their implementations and 11
+tests, from `ir/delta.rs` to the new module `ir/span.rs`. The text is unchanged, the public paths
+are unchanged, and every import inside the crate names `span`.
 
 #### S6h — Color ranking and the deferred key
 

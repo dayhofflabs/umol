@@ -13,10 +13,10 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
-use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoinError};
 use super::frame::NoncovalentBondsFrameAction;
 use super::id::{AtomId, NoncovalentBondId};
+use super::span::EntitySpan;
 use super::traits::{AsColor, AsLit, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A noncovalent bond's atom pair and attributes.

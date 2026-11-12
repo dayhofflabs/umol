@@ -5,7 +5,6 @@ use umol_perm::Permutation;
 
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
-use super::super::delta::EntitySpan;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::error::Contradiction;
@@ -16,6 +15,7 @@ use super::super::num::NumForm;
 use super::super::reaction::Reaction;
 use super::super::reaction_span::ReactionSpan;
 use super::super::remap::MoleculeRemapping;
+use super::super::span::EntitySpan;
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm};
 use super::super::traits::{FrameTransport, Normalize, Reframe};

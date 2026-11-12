@@ -26,8 +26,8 @@ use super::constraint::{
     TopicityRelationForm,
 };
 use super::delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintSpan, DativeBondDelta, Delta, EntitySpan,
-    MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
+    AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, MulticenterBondDelta,
+    NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
 use super::electrons::ElectronCountsForm;
 use super::error::Contradiction;
@@ -44,6 +44,7 @@ use super::operators::{MemOp, RelOp};
 use super::reaction::Reaction;
 use super::reaction_span::ReactionSpan;
 use super::remap::MoleculeRemapping;
+use super::span::{ConstraintSpan, EntitySpan};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     CisTransStereoForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,

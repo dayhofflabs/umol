@@ -13,12 +13,12 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::DynPermutation;
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
-use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
 use super::error::Contradiction;
 use super::frame::AromaticSystemsFrameAction;
 use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
+use super::span::EntitySpan;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{AsColor, FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
