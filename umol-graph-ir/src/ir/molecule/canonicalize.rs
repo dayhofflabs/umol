@@ -3,31 +3,33 @@
 use umol_graph_core::{EdgeId, Graph, NodeId, SubdivisionNodeSource};
 
 use super::super::aromatic::aromatic_system_representative_action;
+use super::super::canonicalize::{
+    color_representatives, hash_value, molecule_canonicalize_level, molecule_remapping,
+    Canonicalize, CanonicalizeContext, DeferredKey, MoleculeCanonicalizeError, TopologySearchInput,
+};
 use super::super::constraint::Constraints;
 use super::super::electrons::ElectronCountsForm;
-use super::super::entity::{Entity, EntityKind};
+use super::super::entity::{DescriptionLevel, Entity, EntityKind};
 use super::super::id::AtomId;
 use super::super::incidence::{IncidenceGraph, IncidenceLevel};
 use super::super::ligand::StereoLigand;
-use super::super::molecule::symmetry::{
-    incidence_color, initial_colors, remapping_preserves_stereo,
-    retain_stereo_preserving_generators,
-};
-use super::super::molecule::Molecule;
 use super::super::multicenter::multicenter_bond_representative_action;
 use super::super::remap::MoleculeRemapping;
 use super::super::stereo::{
     stereo_atom_representative_action, stereo_bond_representative_action, StereoAtomForm,
     StereoBondForm,
 };
-use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
-use super::{
+use super::super::symmetry::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    color_representatives, hash_value, molecule_canonicalize_level, molecule_remapping,
     remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor,
-    CanonicalCandidate, Canonicalize, CanonicalizeContext, DeferredKey, DescriptionLevel,
-    InitialColors, MoleculeCanonicalizeError, OrderedPartition, TopologySearchInput,
+    CanonicalCandidate, InitialColors, OrderedPartition,
 };
+use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
+use super::symmetry::{
+    incidence_color, initial_colors, remapping_preserves_stereo,
+    retain_stereo_preserving_generators,
+};
+use super::Molecule;
 
 /// The key of a leaf: the molecule in the entity order of the leaf, with each form as the integer
 /// of its color.

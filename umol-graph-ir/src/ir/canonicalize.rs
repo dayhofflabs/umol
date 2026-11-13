@@ -19,17 +19,8 @@ use super::molecule::Molecule;
 use super::reaction::Reaction;
 use super::reaction_span::ReactionSpan;
 use super::remap::MoleculeRemapping;
-use super::symmetry::{
-    canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor,
-    CanonicalCandidate, CanonicalSearchResult, InitialColors, OrderedPartition,
-};
-#[cfg(test)]
-use super::symmetry::{same_cells, AutomorphismAdapterOutput, CanonicalSearchStats};
+use super::symmetry::{AutomorphismAdapter, OrderedPartition};
 use super::traits::Reframe;
-
-mod molecule;
-mod reaction_span;
 
 /// Semantic and operational inputs to aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,7 +41,7 @@ fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
     }
 }
 
-fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
+pub(crate) fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
     if molecule.has_constraints() {
         DescriptionLevel::Full
     } else if molecule.has_stereo_atoms() || molecule.has_stereo_bonds() {
@@ -66,14 +57,14 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
     }
 }
 
-fn reaction_canonicalize_level(reaction: &Reaction) -> DescriptionLevel {
+pub(crate) fn reaction_canonicalize_level(reaction: &Reaction) -> DescriptionLevel {
     reaction.deltas().iter().fold(
         molecule_canonicalize_level(reaction.lhs()),
         |level, delta| level.max(delta_canonicalize_level(delta)),
     )
 }
 
-fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
+pub(crate) fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
     if !span.constraints().is_empty() {
         DescriptionLevel::Full
     } else if span.stereo_atoms().count() > 0 || span.stereo_bonds().count() > 0 {
@@ -169,21 +160,21 @@ pub trait Canonicalize: Reframe {
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool;
 }
 
-fn hash_value<T: Hash>(value: &T) -> u64 {
+pub(crate) fn hash_value<T: Hash>(value: &T) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     hasher.finish()
 }
 
 /// A leaf key that is built when it is first compared or read.
-struct DeferredKey<'a, K, Build> {
+pub(crate) struct DeferredKey<'a, K, Build> {
     order: Vec<NodeId>,
     build: &'a Build,
     key: OnceCell<K>,
 }
 
 impl<'a, K, Build: Fn(&[NodeId]) -> K> DeferredKey<'a, K, Build> {
-    fn new(order: &[NodeId], build: &'a Build) -> Self {
+    pub(crate) fn new(order: &[NodeId], build: &'a Build) -> Self {
         Self {
             order: order.to_vec(),
             build,
@@ -196,7 +187,7 @@ impl<'a, K, Build: Fn(&[NodeId]) -> K> DeferredKey<'a, K, Build> {
     }
 
     /// The key, if a comparison built it.
-    fn into_built(self) -> Option<K> {
+    pub(crate) fn into_built(self) -> Option<K> {
         self.key.into_inner()
     }
 }
@@ -227,14 +218,14 @@ impl<K: Ord, Build: Fn(&[NodeId]) -> K> Ord for DeferredKey<'_, K, Build> {
 /// bond remains a colored subdivision vertex. The complete typed leaf key and remapping still
 /// order and map every bond.
 #[derive(Clone, Debug)]
-struct TopologySearchInput {
-    adapter: AutomorphismAdapter,
-    initial_partition: OrderedPartition,
+pub(crate) struct TopologySearchInput {
+    pub(crate) adapter: AutomorphismAdapter,
+    pub(crate) initial_partition: OrderedPartition,
 }
 
 /// One position per color integer in each of two lists, in the order of the integers: the first
 /// position that holds the integer. `None` when the lists do not hold each integer equally often.
-fn color_representatives(source: &[u32], target: &[u32]) -> Option<Vec<(usize, usize)>> {
+pub(crate) fn color_representatives(source: &[u32], target: &[u32]) -> Option<Vec<(usize, usize)>> {
     if source.len() != target.len() {
         return None;
     }
@@ -274,7 +265,7 @@ fn color_representatives(source: &[u32], target: &[u32]) -> Option<Vec<(usize, u
     )
 }
 
-fn molecule_remapping(images: &[Vec<usize>; 8]) -> MoleculeRemapping {
+pub(crate) fn molecule_remapping(images: &[Vec<usize>; 8]) -> MoleculeRemapping {
     fn remapping<Id: Copy + Debug + Into<usize> + From<usize>>(images: &[usize]) -> Remapping<Id> {
         Remapping::new(images.iter().copied().map(Id::from).collect())
             .expect("selected entity order is a permutation")
@@ -329,4 +320,4 @@ impl From<ReactionSpanCanonicalizeError> for ReactionCanonicalizeError {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

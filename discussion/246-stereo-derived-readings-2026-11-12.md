@@ -888,13 +888,26 @@ The tests of the search that take molecules as input stay with the canonicalizat
 molecule, because four of the seven use canonicalization helpers. The tests of `umol-graph-ir`
 pass with the default features, the same 12,443 unit tests.
 
-#### S1d — Canonicalization of the two types
+#### S1d — Canonicalization of the two types **Done**
 
 - **Module:** `ir/canonicalize/molecule.rs` → `ir/molecule/canonicalize.rs`;
   `ir/canonicalize/reaction_span.rs` → `ir/reaction_span/canonicalize.rs`.
 - **Changes:** the two files move with their tests. The tests of `ir/canonicalize/tests.rs`
   follow the functions they test.
 - **Kind:** move (green). `[dep: S1c]`
+
+The two files differ from before only in their imports. In `ir/canonicalize.rs` the items the two
+files use are visible within the crate: the three functions that choose the level, `hash_value`,
+`color_representatives`, `molecule_remapping`, `DeferredKey` and `TopologySearchInput`.
+
+Of the tests of `ir/canonicalize/tests.rs`, the ten of the molecule's `Canonicalize` impl went
+to `ir/molecule/canonicalize/tests.rs` with the four molecule fixtures and `reverse_remapping`,
+and the eleven of the reaction span and the reaction went to
+`ir/reaction_span/canonicalize/tests.rs` with their fixture. The file keeps the tests of what
+`ir::canonicalize` holds, the test that compares the three types together, and what both types'
+tests share: `canonicalize_context`, `permutations` and `explicitly_dense_equivalent`. No test
+changed. The tests of `umol-graph-ir` pass with the default features, the same 12,443 unit
+tests.
 
 #### S1e — Comparison
 

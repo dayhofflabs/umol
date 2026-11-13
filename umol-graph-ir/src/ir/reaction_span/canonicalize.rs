@@ -3,35 +3,36 @@
 use umol_graph_core::{EdgeId, Graph, NodeId, SubdivisionNodeSource};
 
 use super::super::aromatic::{aromatic_system_representative_action, AromaticSystemForm};
+use super::super::canonicalize::{
+    color_representatives, hash_value, molecule_remapping, reaction_canonicalize_level,
+    reaction_span_canonicalize_level, Canonicalize, CanonicalizeContext, DeferredKey,
+    ReactionCanonicalizeError, ReactionSpanCanonicalizeError, TopologySearchInput,
+};
 use super::super::electrons::ElectronCountsForm;
-use super::super::entity::Entity;
+use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, BondId};
 use super::super::incidence::{IncidenceGraph, IncidenceLevel};
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::{multicenter_bond_representative_action, MulticenterBondForm};
 use super::super::reaction::Reaction;
-use super::super::reaction_span::symmetry::{
-    incidence_color, initial_colors, remapping_preserves_stereo,
-    retain_stereo_preserving_generators,
-};
-use super::super::reaction_span::ReactionSpan;
 use super::super::remap::MoleculeRemapping;
 use super::super::span::{ConstraintSpan, EntitySpan};
 use super::super::stereo::{
     stereo_atom_representative_action, stereo_bond_representative_action, StereoAtomForm,
     StereoBondForm,
 };
-use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
-use super::{
+use super::super::symmetry::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    color_representatives, hash_value, molecule_remapping, reaction_canonicalize_level,
-    reaction_span_canonicalize_level, remapping_exists, remapping_preserves_incidences,
-    AutomorphismAdapter, AutomorphismColor, CanonicalCandidate, CanonicalSearchResult,
-    Canonicalize, CanonicalizeContext, DeferredKey, DescriptionLevel, InitialColors,
-    OrderedPartition, ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
-    TopologySearchInput,
+    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor,
+    CanonicalCandidate, CanonicalSearchResult, InitialColors, OrderedPartition,
 };
+use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
+use super::symmetry::{
+    incidence_color, initial_colors, remapping_preserves_stereo,
+    retain_stereo_preserving_generators,
+};
+use super::ReactionSpan;
 
 /// The key of a leaf: the span in the entity order of the leaf, with each entity span as the
 /// integer of its color.

@@ -59,6 +59,7 @@ use super::view::{
 
 mod apply;
 mod build;
+mod canonicalize;
 mod editor;
 mod fragment;
 pub(crate) mod integrity;

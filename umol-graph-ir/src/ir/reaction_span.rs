@@ -64,6 +64,7 @@ use super::stereo::{
 };
 use super::traits::{EntityPatch, FrameTransport, Normalize, Reframe};
 
+mod canonicalize;
 pub(crate) mod symmetry;
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. Each entity kind
