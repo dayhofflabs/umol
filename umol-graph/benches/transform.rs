@@ -1015,6 +1015,60 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
             ));
         }
     }
+    let chlorofluoropropane = mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th*#g/"}
+                       {:site 1 :ligands [0 2 6 7] :attrs "Th*"}]}"#
+    );
+    let inositol = mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "O#h" "O#h" "O#h" "O#h" "O#h" "O#h"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [1 7 "1"] [2 8 "1"] [3 9 "1"] [4 10 "1"] [5 11 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 7 [:h 1]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 8 [:h 2]] :attrs "Th*"}
+                       {:site 3 :ligands [2 4 9 [:h 3]] :attrs "Th*"}
+                       {:site 4 :ligands [3 5 10 [:h 4]] :attrs "Th*"}
+                       {:site 5 :ligands [0 4 11 [:h 5]] :attrs "Th*"}]}"#
+    );
+    let chlorofluoropropane_expected: Vec<_> = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        .into_iter()
+        .map(|(first, second)| {
+            let mut result = chlorofluoropropane.clone();
+            result
+                .stereo_atom_mut(StereoAtomId(0))
+                .attributes_mut()
+                .configuration = (StereoKind::Tetrahedral, first).into();
+            result
+                .stereo_atom_mut(StereoAtomId(1))
+                .attributes_mut()
+                .configuration = (StereoKind::Tetrahedral, second).into();
+            result
+        })
+        .collect();
+    cases.push((
+        "chlorofluoropropane",
+        chlorofluoropropane,
+        EnumerateStereoConfig::default(),
+        vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(1))],
+        chlorofluoropropane_expected,
+        true,
+    ));
+    cases.push((
+        "inositol",
+        inositol.clone(),
+        EnumerateStereoConfig {
+            selection: StereoSelection {
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        (0..6).map(|atom| StereoSite::Atom(AtomId(atom))).collect(),
+        vec![inositol],
+        true,
+    ));
     let mut group = c.benchmark_group("stereo_enumerator");
     for (name, input, config, order, expected, full) in cases {
         let transformer =

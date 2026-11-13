@@ -10,6 +10,7 @@ use criterion::{BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ops::model::StereoModel;
 use umol_graph::ops::stereo::{StereoDerivation, StereoPerceiver, StereoSelection, StereoSite};
+use umol_graph::ops::validate::StereoConformanceValidator;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
@@ -17,6 +18,7 @@ use umol_graph_ir::ir::{
     StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
     StereoCoset, StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
 };
+use umol_graph_ir::mol_dsl_concrete;
 
 pub(super) fn bench_stereo(c: &mut Criterion) {
     let mut cases = vec![
@@ -346,7 +348,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
         );
         recognition_cases.push((name.clone(), source, selection, expected));
     }
-    let mut group = c.benchmark_group("stereo_baseline");
+    let mut group = c.benchmark_group("stereo");
     for (name, molecule, ring_size, expected_classifications) in cases {
         let original = molecule.clone();
         assert_eq!(molecule.clone().edit().finish(), Ok(molecule.clone()));
@@ -592,6 +594,94 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                         .unwrap(),
                 )
             });
+        });
+    }
+    let validator = StereoConformanceValidator::new(&model);
+    for (name, molecule) in [
+        (
+            "chlorofluoropropane",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+                :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
+                               {:site 1 :ligands [0 2 6 7] :attrs "Th0#g'"}]}"#
+            ),
+        ),
+        (
+            "trichloropentane_meso",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#h3" "C" "C" "C" "C#h3" "Cl" "Cl" "Cl" "H" "H" "H"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]
+                        [1 8 "1"] [2 9 "1"] [3 10 "1"]]
+                :stereo-atoms [{:site 1 :ligands [0 2 5 8] :attrs "Th0"}
+                               {:site 2 :ligands [1 3 6 9] :attrs "Th0"}
+                               {:site 3 :ligands [2 4 7 10] :attrs "Th0"}]}"#
+            ),
+        ),
+        (
+            "inositol",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"
+                        "O#h" "O#h" "O#h" "O#h" "O#h" "O#h"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                        [0 6 "1"] [1 7 "1"] [2 8 "1"] [3 9 "1"] [4 10 "1"] [5 11 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                               {:site 1 :ligands [0 2 7 [:h 1]] :attrs "Th*"}
+                               {:site 2 :ligands [1 3 8 [:h 2]] :attrs "Th*"}
+                               {:site 3 :ligands [2 4 9 [:h 3]] :attrs "Th*"}
+                               {:site 4 :ligands [3 5 10 [:h 4]] :attrs "Th*"}
+                               {:site 5 :ligands [0 4 11 [:h 5]] :attrs "Th*"}]}"#
+            ),
+        ),
+        (
+            "bis_fluoroethyl_difluorohexane",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#h3" "C#h3" "C#h3" "C#h3" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"
+                        "F" "F" "F" "F"]
+                :bonds [[8 9 "1"] [8 4 "1"] [8 5 "1"] [9 6 "1"] [9 7 "1"] [4 0 "1"] [5 1 "1"]
+                        [6 2 "1"] [7 3 "1"] [4 10 "1"] [5 11 "1"] [6 12 "1"] [7 13 "1"]]
+                :stereo-atoms [{:site 4 :ligands [0 8 10 [:h 4]] :attrs "Th*"}
+                               {:site 5 :ligands [1 8 11 [:h 5]] :attrs "Th*"}
+                               {:site 6 :ligands [2 9 12 [:h 6]] :attrs "Th*"}
+                               {:site 7 :ligands [3 9 13 [:h 7]] :attrs "Th*"}
+                               {:site 8 :ligands [4 5 9 [:h 8]] :attrs "Th*"}
+                               {:site 9 :ligands [6 7 8 [:h 9]] :attrs "Th*"}]}"#
+            ),
+        ),
+        (
+            "tris_hydroxyethyl_methane",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h3" "C#h3" "C#h3" "O#h" "O#h" "O#h"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [2 5 "1"] [3 6 "1"]
+                        [1 7 "1"] [2 8 "1"] [3 9 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}
+                               {:site 1 :ligands [0 4 7 [:h 1]] :attrs "Th*"}
+                               {:site 2 :ligands [0 5 8 [:h 2]] :attrs "Th*"}
+                               {:site 3 :ligands [0 6 9 [:h 3]] :attrs "Th*"}]}"#
+            ),
+        ),
+    ] {
+        let sites: BTreeSet<_> = molecule
+            .stereo_atoms()
+            .iter()
+            .map(|stereo| StereoSite::Atom(stereo.site_id()))
+            .collect();
+        group.bench_function(BenchmarkId::new("classify", name), |b| {
+            b.iter(|| {
+                black_box(
+                    perception
+                        .classify(
+                            black_box(&molecule),
+                            black_box(&sites),
+                            AutomorphismAlgorithm::Nauty,
+                            16,
+                        )
+                        .unwrap(),
+                )
+            });
+        });
+        group.bench_function(BenchmarkId::new("validate", name), |b| {
+            b.iter(|| black_box(validator.validate(black_box(&molecule))));
         });
     }
     group.finish();

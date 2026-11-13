@@ -481,7 +481,7 @@ fn traversal(c: &mut Criterion) {
             Graph::new(4, &[[0, 0], [0, 1], [0, 1], [1, 2]]),
         ),
     ];
-    let mut components = c.benchmark_group("traversal_baseline/components");
+    let mut components = c.benchmark_group("traversal/components");
     for (name, graph) in &graphs {
         components.bench_function(*name, |b| {
             b.iter(|| {
@@ -490,7 +490,7 @@ fn traversal(c: &mut Criterion) {
         });
     }
     components.finish();
-    let mut neighborhood = c.benchmark_group("traversal_baseline/neighborhood");
+    let mut neighborhood = c.benchmark_group("traversal/neighborhood");
     for (name, graph) in &graphs {
         neighborhood.bench_function(*name, |b| {
             b.iter(|| {
