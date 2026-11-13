@@ -12,6 +12,7 @@ pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use strum::EnumCount;
+pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use transact::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
 use umol_graph_core::{
     Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,
@@ -64,6 +65,7 @@ pub(crate) mod integrity;
 mod pushout;
 mod remap;
 pub mod spec;
+mod symmetry;
 mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.

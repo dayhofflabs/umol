@@ -7,11 +7,10 @@ use umol_perm::{OrientedPermutationGroup, Permutation};
 
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::molecule::Molecule;
+use super::super::molecule::{Molecule, StereoSymmetry};
 use super::super::stereo::{
     StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
 };
-use super::super::symmetry::StereoSymmetry;
 use super::super::traits::{FrameTransport, Lattice};
 use super::atom::AtomView;
 use super::bond::BondView;
@@ -864,11 +863,12 @@ mod tests {
     use crate::ir::entity::Entity;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
+    use crate::ir::molecule::{
+        GraphSymmetryConfig, Molecule, MoleculeEntries, MoleculeIntegrityError,
+    };
     use crate::ir::stereo::{
         StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity, Topicity,
     };
-    use crate::ir::symmetry::GraphSymmetryConfig;
 
     #[fixture]
     fn molecule() -> Molecule {

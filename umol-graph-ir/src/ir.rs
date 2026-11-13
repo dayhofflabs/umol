@@ -34,7 +34,6 @@ pub(crate) mod span;
 pub(crate) mod spin;
 pub(crate) mod stereo;
 pub(crate) mod substructure;
-pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod view;
 
@@ -104,9 +103,10 @@ pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::{
-    spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
-    MoleculeIntegrityError, MoleculePushoutCorrespondence, MoleculeSpec, MoleculeSpecTerm, Port,
-    PortArg, RollbackMethod, TrackedTransaction, Transaction, TransactionError,
+    spec, AtomArg, Fragment, GraphSymmetry, GraphSymmetryConfig, Molecule, MoleculeBuilder,
+    MoleculeEditor, MoleculeEntries, MoleculeIntegrityError, MoleculePushoutCorrespondence,
+    MoleculeSpec, MoleculeSpecTerm, Port, PortArg, RollbackMethod, StereoSymmetry,
+    TrackedTransaction, Transaction, TransactionError,
 };
 pub use multicenter::{
     MulticenterBondFieldKind, MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds,
@@ -138,7 +138,6 @@ pub use stereo::{
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,
 };
-pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, EntityPatch, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Reframe, ReframeKind,
     TryFromIr, TryIntoIr,

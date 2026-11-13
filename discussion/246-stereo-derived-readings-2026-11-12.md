@@ -828,12 +828,16 @@ Baseline of the new cases, medians in µs:
 
 Every subitem of this stage moves code without changing it.
 
-#### S1a — Present symmetry code under the molecule
+#### S1a — Present symmetry code under the molecule **Done**
 
 - **Module:** `ir/symmetry.rs` → `ir/molecule/symmetry.rs`.
 - **Changes:** the file moves with its tests. The public paths `ir::GraphSymmetry`,
   `ir::GraphSymmetryConfig` and `ir::StereoSymmetry` stay.
 - **Kind:** move (green).
+
+Only import paths changed: those of the moved file and those of its one user,
+`ir/view/stereo.rs`. `ir::molecule` re-exports the three types, as it does for its other
+submodules. The tests of `umol-graph-ir` pass with the default features.
 
 #### S1b — Generic search
 

@@ -5,19 +5,19 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
 use umol_perm::{Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation};
 
-use super::coloring::MoleculeColoring;
-use super::entity::{Entity, EntityKind};
-use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
-use super::incidence::{IncidenceGraph, IncidenceLevel};
-use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::Molecule;
-#[cfg(test)]
-use super::molecule::MoleculeEntries;
-use super::stereo::{
+use super::super::coloring::MoleculeColoring;
+use super::super::entity::{Entity, EntityKind};
+use super::super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
+use super::super::incidence::{IncidenceGraph, IncidenceLevel};
+use super::super::ligand::{StereoLigand, StereoLigandKind};
+use super::super::stereo::{
     coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
     Topicity,
 };
-use super::traits::AsLit;
+use super::super::traits::AsLit;
+use super::Molecule;
+#[cfg(test)]
+use super::MoleculeEntries;
 
 /// Configuration for [`Molecule::graph_symmetry`].
 pub struct GraphSymmetryConfig<C: MoleculeColoring> {
