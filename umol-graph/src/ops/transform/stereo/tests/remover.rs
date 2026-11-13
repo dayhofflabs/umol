@@ -33,7 +33,7 @@ fn mixed_sites() -> Molecule {
 #[case::cis_trans(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))], vec![StereoSite::Bond(BondId(4))])]
 #[case::other_kind(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::SquarePlanar])), ..Default::default() }, vec![], vec![])]
 #[case::stereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))], vec![StereoSite::Bond(BondId(4))])]
-#[case::symmetric(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() }, vec![], vec![])]
+#[case::nonstereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() }, vec![], vec![])]
 #[case::intersection(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])), kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![], vec![])]
 #[case::empty_sites(StereoSelection { sites: Some(BTreeSet::new()), ..Default::default() }, vec![], vec![])]
 #[case::empty_kinds(StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() }, vec![], vec![])]
@@ -326,17 +326,17 @@ fn test_stereo_remover_transform_mode(#[case] molecule: Molecule, #[case] expect
     mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
     StereoSite::Atom(AtomId(0)), Stereogenicity::Stereogenic,
 )]
-#[case::prochiral_atom(
+#[case::prostereogenic_atom(
     mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
-    StereoSite::Atom(AtomId(0)), Stereogenicity::Prochiral,
+    StereoSite::Atom(AtomId(0)), Stereogenicity::Prostereogenic,
 )]
-#[case::symmetric_atom(
+#[case::nonstereogenic_atom(
     mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
-    StereoSite::Atom(AtomId(0)), Stereogenicity::Symmetric,
+    StereoSite::Atom(AtomId(0)), Stereogenicity::Nonstereogenic,
 )]
 #[case::stereogenic_bond(
     mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
@@ -344,11 +344,11 @@ fn test_stereo_remover_transform_mode(#[case] molecule: Molecule, #[case] expect
     mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#),
     StereoSite::Bond(BondId(0)), Stereogenicity::Stereogenic,
 )]
-#[case::symmetric_bond(
+#[case::nonstereogenic_bond(
     mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#),
     mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#),
-    StereoSite::Bond(BondId(0)), Stereogenicity::Symmetric,
+    StereoSite::Bond(BondId(0)), Stereogenicity::Nonstereogenic,
 )]
 fn test_stereo_remover_transform_stereogenicity(
     #[case] mut molecule: Molecule,
@@ -395,9 +395,9 @@ fn test_stereo_remover_transform_stereogenicity(
 }
 
 #[rstest]
-#[case::symmetric_only(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
+#[case::nonstereogenic_only(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Symmetric)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Nonstereogenic)]
 #[case::stereogenic_only(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Stereogenic)]
@@ -508,7 +508,7 @@ fn test_stereo_remover_transform_constraints() {
             StereoBondId(1),
             StereoKind::CisTrans,
             StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             )),
         ))),
         Constraint::And(vec![
@@ -560,7 +560,7 @@ fn test_stereo_remover_transform_constraints() {
             StereoBondId(0),
             StereoKind::CisTrans,
             StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             )),
         ))),
     ]);
@@ -671,22 +671,22 @@ fn test_stereo_remover_transform_model(#[case] selection: StereoSelection) {
 #[case::kindless(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "*"}]}"#),
-    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() },
+    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() },
     StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
 #[case::symbolic(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th?configuration"}]}"#),
-    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() },
+    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() },
     StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
 #[case::geometry(mol_dsl_concrete!(r#"{:atoms ["Pt#c+2" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}"#),
-    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() },
+    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() },
     StereoPerceptionError::UnsupportedKind { kind: StereoKind::SquarePlanar })]
 #[case::frame(mol_dsl_concrete!(r#"{:atoms ["C#h" "F" "Cl" "Br"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3] :attrs "Th0"}]}"#),
-    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() },
+    StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() },
     StereoPerceptionError::Inconsistency(StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) }))]
 #[case::later_bond(mol_dsl_concrete!(r#"{:atoms ["C#T+#D4" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2#C+#R!"] [5 7 "1"] [6 8 "1"]]

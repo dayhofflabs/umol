@@ -786,7 +786,7 @@ ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-fra
 - **`#p`** — **ligand symmetry**: asserts whether a ligand permutation **is** (`boolean` **`+`** or omitted), **is not** (**`!`**), or is **undetermined** (**`*`**) a symmetry of the element. Payload **`(['`''] cycles | '~') boolean`**: **`'`** marks the permutation **improper** (orientation-reversing; default proper); **`cycles`** is the permutation in **disjoint-cycle notation** (below); the **trailing** **`boolean`** is the assertion's truth value — a scalar polarity written **after** the permutation (**`+`** / omitted true, **`!`** false, **`*`** undetermined). The **`~`** sugar denotes the **class involution** (the orientation-reversing generator for chiral classes, the configuration-swapping ligand permutation for achiral classes) and already carries the class-appropriate orientation, so it is not combined with **`'`**.
 - **`#f`** — **fluxionality**: whether a proper ligand permutation is realized by dynamics. Payload **`(cycles | '~') boolean`**; the permutation carries no **`'`** (it is a bare proper move), the **trailing** **`boolean`** its truth value. **`~`** is the class involution.
 - **`#o`** — **topicity** of a ligand pair. Payload **`ligand-pair relation`** — the **`(i,j)`** pair (two 0-indexed positions in the **`:ligands`** frame) **first**, then the **`relation`**. Its negation is **not** a trailing polarity like **`#p`** / **`#f`**: the relation's set-complement is a **leading** **`!`** on the glyph (**`!/`** = not diastereotopic; **Relation completeness** below). The glyphs are **`=`** homotopic, **`'`** enantiotopic, **`/`** diastereotopic.
-- **`#g`** — **stereogenicity** classification. Payload **`relation`**: **`=`** symmetric, **`'`** prochiral, **`/`** stereogenic.
+- **`#g`** — **stereogenicity** classification. Payload **`relation`**: **`=`** nonstereogenic, **`'`** prostereogenic, **`/`** stereogenic.
 
 Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**, the ligand pair for **`#o`**, none for **`#g`**) directly after the tag, then its **value**. The value forms differ: **`#p`** / **`#f`** take a **trailing** scalar **`boolean`** — its negation marker **`!`** follows the permutation (**`#p(0,1)!`**); **`#o`** / **`#g`** take a **`relation`** whose set-complement is a **leading** **`!`** on the glyph (**`#o(0,1)!/`**). The two are different value types — a three-valued boolean vs. a set with complement — so the **`!`** trails on **`#p`** / **`#f`** but leads on **`#o`** / **`#g`**.
 
@@ -932,7 +932,7 @@ ligand-pair          ::= [ nat nat ]                (* two ligand-frame position
 topicity-form        ::= { :pair ligand-pair :relation topicity-relation }
 stereogenicity-form  ::= { :relation stereogenicity-relation }
 topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
-stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
+stereogenicity-relation ::= :nonstereogenic | :prostereogenic | :stereogenic | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
 
 stereo-constraint-form ::= :undetermined | :not-stereo | :stereo
 

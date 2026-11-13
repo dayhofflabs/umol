@@ -223,11 +223,11 @@ fn test_molecule_observable_descriptor() {
 }
 
 #[rstest]
-fn test_molecule_stereo_atom_symmetry_prochiral() {
+fn test_molecule_stereo_atom_symmetry_prostereogenic() {
     let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
     let gs = mol.graph_symmetry(&config());
     let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-    // Two identical Cl ⇒ prochiral, not a genuine stereocenter.
+    // Two identical Cl ⇒ prostereogenic, not a genuine stereocenter.
     assert!(!stereo.is_stereogenic());
     assert_eq!(
         stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
@@ -578,7 +578,7 @@ fn test_remapping_preserves_stereo(
     (0..10).map(NodeId::from).collect(),
     true,
 )]
-#[case::prochiral_explicit_hydrogens(
+#[case::prostereogenic_explicit_hydrogens(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),

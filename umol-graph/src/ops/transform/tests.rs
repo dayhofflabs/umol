@@ -457,7 +457,7 @@ fn test_molecule_remove_stereo(
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
 }"#), RemoveStereoConfig {
     selection: StereoSelection {
-        stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+        stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])),
         ..Default::default()
     },
     ..Default::default()

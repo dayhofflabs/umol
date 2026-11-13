@@ -283,7 +283,7 @@ pub(crate) fn raw_topicity_relation_strategy() -> BoxedStrategy<TopicityRelation
 
 pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<StereogenicityForm> {
     prop_oneof![
-        2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric]))),
+        2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Nonstereogenic]))),
         2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
         3 => stereogenicity_relation_strategy(),
     ]
@@ -1209,14 +1209,14 @@ pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRela
 
 pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityForm> {
     prop_oneof![
-        Just(StereogenicityForm::Lit(Stereogenicity::Symmetric)),
-        Just(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+        Just(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic)),
+        Just(StereogenicityForm::Lit(Stereogenicity::Prostereogenic)),
         Just(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
         Just(StereogenicityForm::NotSet(BTreeSet::from([
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         ]))),
         Just(StereogenicityForm::NotSet(BTreeSet::from([
-            Stereogenicity::Prochiral
+            Stereogenicity::Prostereogenic
         ]))),
         Just(StereogenicityForm::NotSet(BTreeSet::from([
             Stereogenicity::Stereogenic
@@ -4580,8 +4580,8 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
             StereoAtomId(id),
             StereoKind::Tetrahedral,
             StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(match value % 3 {
-                0 => Stereogenicity::Symmetric,
-                1 => Stereogenicity::Prochiral,
+                0 => Stereogenicity::Nonstereogenic,
+                1 => Stereogenicity::Prostereogenic,
                 _ => Stereogenicity::Stereogenic,
             })),
         ),
@@ -4589,8 +4589,8 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
             StereoBondId(id),
             StereoKind::CisTrans,
             StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(match value % 3 {
-                0 => Stereogenicity::Symmetric,
-                1 => Stereogenicity::Prochiral,
+                0 => Stereogenicity::Nonstereogenic,
+                1 => Stereogenicity::Prostereogenic,
                 _ => Stereogenicity::Stereogenic,
             })),
         ),

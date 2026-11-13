@@ -1243,8 +1243,8 @@ macro_rules! stereo_element {
     ) => {
         $(#[doc = $doc])+
         ///
-        /// A stored arrangement does not assert stereogenicity; symmetric and
-        /// prochiral arrangements remain representable.
+        /// A stored arrangement does not assert stereogenicity; nonstereogenic and
+        /// prostereogenic arrangements remain representable.
         ///
         /// Constraints derive their meaning from the configuration's kind. With an
         /// undetermined configuration they remain in raw storage but are semantically
@@ -1883,8 +1883,8 @@ pub enum Topicity {
 /// Stereogenicity classification of a stereo carrier (derived ground value).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, VariantArray)]
 pub enum Stereogenicity {
-    Symmetric,
-    Prochiral,
+    Nonstereogenic,
+    Prostereogenic,
     Stereogenic,
 }
 
@@ -5207,9 +5207,9 @@ mod tests {
         }),
     )]
     #[case::stereogenicity(
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prostereogenic)),
         Permutation::identity(3),
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prostereogenic)),
     )]
     fn test_stereo_atom_constraint_form_reframe_by(
         #[case] input: StereoAtomConstraintForm,

@@ -674,7 +674,7 @@ mod tests {
             :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#,
         (|molecule: &mut Molecule| {
             molecule.stereo_bond_mut(StereoBondId(0)).attributes_mut().constraints.set(
-                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric)),
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic)),
             );
         }) as fn(&mut Molecule)
     )]
@@ -1271,11 +1271,11 @@ mod tests {
                 .attributes_mut()
                 .constraints
                 .set(StereoBondConstraintForm::Stereogenicity(
-                    StereogenicityForm::Lit(Stereogenicity::Prochiral),
+                    StereogenicityForm::Lit(Stereogenicity::Prostereogenic),
                 ));
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::StereogenicityMismatch {
-            asserted: StereogenicityForm::Lit(Stereogenicity::Prochiral),
+            asserted: StereogenicityForm::Lit(Stereogenicity::Prostereogenic),
             derived: Stereogenicity::Stereogenic,
         }
     )]
@@ -1323,11 +1323,11 @@ mod tests {
                 .attributes_mut()
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(
-                    StereogenicityForm::Lit(Stereogenicity::Symmetric),
+                    StereogenicityForm::Lit(Stereogenicity::Nonstereogenic),
                 ));
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::StereogenicityMismatch {
-            asserted: StereogenicityForm::Lit(Stereogenicity::Symmetric),
+            asserted: StereogenicityForm::Lit(Stereogenicity::Nonstereogenic),
             derived: Stereogenicity::Stereogenic,
         }
     )]
@@ -1420,12 +1420,12 @@ mod tests {
         (|molecule: &mut Molecule| {
             molecule.stereo_atom_mut(StereoAtomId(1)).attributes_mut().constraints.set(
                 StereoAtomConstraintForm::Stereogenicity(
-                    StereogenicityForm::Lit(Stereogenicity::Symmetric),
+                    StereogenicityForm::Lit(Stereogenicity::Nonstereogenic),
                 ),
             );
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::StereogenicityMismatch {
-            asserted: StereogenicityForm::Lit(Stereogenicity::Symmetric),
+            asserted: StereogenicityForm::Lit(Stereogenicity::Nonstereogenic),
             derived: Stereogenicity::Stereogenic,
         },
     )]

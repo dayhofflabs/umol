@@ -505,24 +505,24 @@ impl Topicity {
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Stereogenicity {
-    Symmetric,
-    Prochiral,
+    Nonstereogenic,
+    Prostereogenic,
     Stereogenic,
 }
 
 impl Stereogenicity {
     pub(crate) fn from_rust(ir_value: GraphIrStereogenicity) -> Self {
         match ir_value {
-            GraphIrStereogenicity::Symmetric => Self::Symmetric,
-            GraphIrStereogenicity::Prochiral => Self::Prochiral,
+            GraphIrStereogenicity::Nonstereogenic => Self::Nonstereogenic,
+            GraphIrStereogenicity::Prostereogenic => Self::Prostereogenic,
             GraphIrStereogenicity::Stereogenic => Self::Stereogenic,
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphIrStereogenicity {
         match self {
-            Self::Symmetric => GraphIrStereogenicity::Symmetric,
-            Self::Prochiral => GraphIrStereogenicity::Prochiral,
+            Self::Nonstereogenic => GraphIrStereogenicity::Nonstereogenic,
+            Self::Prostereogenic => GraphIrStereogenicity::Prostereogenic,
             Self::Stereogenic => GraphIrStereogenicity::Stereogenic,
         }
     }
@@ -1761,8 +1761,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(GraphIrStereogenicity::Symmetric)]
-    #[case(GraphIrStereogenicity::Prochiral)]
+    #[case(GraphIrStereogenicity::Nonstereogenic)]
+    #[case(GraphIrStereogenicity::Prostereogenic)]
     #[case(GraphIrStereogenicity::Stereogenic)]
     fn test_stereogenicity_roundtrip(#[case] ir_value: GraphIrStereogenicity) {
         assert_eq!(Stereogenicity::from_rust(ir_value).to_rust(), ir_value);
@@ -2037,12 +2037,12 @@ mod tests {
 
     #[rstest]
     #[case::lit(
-        StereogenicityForm::Lit(Stereogenicity::Prochiral),
-        Some(Stereogenicity::Prochiral)
+        StereogenicityForm::Lit(Stereogenicity::Prostereogenic),
+        Some(Stereogenicity::Prostereogenic)
     )]
     #[case::undetermined(StereogenicityForm::Undetermined(), None)]
     #[case::set(
-        StereogenicityForm::LitSet(FrozenSetItems(BTreeSet::from([Stereogenicity::Symmetric]))),
+        StereogenicityForm::LitSet(FrozenSetItems(BTreeSet::from([Stereogenicity::Nonstereogenic]))),
         None
     )]
     fn test_stereogenicity_form_as_lit(
@@ -2056,8 +2056,8 @@ mod tests {
     #[case(GraphIrStereogenicityForm::Undetermined)]
     #[case(GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic))]
     #[case(GraphIrStereogenicityForm::LitSet(BTreeSet::from([
-        GraphIrStereogenicity::Symmetric,
-        GraphIrStereogenicity::Prochiral,
+        GraphIrStereogenicity::Nonstereogenic,
+        GraphIrStereogenicity::Prostereogenic,
     ])))]
     #[case(GraphIrStereogenicityForm::NotSet(BTreeSet::from([GraphIrStereogenicity::Stereogenic])))]
     fn test_stereogenicity_form_roundtrip(#[case] ir_value: GraphIrStereogenicityForm) {

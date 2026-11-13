@@ -110,7 +110,7 @@ fn test_stereo_bond_form_normalize_constraints(
 }
 
 #[rstest]
-#[case::literal(StereogenicityForm::Lit(Stereogenicity::Symmetric))]
+#[case::literal(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))]
 #[case::contradiction(StereogenicityForm::lit_set([]))]
 fn test_stereo_bond_form_normalized_eq_constraints(#[case] payload: StereogenicityForm) {
     let form = StereoBondForm {
@@ -140,7 +140,7 @@ fn test_stereo_bond_form_meet(
 }
 
 #[rstest]
-#[case::literal(StereogenicityForm::Lit(Stereogenicity::Symmetric))]
+#[case::literal(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))]
 #[case::contradiction(StereogenicityForm::lit_set([]))]
 fn test_stereo_bond_form_meet_constraints(
     #[case] payload: StereogenicityForm,

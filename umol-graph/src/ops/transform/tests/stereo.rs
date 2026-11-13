@@ -5,7 +5,8 @@ pub(in crate::ops::transform) mod reference;
 
 use fixtures::{
     cis_trans, evidenced_stereo, hydrogen_and_lone_pair, imine, implicit_hydrogen, lone_pair,
-    partial_stereo, prochiral, remote_stereo, small_ring, square_planar, symmetric, tetrahedral,
+    nonstereogenic, partial_stereo, prostereogenic, remote_stereo, small_ring, square_planar,
+    tetrahedral,
 };
 use pretty_assertions::assert_eq;
 use rstest::rstest;
@@ -29,11 +30,11 @@ type StereoRecord = (
     (Entity::Atom(AtomId(0)), vec![(1, Atom), (2, Atom), (3, Atom), (4, Atom)],
      StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined)),
 ])]
-#[case::prochiral(prochiral(), vec![
+#[case::prostereogenic(prostereogenic(), vec![
     (Entity::Atom(AtomId(0)), vec![(1, Atom), (2, Atom), (3, Atom), (4, Atom)],
      StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
 ])]
-#[case::symmetric(symmetric(), vec![
+#[case::nonstereogenic(nonstereogenic(), vec![
     (Entity::Atom(AtomId(0)), vec![(1, Atom), (2, Atom), (3, Atom), (4, Atom)],
      StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32)),
 ])]
@@ -115,8 +116,8 @@ fn test_molecule_edit_stereo_fixture(
 
 #[rstest]
 #[case::stereogenic(tetrahedral(), Stereogenicity::Stereogenic)]
-#[case::prochiral(prochiral(), Stereogenicity::Prochiral)]
-#[case::symmetric(symmetric(), Stereogenicity::Symmetric)]
+#[case::prostereogenic(prostereogenic(), Stereogenicity::Prostereogenic)]
+#[case::nonstereogenic(nonstereogenic(), Stereogenicity::Nonstereogenic)]
 fn test_stereo_symmetry_stereogenicity_atom(
     #[case] mut molecule: Molecule,
     #[case] expected: Stereogenicity,
@@ -143,13 +144,13 @@ fn test_stereo_symmetry_stereogenicity_atom(
 
 #[rstest]
 #[case::stereogenic(cis_trans(), Stereogenicity::Stereogenic)]
-#[case::symmetric(
+#[case::nonstereogenic(
     mol_dsl_concrete!(r#"{
         :atoms ["C" "C" "F" "F" "Br" "I"]
         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct*"}]
     }"#),
-    Stereogenicity::Symmetric,
+    Stereogenicity::Nonstereogenic,
 )]
 fn test_stereo_symmetry_stereogenicity_bond(
     #[case] mut molecule: Molecule,

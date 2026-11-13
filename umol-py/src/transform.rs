@@ -321,7 +321,7 @@ mod tests {
     #[case::selected(GraphStereoSelection {
         sites: Some(BTreeSet::from([GraphStereoSite::Bond(GraphIrBondId(3))])),
         kinds: Some(BTreeSet::from([GraphIrStereoKind::SquarePlanar])),
-        stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prochiral])),
+        stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prostereogenic])),
     })]
     fn test_add_stereo_config_from_rust(
         #[case] selection: GraphStereoSelection,
@@ -352,7 +352,7 @@ mod tests {
     #[case::selected(GraphStereoSelection {
         sites: Some(BTreeSet::from([GraphStereoSite::Bond(GraphIrBondId(3))])),
         kinds: Some(BTreeSet::from([GraphIrStereoKind::SquarePlanar])),
-        stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prochiral])),
+        stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prostereogenic])),
     })]
     fn test_remove_stereo_config_from_rust(
         #[case] selection: GraphStereoSelection,
@@ -384,7 +384,7 @@ mod tests {
     #[case::selected(GraphStereoSelection {
         sites: Some(BTreeSet::from([GraphStereoSite::Bond(GraphIrBondId(3))])),
         kinds: Some(BTreeSet::from([GraphIrStereoKind::SquarePlanar])),
-        stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prochiral])),
+        stereogenicities: Some(BTreeSet::from([GraphIrStereogenicity::Prostereogenic])),
     })]
     fn test_enumerate_stereo_config_from_rust(
         #[case] selection: GraphStereoSelection,

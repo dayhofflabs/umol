@@ -337,7 +337,7 @@ fn test_remapping_preserves_stereo(
     (0..10).map(NodeId::from).collect(),
     true,
 )]
-#[case::prochiral_explicit_hydrogens(
+#[case::prostereogenic_explicit_hydrogens(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: [Element::C, Element::H, Element::H, Element::F, Element::Cl]
             .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))

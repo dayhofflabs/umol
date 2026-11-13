@@ -478,17 +478,17 @@ impl StereoSymmetry {
         }
     }
 
-    /// Stereogenic, prochiral (an enantiotopic ligand pair), or symmetric.
+    /// Stereogenic, prostereogenic (an enantiotopic ligand pair), or nonstereogenic.
     ///
-    /// Graph-derived actions fix virtual ligands, so prochirality does not arise
+    /// Graph-derived actions fix virtual ligands, so prostereogenicity does not arise
     /// from treating virtual hydrogens as distinguishable positions.
     pub fn stereogenicity(&self) -> Stereogenicity {
         if self.is_stereogenic() {
             Stereogenicity::Stereogenic
         } else if self.has_enantiotopic_pair() {
-            Stereogenicity::Prochiral
+            Stereogenicity::Prostereogenic
         } else {
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         }
     }
 

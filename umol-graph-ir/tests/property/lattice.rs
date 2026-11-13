@@ -114,11 +114,11 @@ fn test_topicity_relation_form_is_compatible(
     false
 )]
 #[case::excluded(
-    StereogenicityForm::Lit(Stereogenicity::Symmetric),
-    StereogenicityForm::not(Stereogenicity::Symmetric),
+    StereogenicityForm::Lit(Stereogenicity::Nonstereogenic),
+    StereogenicityForm::not(Stereogenicity::Nonstereogenic),
     false
 )]
-#[case::full_complement(StereogenicityForm::Undetermined, StereogenicityForm::not_set([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]), false)]
+#[case::full_complement(StereogenicityForm::Undetermined, StereogenicityForm::not_set([Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic]), false)]
 fn test_stereogenicity_form_is_compatible(
     #[case] a: StereogenicityForm,
     #[case] b: StereogenicityForm,

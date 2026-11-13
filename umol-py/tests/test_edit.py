@@ -1135,7 +1135,7 @@ def test_edits_parse_render():
     ("old", "new"),
     [
         (None, StereogenicityForm.Lit(Stereogenicity.Stereogenic)),
-        (StereogenicityForm.LitSet(set()), StereogenicityForm.Lit(Stereogenicity.Symmetric)),
+        (StereogenicityForm.LitSet(set()), StereogenicityForm.Lit(Stereogenicity.Nonstereogenic)),
         (StereogenicityForm.Lit(Stereogenicity.Stereogenic), None),
     ],
 )
@@ -1562,7 +1562,7 @@ def test_edits_relation_field_batches_new(method, add_method, field, old, new, f
 
 
 @pytest.mark.parametrize("constraint", [
-    StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral)),
+    StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prostereogenic)),
     StereoAtomConstraintForm.Topicity(TopicityForm(StereoLigandPair(0, 2), TopicityRelationForm.Lit(Topicity.Homotopic))),
     StereoAtomConstraintForm.Fluxionality(FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False)),
     StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Improper), True)),
@@ -1664,7 +1664,7 @@ def test_edits_stereo_bond_configurations(stereo_bond_ligands, count):
 
 
 @pytest.mark.parametrize("constraint", [
-    StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral)),
+    StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prostereogenic)),
     StereoBondConstraintForm.Topicity(TopicityForm(StereoLigandPair(0, 2), TopicityRelationForm.Lit(Topicity.Homotopic))),
     StereoBondConstraintForm.Fluxionality(FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False)),
     StereoBondConstraintForm.LigandSymmetry(LigandSymmetryForm(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Improper), True)),

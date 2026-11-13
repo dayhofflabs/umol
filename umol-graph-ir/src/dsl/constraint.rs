@@ -1817,11 +1817,11 @@ mod tests {
     )]
     #[case::topicity("{:stereo-atom [0 [:tetrahedral {:topicity {:pair [0 1] :relation :homotopic :unexpected 0}}]]}", "topicity")]
     #[case::stereogenicity(
-        "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :symmetric :unexpected 0}}]]}",
+        "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :nonstereogenic :unexpected 0}}]]}",
         "stereogenicity"
     )]
     #[case::topicity_complement("{:stereo-atom [0 [:tetrahedral {:topicity {:pair [0 1] :relation {:not-in [:homotopic] :unexpected 0}}}]]}", "relation")]
-    #[case::stereogenicity_complement("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:symmetric] :unexpected 0}}}]]}", "relation")]
+    #[case::stereogenicity_complement("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:nonstereogenic] :unexpected 0}}}]]}", "relation")]
     fn test_read_constraint_dsl_map_keys(
         #[case] source: &str,
         #[case] context: &str,
@@ -1871,7 +1871,7 @@ mod tests {
         ":count"
     )]
     #[case::orientation("{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :proper :orientation :improper}}]]}", ":orientation")]
-    #[case::relation("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:symmetric] :not-in [:stereogenic]}}}]]}", ":not-in")]
+    #[case::relation("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:nonstereogenic] :not-in [:stereogenic]}}}]]}", ":not-in")]
     fn test_read_constraint_dsl_duplicate_keys(#[case] source: &str, #[case] key: &str) {
         let expected = EdnError::from(umol_edn::ParseError::DuplicateKey {
             offset: source.rfind(key).unwrap(),

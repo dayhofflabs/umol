@@ -79,7 +79,7 @@ fn test_stereo_adder_new(
 #[case::cis_trans(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..AddStereoConfig::default().selection }, vec![StereoSite::Bond(BondId(4))])]
 #[case::intersection(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])), kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..AddStereoConfig::default().selection }, vec![])]
 #[case::unrestricted(StereoSelection::default(), vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))])]
-#[case::prochiral(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])), ..AddStereoConfig::default().selection }, vec![])]
+#[case::prostereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])), ..AddStereoConfig::default().selection }, vec![])]
 #[case::empty_sites(StereoSelection { sites: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
 #[case::empty_kinds(StereoSelection { kinds: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
 #[case::empty_classes(StereoSelection { stereogenicities: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
@@ -512,7 +512,7 @@ fn test_stereo_adder_transform_resolution(
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
 #[case::negative_bond(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "2#C!"] [0 2 "1"] [1 3 "1"]]}"#))]
-#[case::symmetric_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
+#[case::nonstereogenic_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
     :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
 #[case::existing_atom(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
@@ -556,12 +556,12 @@ fn test_stereo_adder_transform_identity(#[case] molecule: Molecule) {
 }
 
 #[rstest]
-#[case::prochiral(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), Stereogenicity::Prochiral)]
-#[case::symmetric(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), Stereogenicity::Symmetric)]
-#[case::symmetric_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
-    :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#), StereoSite::Bond(BondId(0)), Stereogenicity::Symmetric)]
+#[case::prostereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), Stereogenicity::Prostereogenic)]
+#[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), Stereogenicity::Nonstereogenic)]
+#[case::nonstereogenic_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
+    :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#), StereoSite::Bond(BondId(0)), Stereogenicity::Nonstereogenic)]
 fn test_stereo_adder_transform_selection(
     #[case] molecule: Molecule,
     #[case] site: StereoSite,

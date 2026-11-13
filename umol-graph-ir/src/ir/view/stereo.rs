@@ -602,9 +602,9 @@ macro_rules! stereo_view_queries {
                 symmetry.is_stereogenic()
             }
 
-            /// Whether this carrier is prochiral (some enantiotopic ligand pair).
-            pub fn is_prochiral(&self, symmetry: &StereoSymmetry) -> bool {
-                symmetry.stereogenicity() == Stereogenicity::Prochiral
+            /// Whether this carrier is prostereogenic (some enantiotopic ligand pair).
+            pub fn is_prostereogenic(&self, symmetry: &StereoSymmetry) -> bool {
+                symmetry.stereogenicity() == Stereogenicity::Prostereogenic
             }
 
             /// Kind-level chirality — whether the geometry can encode handedness.
@@ -1011,7 +1011,7 @@ mod tests {
                     ligands.clone(),
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))
                         .with_constraint(StereoAtomConstraintForm::Stereogenicity(
-                            StereogenicityForm::Lit(Stereogenicity::Prochiral),
+                            StereogenicityForm::Lit(Stereogenicity::Prostereogenic),
                         )),
                 ),
                 (AtomId(6), vec![], StereoAtomForm::default()),
@@ -1022,7 +1022,7 @@ mod tests {
                     ligands.clone(),
                     StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)).with_constraint(
                         StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                            Stereogenicity::Prochiral,
+                            Stereogenicity::Prostereogenic,
                         )),
                     ),
                 ),

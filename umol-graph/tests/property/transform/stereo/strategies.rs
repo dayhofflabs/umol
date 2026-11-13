@@ -151,13 +151,13 @@ pub(super) fn stereo_cases(
             let class = if th {
                 match distinct {
                     4 => Stereogenicity::Stereogenic,
-                    3 => Stereogenicity::Prochiral,
-                    _ => Stereogenicity::Symmetric,
+                    3 => Stereogenicity::Prostereogenic,
+                    _ => Stereogenicity::Nonstereogenic,
                 }
             } else if labels[0] != labels[1] && labels[2] != labels[3] {
                 Stereogenicity::Stereogenic
             } else {
-                Stereogenicity::Symmetric
+                Stereogenicity::Nonstereogenic
             };
             let mut image = [0usize, 1, 2, 3];
             if th {

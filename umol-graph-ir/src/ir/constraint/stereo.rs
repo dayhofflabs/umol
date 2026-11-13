@@ -1199,7 +1199,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::singleton_to_lit(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), Ok(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))]
-    #[case::full_to_undetermined(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), Ok(StereogenicityForm::Undetermined))]
+    #[case::full_to_undetermined(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic])), Ok(StereogenicityForm::Undetermined))]
     #[case::empty_err(StereogenicityForm::LitSet(BTreeSet::new()), Err(Contradiction))]
     fn test_stereogenicity_form_normalize(
         #[case] input: StereogenicityForm,
@@ -1211,8 +1211,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     fn test_stereogenicity_form_normalized_eq_default(
-        #[values(StereogenicityForm::Undetermined, StereogenicityForm::Lit(Stereogenicity::Stereogenic), StereogenicityForm::Lit(Stereogenicity::Symmetric), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Symmetric])), StereogenicityForm::LitSet(BTreeSet::new()))] left: StereogenicityForm,
-        #[values(StereogenicityForm::Undetermined, StereogenicityForm::Lit(Stereogenicity::Stereogenic), StereogenicityForm::Lit(Stereogenicity::Symmetric), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Symmetric])), StereogenicityForm::LitSet(BTreeSet::new()))] right: StereogenicityForm,
+        #[values(StereogenicityForm::Undetermined, StereogenicityForm::Lit(Stereogenicity::Stereogenic), StereogenicityForm::Lit(Stereogenicity::Nonstereogenic), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic])), StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Nonstereogenic])), StereogenicityForm::LitSet(BTreeSet::new()))] left: StereogenicityForm,
+        #[values(StereogenicityForm::Undetermined, StereogenicityForm::Lit(Stereogenicity::Stereogenic), StereogenicityForm::Lit(Stereogenicity::Nonstereogenic), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic])), StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Nonstereogenic])), StereogenicityForm::LitSet(BTreeSet::new()))] right: StereogenicityForm,
     ) {
         assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
@@ -1719,7 +1719,7 @@ mod tests {
         vec![StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))])]
     #[case::old_mismatch(
         vec![StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))],
-        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))),
         None,
         Err(Contradiction),
         vec![StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))])]
@@ -1979,7 +1979,7 @@ mod tests {
         true)]
     #[case::stereogenicity_mismatch(
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-        StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
+        StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))),
         false)]
     #[case::ligand_symmetry_vacuous_absent(
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })),
@@ -2091,7 +2091,7 @@ mod tests {
         true)]
     #[case::stereogenicity_determined_conflicting(
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-        StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
+        StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))),
         false)]
     fn test_stereo_atom_constraints_form_matches(
         #[case] pattern: StereoAtomConstraintsForm,
@@ -2351,7 +2351,7 @@ mod tests {
         true)]
     #[case::stereogenicity_mismatch(
         StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-        StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
+        StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))),
         false)]
     #[case::ligand_symmetry_vacuous_absent(
         StereoBondConstraintsForm::from(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })),
@@ -2463,7 +2463,7 @@ mod tests {
         true)]
     #[case::stereogenicity_determined_conflicting(
         StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-        StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
+        StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))),
         false)]
     fn test_stereo_bond_constraints_form_matches(
         #[case] pattern: StereoBondConstraintsForm,

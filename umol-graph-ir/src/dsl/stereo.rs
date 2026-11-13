@@ -614,8 +614,8 @@ fn topicity_char(i: &mut &str) -> PResult<Topicity> {
 
 fn stereogenicity_char(i: &mut &str) -> PResult<Stereogenicity> {
     alt((
-        '='.value(Stereogenicity::Symmetric),
-        '\''.value(Stereogenicity::Prochiral),
+        '='.value(Stereogenicity::Nonstereogenic),
+        '\''.value(Stereogenicity::Prostereogenic),
         '/'.value(Stereogenicity::Stereogenic),
     ))
     .parse_next(i)
@@ -763,8 +763,8 @@ fn write_topicity_char(t: Topicity) -> char {
 
 fn write_stereogenicity_char(s: Stereogenicity) -> char {
     match s {
-        Stereogenicity::Symmetric => '=',
-        Stereogenicity::Prochiral => '\'',
+        Stereogenicity::Nonstereogenic => '=',
+        Stereogenicity::Prostereogenic => '\'',
         Stereogenicity::Stereogenic => '/',
     }
 }
@@ -1465,8 +1465,8 @@ relation_serde! {
 relation_serde! {
     render_edn_stereogenicity_relation, read_edn_stereogenicity_relation,
     read_stereogenicity_relation, StereogenicityForm, Stereogenicity,
-    Stereogenicity::Symmetric => "symmetric",
-    Stereogenicity::Prochiral => "prochiral",
+    Stereogenicity::Nonstereogenic => "nonstereogenic",
+    Stereogenicity::Prostereogenic => "prostereogenic",
     Stereogenicity::Stereogenic => "stereogenic",
 }
 
@@ -2179,7 +2179,7 @@ mod tests {
     #[rstest]
     #[case::lit(StereogenicityDsl(StereogenicityForm::Lit(Stereogenicity::Stereogenic)), "{:relation :stereogenic}")]
     #[case::undetermined(StereogenicityDsl(StereogenicityForm::Undetermined), "{:relation :undetermined}")]
-    #[case::not_set(StereogenicityDsl(StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))), "{:relation {:not-in [:symmetric]}}")]
+    #[case::not_set(StereogenicityDsl(StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Nonstereogenic]))), "{:relation {:not-in [:nonstereogenic]}}")]
     fn test_stereogenicity_dsl_to_edn(#[case] form: StereogenicityDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
@@ -2188,8 +2188,8 @@ mod tests {
     #[rstest]
     #[case::lit("{:relation :stereogenic}", StereogenicityDsl(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))]
     #[case::undetermined("{:relation :undetermined}", StereogenicityDsl(StereogenicityForm::Undetermined))]
-    #[case::lit_set("{:relation [:prochiral :stereogenic]}", StereogenicityDsl(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Prochiral, Stereogenicity::Stereogenic]))))]
-    #[case::not_set("{:relation {:not-in [:symmetric]}}", StereogenicityDsl(StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))))]
+    #[case::lit_set("{:relation [:prostereogenic :stereogenic]}", StereogenicityDsl(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic]))))]
+    #[case::not_set("{:relation {:not-in [:nonstereogenic]}}", StereogenicityDsl(StereogenicityForm::NotSet(BTreeSet::from([Stereogenicity::Nonstereogenic]))))]
     fn test_stereogenicity_dsl_from_edn(#[case] input: &str, #[case] expected: StereogenicityDsl) {
         assert_eq!(StereogenicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }

@@ -173,11 +173,11 @@ def test_stereo_site_new_error(constructor, value, error):
             {
                 "sites": [StereoSite.Atom(1), StereoSite.Bond(1)],
                 "kinds": {StereoKind.Tetrahedral, StereoKind.CisTrans},
-                "stereogenicities": {Stereogenicity.Prochiral},
+                "stereogenicities": {Stereogenicity.Prostereogenic},
             },
             frozenset({StereoSite.Atom(1), StereoSite.Bond(1)}),
             frozenset({StereoKind.Tetrahedral, StereoKind.CisTrans}),
-            frozenset({Stereogenicity.Prochiral}),
+            frozenset({Stereogenicity.Prostereogenic}),
         ),
     ],
 )
@@ -205,7 +205,7 @@ def test_stereo_selection_new(kwargs, sites, kinds, classes):
         ({"stereogenicities": []}, StereoSite.Atom(0), None, None, False),
         ({"kinds": [StereoKind.Tetrahedral]}, StereoSite.Atom(0), None, None, False),
         (
-            {"stereogenicities": [Stereogenicity.Symmetric]},
+            {"stereogenicities": [Stereogenicity.Nonstereogenic]},
             StereoSite.Atom(0),
             None,
             None,
@@ -215,40 +215,40 @@ def test_stereo_selection_new(kwargs, sites, kinds, classes):
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenicities": [Stereogenicity.Prostereogenic],
             },
             StereoSite.Atom(0),
             StereoKind.CisTrans,
-            Stereogenicity.Prochiral,
+            Stereogenicity.Prostereogenic,
             True,
         ),
         (
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenicities": [Stereogenicity.Prostereogenic],
             },
             StereoSite.Bond(0),
             StereoKind.CisTrans,
-            Stereogenicity.Prochiral,
+            Stereogenicity.Prostereogenic,
             False,
         ),
         (
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenicities": [Stereogenicity.Prostereogenic],
             },
             StereoSite.Atom(0),
             StereoKind.Tetrahedral,
-            Stereogenicity.Prochiral,
+            Stereogenicity.Prostereogenic,
             False,
         ),
         (
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenicities": [Stereogenicity.Prostereogenic],
             },
             StereoSite.Atom(0),
             StereoKind.CisTrans,
@@ -424,7 +424,7 @@ def test_stereo_config_properties(constructor, kwargs):
     selection = StereoSelection(
         sites={StereoSite.Bond(1)},
         kinds={StereoKind.CisTrans},
-        stereogenicities={Stereogenicity.Symmetric},
+        stereogenicities={Stereogenicity.Nonstereogenic},
     )
     config = constructor(selection=selection, **kwargs)
     assert config.selection == selection

@@ -1146,7 +1146,7 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
     DescriptionLevel::Structure,
     3,
 )]
-#[case::prochiral_rhs_configuration(
+#[case::prostereogenic_rhs_configuration(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: [Element::C, Element::H, Element::H, Element::F, Element::Cl]
             .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))

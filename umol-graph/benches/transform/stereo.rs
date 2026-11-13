@@ -29,16 +29,16 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             None,
         ),
         (
-            "fixture_prochiral".to_owned(),
-            fixtures::prochiral(),
+            "fixture_prostereogenic".to_owned(),
+            fixtures::prostereogenic(),
             None,
-            Some(vec![Stereogenicity::Prochiral]),
+            Some(vec![Stereogenicity::Prostereogenic]),
         ),
         (
-            "fixture_symmetric".to_owned(),
-            fixtures::symmetric(),
+            "fixture_nonstereogenic".to_owned(),
+            fixtures::nonstereogenic(),
             None,
-            Some(vec![Stereogenicity::Symmetric]),
+            Some(vec![Stereogenicity::Nonstereogenic]),
         ),
         (
             "fixture_implicit_hydrogen".to_owned(),

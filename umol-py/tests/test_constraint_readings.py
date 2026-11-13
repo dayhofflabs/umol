@@ -143,10 +143,10 @@ ENTITY_CASES = [
     pytest.param(
         "stereo_bonds", StereoBondConstraintsForm,
         StereoBondConstraintForm.Stereogenicity(
-            StereogenicityForm.LitSet({Stereogenicity.Symmetric})
+            StereogenicityForm.LitSet({Stereogenicity.Nonstereogenic})
         ),
         StereoBondConstraintForm.Stereogenicity(
-            StereogenicityForm.Lit(Stereogenicity.Symmetric)
+            StereogenicityForm.Lit(Stereogenicity.Nonstereogenic)
         ),
         StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()),
         StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()),

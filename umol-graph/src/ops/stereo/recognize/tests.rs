@@ -245,8 +245,8 @@ fn test_stereo_perceiver_recognize(
 #[case::tetrahedral(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0))])]
 #[case::cis_trans(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))])]
 #[case::stereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))])]
-#[case::prochiral(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0))])]
-#[case::symmetric(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])), ..Default::default() }, vec![])]
+#[case::prostereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0))])]
+#[case::nonstereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() }, vec![])]
 #[case::intersection(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])), kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![])]
 #[case::empty_sites(StereoSelection { sites: Some(BTreeSet::new()), ..Default::default() }, vec![])]
 #[case::empty_kinds(StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() }, vec![])]
@@ -934,10 +934,10 @@ fn test_stereo_perceiver_classify_frame(
     :stereo-atoms [{:site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th0"}]}"#), Stereogenicity::Stereogenic)]
 #[case::equivalent_hydrogens(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Prochiral)]
-#[case::symmetric(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Prostereogenic)]
+#[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Symmetric)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Nonstereogenic)]
 fn test_stereo_perceiver_classify_model(
     #[case] mut molecule: Molecule,
     #[case] expected: Stereogenicity,

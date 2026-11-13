@@ -269,7 +269,7 @@ def test_molecule_remove_stereo_classification(stereo_determined, method):
         getattr(stereo_determined, method)(
             StereoModel.default(),
             config=RemoveStereoConfig(
-                selection=StereoSelection(stereogenicities={Stereogenicity.Symmetric})
+                selection=StereoSelection(stereogenicities={Stereogenicity.Nonstereogenic})
             ),
         )
     assert caught.value.kind == StereoKind.SquarePlanar

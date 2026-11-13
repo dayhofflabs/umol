@@ -49,8 +49,8 @@ from umol import (
         (StereoCoset.LitSet, {0, 1}),
         (TopicityRelationForm.LitSet, {Topicity.Homotopic, Topicity.Enantiotopic}),
         (TopicityRelationForm.NotSet, {Topicity.Homotopic}),
-        (StereogenicityForm.LitSet, {Stereogenicity.Prochiral, Stereogenicity.Symmetric}),
-        (StereogenicityForm.NotSet, {Stereogenicity.Symmetric}),
+        (StereogenicityForm.LitSet, {Stereogenicity.Prostereogenic, Stereogenicity.Nonstereogenic}),
+        (StereogenicityForm.NotSet, {Stereogenicity.Nonstereogenic}),
     ],
 )
 def test_stereo_set_members(variant, members):
@@ -297,7 +297,7 @@ def test_stereo_bond_update_parse_error():
     ],
 )
 def test_stereo_update_constraints_asserted(update_type, container_type, constraint_type, kind):
-    entry = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral))
+    entry = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prostereogenic))
     update = update_type(
         configuration=StereoConfigurationUpdate.Kinded(kind, None),
         constraints=container_type([entry]),
@@ -566,7 +566,7 @@ def test_stereo_form_new_named_configuration(form_type, configuration, expected)
     ],
 )
 @pytest.mark.parametrize("payload", [
-    StereogenicityForm.Lit(Stereogenicity.Symmetric), StereogenicityForm.LitSet(set()),
+    StereogenicityForm.Lit(Stereogenicity.Nonstereogenic), StereogenicityForm.LitSet(set()),
 ])
 @pytest.mark.parametrize("coset", [StereoCoset.Lit(0), StereoCoset.Undetermined()])
 def test_stereo_form_meet_constraints(form_type, container_type, constraint_type, kind, payload, coset):

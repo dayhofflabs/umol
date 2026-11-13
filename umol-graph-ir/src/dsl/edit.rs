@@ -7960,7 +7960,7 @@ mod tests {
             id: StereoBondHandle::New(0),
             kind: Some(StereoKind::CisTrans),
             old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))),
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))),
         },
     )]
     #[case::stereo_bond_constraint_add(

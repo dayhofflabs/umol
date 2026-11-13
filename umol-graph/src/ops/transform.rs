@@ -183,7 +183,7 @@ pub trait Transform: Sized {
     ///
     /// Existing arrangements and source assertions are preserved.
     /// The default configuration admits only stereogenic tetrahedral/cis-trans
-    /// sites; selectors may also admit prochiral or symmetric arrangements.
+    /// sites; selectors may also admit prostereogenic or nonstereogenic arrangements.
     ///
     /// # Errors
     ///

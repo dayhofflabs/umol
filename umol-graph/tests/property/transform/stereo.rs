@@ -135,8 +135,8 @@ fn test_stereo_adder_transform() {
                 ),
                 stereogenicities: classes.map(|mask| {
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
+                        Stereogenicity::Nonstereogenic,
+                        Stereogenicity::Prostereogenic,
                         Stereogenicity::Stereogenic,
                     ]
                     .into_iter()
@@ -231,8 +231,8 @@ fn test_stereo_adder_transform_relabeling() {
                 ),
                 stereogenicities: classes.map(|mask| {
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
+                        Stereogenicity::Nonstereogenic,
+                        Stereogenicity::Prostereogenic,
                         Stereogenicity::Stereogenic,
                     ]
                     .into_iter()
@@ -477,8 +477,8 @@ fn test_stereo_remover_transform_classification() {
                 ),
                 stereogenicities: Some(
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
+                        Stereogenicity::Nonstereogenic,
+                        Stereogenicity::Prostereogenic,
                         Stereogenicity::Stereogenic,
                     ]
                     .into_iter()
@@ -620,8 +620,8 @@ fn test_stereo_remover_transform_frames() {
                 ),
                 stereogenicities: Some(
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
+                        Stereogenicity::Nonstereogenic,
+                        Stereogenicity::Prostereogenic,
                         Stereogenicity::Stereogenic,
                     ]
                     .into_iter()
@@ -1190,7 +1190,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             RemoveStereoConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: StereoSelection {
-                    stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                    stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])),
                     ..selection.clone()
                 },
                 ..Default::default()

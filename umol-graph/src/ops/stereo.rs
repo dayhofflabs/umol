@@ -138,8 +138,8 @@ pub enum StereoContradiction {
 /// additionally identifies missing selected tetrahedral/cis-trans entities.
 /// classify evaluates existing arrangements without choosing their cosets.
 /// All queries preserve the molecule. Resolver policy and transformation remain
-/// separate from these read-only results. A stored arrangement may be symmetric
-/// or prochiral, independently of its configuration being determined.
+/// separate from these read-only results. A stored arrangement may be nonstereogenic
+/// or prostereogenic, independently of its configuration being determined.
 #[derive(Clone, Debug)]
 pub struct StereoPerceiver {
     model: StereoModel,
@@ -697,13 +697,13 @@ mod tests {
             ..Default::default() },
         vec![StereoSite::Bond(BondId(0)), StereoSite::Atom(AtomId(0))],
     )]
-    #[case::prochiral(
-        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+    #[case::prostereogenic(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])),
             ..Default::default() },
         vec![StereoSite::Atom(AtomId(4)), StereoSite::Atom(AtomId(1))],
     )]
-    #[case::symmetric(
-        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+    #[case::nonstereogenic(
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])),
             ..Default::default() },
         vec![StereoSite::Atom(AtomId(2)), StereoSite::Atom(AtomId(3))],
     )]
@@ -722,7 +722,7 @@ mod tests {
                 StereoSite::Atom(AtomId(3)), StereoSite::Bond(BondId(0)), StereoSite::Atom(AtomId(4)),
             ])),
             kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
-            stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+            stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])),
         },
         vec![StereoSite::Atom(AtomId(1))],
     )]
@@ -739,7 +739,7 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(2)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(0)),
@@ -749,17 +749,17 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(4)),
                 StereoKind::Axial,
-                Stereogenicity::Prochiral,
+                Stereogenicity::Prostereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Prochiral,
+                Stereogenicity::Prostereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(3)),
                 StereoKind::SquarePlanar,
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             ),
         ];
         let selected: Vec<_> = candidates
@@ -794,9 +794,9 @@ mod tests {
         StereoSite::Atom(AtomId(0)), Some(StereoKind::Tetrahedral), None, true,
     )]
     #[case::known_stereogenicity(
-        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+        StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])),
             ..Default::default() },
-        StereoSite::Atom(AtomId(0)), None, Some(Stereogenicity::Prochiral), true,
+        StereoSite::Atom(AtomId(0)), None, Some(Stereogenicity::Prostereogenic), true,
     )]
     #[case::empty_kinds(
         StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() },

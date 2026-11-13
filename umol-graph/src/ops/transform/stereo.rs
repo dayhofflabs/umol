@@ -4,7 +4,7 @@
 //! removes selected entities and their source assertions. StereoEnumerator determines
 //! existing selected absolute configurations in the supplied sequence of sites.
 //! All three use StereoPerceiver and intersect site, kind, and stereogenicity filters.
-//! A stored stereo entity may be symmetric or prochiral; its presence does not assert
+//! A stored stereo entity may be nonstereogenic or prostereogenic; its presence does not assert
 //! stereogenicity. Enumeration retains symmetry-equivalent assignments.
 //!
 //! # Examples
@@ -106,7 +106,7 @@ pub enum AddStereoError {
 /// model and configuration. New cosets are undetermined.
 /// Existing entities, their frames and configurations,
 /// source assertions, and molecular topology are preserved.
-/// Use the selection's stereogenicities to admit prochiral or symmetric sites;
+/// Use the selection's stereogenicities to admit prostereogenic or nonstereogenic sites;
 /// the default admits only stereogenic sites.
 ///
 /// All rejection occurs during planning. Undetermined fields outside the
@@ -978,20 +978,20 @@ mod tests {
         },
         vec![StereoSite::Bond(BondId(0))],
     )]
-    #[case::prochiral(
+    #[case::prostereogenic(
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])),
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(1))],
     )]
-    #[case::symmetric(
+    #[case::nonstereogenic(
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])),
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
@@ -1044,12 +1044,12 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Prochiral,
+                Stereogenicity::Prostereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(2)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(3)),
@@ -1064,7 +1064,7 @@ mod tests {
             (
                 StereoSite::Bond(BondId(1)),
                 StereoKind::CisTrans,
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             ),
         ];
         let selected: Vec<_> = candidates
@@ -1184,7 +1184,7 @@ mod tests {
     #[case::non_stereogenic(
         StereoSelection {
             kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
-            stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral])),
+            stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic])),
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2)), StereoSite::Bond(BondId(1))],
@@ -1218,7 +1218,7 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                Some(Stereogenicity::Prochiral),
+                Some(Stereogenicity::Prostereogenic),
             ),
             (
                 StereoSite::Atom(AtomId(2)),
@@ -1226,7 +1226,7 @@ mod tests {
                     StereoKind::Tetrahedral,
                     StereoCoset::lit_set([0, 1]),
                 ),
-                Some(Stereogenicity::Symmetric),
+                Some(Stereogenicity::Nonstereogenic),
             ),
             (
                 StereoSite::Atom(AtomId(3)),
@@ -1244,7 +1244,7 @@ mod tests {
             (
                 StereoSite::Bond(BondId(1)),
                 StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                Some(Stereogenicity::Symmetric),
+                Some(Stereogenicity::Nonstereogenic),
             ),
             (
                 StereoSite::Atom(AtomId(4)),
@@ -1341,20 +1341,20 @@ mod tests {
         },
         vec![StereoSite::Bond(BondId(0))],
     )]
-    #[case::prochiral(
+    #[case::prostereogenic(
         EnumerateStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])),
                 ..EnumerateStereoConfig::default().selection
             },
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(1))],
     )]
-    #[case::symmetric(
+    #[case::nonstereogenic(
         EnumerateStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])),
                 ..EnumerateStereoConfig::default().selection
             },
             ..Default::default()
@@ -1395,12 +1395,12 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Prochiral,
+                Stereogenicity::Prostereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(2)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(3)),
@@ -1415,7 +1415,7 @@ mod tests {
             (
                 StereoSite::Bond(BondId(1)),
                 StereoKind::CisTrans,
-                Stereogenicity::Symmetric,
+                Stereogenicity::Nonstereogenic,
             ),
         ];
         let selected: Vec<_> = candidates

@@ -909,14 +909,48 @@ tests share: `canonicalize_context`, `permutations` and `explicitly_dense_equiva
 changed. The tests of `umol-graph-ir` pass with the default features, the same 12,443 unit
 tests.
 
-#### S1e — Comparison
+#### S1e — Comparison **Done**
 
 - **Check:** the canonicalization groups against the baseline of S0b. No change is expected.
   `[dep: S1d]`
 
+The 215 benchmarks were run with the settings of S0b and `--baseline pre-246`. The ratio of the
+time after to the time before, from the medians, by group:
+
+| Group | Benchmarks | Lowest | Median | Highest |
+| --- | ---: | ---: | ---: | ---: |
+| `canonicalize/complete/canonical_eq_equal` | 20 | 0.97 | 0.99 | 1.00 |
+| `canonicalize/complete/canonical_eq_unequal_colors` | 20 | 0.94 | 0.98 | 1.00 |
+| `canonicalize/complete/canonical_eq_unequal_constitution` | 3 | 0.98 | 0.98 | 0.99 |
+| `canonicalize/complete/canonical_eq_unequal_counts` | 20 | 0.90 | 0.97 | 1.11 |
+| `canonicalize/complete/canonical_eq_unequal_stereo` | 10 | 0.98 | 1.00 | 1.01 |
+| `canonicalize/inline_constraint/molecule/canonical_eq_equal` | 3 | 0.98 | 0.98 | 0.98 |
+| `canonicalize/inline_constraint/reaction_span/canonical_eq_equal` | 3 | 0.98 | 0.98 | 0.99 |
+| `canonicalize/reaction/canonical_eq_equal` | 20 | 0.99 | 1.01 | 1.03 |
+| `canonicalize/reaction/canonical_eq_unequal` | 20 | 0.96 | 1.00 | 1.03 |
+| `canonicalize/reaction_span/canonical_eq_equal` | 20 | 0.98 | 0.99 | 1.01 |
+| `canonicalize/reaction_span_modified/canonical_eq_equal` | 20 | 0.98 | 0.99 | 1.00 |
+| `canonicalize/reaction_span_modified/canonical_eq_unequal_colors` | 20 | 0.99 | 1.00 | 1.03 |
+| `canonicalize/reaction_span_modified/canonical_eq_unequal_counts` | 20 | 0.93 | 1.03 | 1.12 |
+| `canonicalize/reaction_span_modified/canonical_eq_unequal_stereo` | 10 | 0.98 | 0.99 | 1.05 |
+| `canonicalize/scaling/canonical_eq_equal` | 3 | 1.00 | 1.01 | 1.01 |
+| `canonicalize/scaling/canonical_eq_unequal` | 3 | 0.98 | 1.01 | 1.02 |
+
+- **Above one microsecond.** The 172 benchmarks have a median ratio of 0.99 and lie between 0.94
+  and 1.05. The two highest, 1.05 and 1.03, are in
+  `reaction_span_modified/canonical_eq_unequal_stereo`; a second run of that group gave 0.98 and
+  0.99 for them.
+- **About ten nanoseconds.** The 43 benchmarks that the entity counts decide lie between 0.90 and
+  1.12, which is one nanosecond.
+
+The moves changed no timing beyond the noise of a run.
+
+The stage ends green. `umol-graph-ir` passes with all features, 12,443 unit tests and 559
+property tests, and the crates that depend on it pass, 10,458 tests.
+
 ### S2 — Class names
 
-#### S2a — `Stereogenicity` variants
+#### S2a — `Stereogenicity` variants **Done**
 
 - **Module:** `ir::stereo`, then every user in `umol-graph-ir`, `umol-graph`, `umol-io` and
   `umol-py`.
@@ -925,6 +959,24 @@ tests.
   stay with the renamed variants. The Python enum follows, and so does
   `umol-graph-ir/spec/umol-dsl-spec.md`, which states the keywords and the glyphs.
 - **Kind:** breaking (red→green within the subitem).
+
+The two variants are renamed in the enum, in the Python enum and at every use, 160 in Rust and
+34 in the Python tests. The EDN keywords are `:nonstereogenic` and `:prostereogenic`; six test
+strings spell them. The specification states the new keywords and the new words for the glyphs.
+
+Wherever the words "prochiral" and "symmetric" named the two classes, they follow: 73 test case
+labels, fixture names, benchmark case names, comments, the view method `is_prostereogenic`, and
+one test constant in `umol-io`. The word "symmetric" stays where it means something else: a
+relation, the symmetric group, or a molecule with many automorphisms, as in the
+`symmetric_stereo_*` cases of the canonicalization benchmark. No test body changed. The guides
+and `README.md` follow in S6a.
+
+Two cases of the `classify` baseline changed their names, to `fixture_prostereogenic` and
+`fixture_nonstereogenic`. Their record in `pre-246` was saved again under the new names, on code
+whose `classify` is unchanged since the first run.
+
+The tests pass: the Rust tests of the four crates, with all features for `umol-graph-ir` and
+`umol-graph`, and 3,420 Python tests after a rebuild.
 
 #### S2b — `Topicity::Distinct`
 

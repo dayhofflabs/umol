@@ -2,7 +2,7 @@
 //!
 //! Four explicit terminal ligands are labeled H, F, Cl, Br, or I. The independent
 //! reference uses label equality: four distinct Th ligands are stereogenic, one
-//! equal pair is prochiral, and other partitions are symmetric. Ct is stereogenic
+//! equal pair is prostereogenic, and other partitions are nonstereogenic. Ct is stereogenic
 //! exactly when each endpoint's two labels differ. Recognition selects the exact
 //! expected frame and open coset; classification is independent of the supplied
 //! binary coset domain. Both queries preserve their input.
@@ -30,10 +30,10 @@ proptest! {
         let distinct = labels.into_iter().collect::<BTreeSet<_>>().len();
         let class = match distinct {
             4 => Stereogenicity::Stereogenic,
-            3 => Stereogenicity::Prochiral,
-            _ => Stereogenicity::Symmetric,
+            3 => Stereogenicity::Prostereogenic,
+            _ => Stereogenicity::Nonstereogenic,
         };
-        let selected: BTreeSet<_> = [Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]
+        let selected: BTreeSet<_> = [Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic]
             .into_iter().enumerate().filter_map(|(i, class)| (classes & (1 << i) != 0).then_some(class)).collect();
         let elements = [Element::H, Element::F, Element::Cl, Element::Br, Element::I];
         let molecule = Molecule::from_entries(MoleculeEntries {
@@ -73,8 +73,8 @@ proptest! {
     ) {
         let class = if labels[0] != labels[1] && labels[2] != labels[3] {
             Stereogenicity::Stereogenic
-        } else { Stereogenicity::Symmetric };
-        let selected: BTreeSet<_> = [Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]
+        } else { Stereogenicity::Nonstereogenic };
+        let selected: BTreeSet<_> = [Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic]
             .into_iter().enumerate().filter_map(|(i, class)| (classes & (1 << i) != 0).then_some(class)).collect();
         let elements = [Element::H, Element::F, Element::Cl, Element::Br, Element::I];
         let molecule = Molecule::from_entries(MoleculeEntries {

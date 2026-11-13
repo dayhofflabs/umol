@@ -421,8 +421,8 @@ fn test_stereo_assignment_checks_is_consistent_logical(mut mixed_stereo: Molecul
 }
 
 #[rstest]
-#[case::prochiral(Stereogenicity::Prochiral, true)]
-#[case::symmetric(Stereogenicity::Symmetric, false)]
+#[case::prostereogenic(Stereogenicity::Prostereogenic, true)]
+#[case::nonstereogenic(Stereogenicity::Nonstereogenic, false)]
 fn test_stereo_assignment_checks_is_consistent_stereogenicity(
     #[case] asserted: Stereogenicity,
     #[case] expected: bool,
@@ -551,12 +551,12 @@ fn test_stereo_assignment_checks_is_consistent_frame(
     ),
     true
 )]
-#[case::atom_symmetric(
+#[case::atom_nonstereogenic(
     Constraint::StereoAtom(
         StereoAtomId(0),
         StereoKind::Tetrahedral,
         StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         ))
     ),
     false
@@ -571,12 +571,12 @@ fn test_stereo_assignment_checks_is_consistent_frame(
     ),
     true
 )]
-#[case::bond_symmetric(
+#[case::bond_nonstereogenic(
     Constraint::StereoBond(
         StereoBondId(0),
         StereoKind::CisTrans,
         StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         ))
     ),
     false
@@ -614,7 +614,7 @@ fn test_stereo_assignment_checks_is_consistent_constraint(
 
 #[rstest]
 #[case::stereogenic(Stereogenicity::Stereogenic, true)]
-#[case::symmetric(Stereogenicity::Symmetric, false)]
+#[case::nonstereogenic(Stereogenicity::Nonstereogenic, false)]
 fn test_stereo_assignment_checks_is_consistent_context(
     #[case] asserted: Stereogenicity,
     #[case] expected: bool,
@@ -743,12 +743,12 @@ fn test_stereo_assignment_checks_is_consistent_evidence(
 }
 
 #[rstest]
-#[case::prochiral(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
+#[case::prostereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Prochiral)]
-#[case::symmetric(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Prostereogenic)]
+#[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Symmetric)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Nonstereogenic)]
 fn test_stereo_assignment_checks_is_consistent_assignments(
     #[case] mut molecule: Molecule,
     #[case] class: Stereogenicity,

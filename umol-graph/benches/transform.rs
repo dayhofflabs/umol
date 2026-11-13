@@ -864,15 +864,15 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
         :stereo-atoms [{:site 0 :ligands [2 1 3 4] :attrs "Th1"}]
         :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct1"}]}"#
     );
-    let symmetric = mol_dsl_concrete!(
+    let nonstereogenic = mol_dsl_concrete!(
         r#"{:atoms ["C" "H" "H" "H" "H" "C" "H" "H" "H" "H"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [5 9 "1"]]
         :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"} {:site 5 :ligands [6 7 8 9] :attrs "Th*"}]}"#
     );
-    let symmetric_expected: Vec<_> = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    let nonstereogenic_expected: Vec<_> = [(0, 0), (0, 1), (1, 0), (1, 1)]
         .into_iter()
         .map(|(first, second)| {
-            let mut result = symmetric.clone();
+            let mut result = nonstereogenic.clone();
             result
                 .stereo_atom_mut(StereoAtomId(0))
                 .attributes_mut()
@@ -902,11 +902,11 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
             true,
         ),
         (
-            "symmetric_2",
-            symmetric,
+            "nonstereogenic_2",
+            nonstereogenic,
             EnumerateStereoConfig::default(),
             vec![StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(5))],
-            symmetric_expected,
+            nonstereogenic_expected,
             true,
         ),
     ];

@@ -191,8 +191,8 @@ fn test_stereo_symmetry_stereogenicity(
                 .count();
             match equal_pairs {
                 0 => Stereogenicity::Stereogenic,
-                1 => Stereogenicity::Prochiral,
-                _ => Stereogenicity::Symmetric,
+                1 => Stereogenicity::Prostereogenic,
+                _ => Stereogenicity::Nonstereogenic,
             }
         } else {
             entries.stereo_bonds.push((
@@ -203,7 +203,7 @@ fn test_stereo_symmetry_stereogenicity(
             if elements[0] != elements[1] && elements[2] != elements[3] {
                 Stereogenicity::Stereogenic
             } else {
-                Stereogenicity::Symmetric
+                Stereogenicity::Nonstereogenic
             }
         };
         let molecule = Molecule::from_entries(entries);
