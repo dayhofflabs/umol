@@ -133,7 +133,7 @@ pub use stereo::{
     CisTransConfiguration, CisTransStereoForm, StereoAtomFieldKind, StereoAtomForm,
     StereoAtomUpdate, StereoAtoms, StereoBondFieldKind, StereoBondForm, StereoBondUpdate,
     StereoBonds, StereoConfiguration, StereoConfigurationForm, StereoConfigurationUpdate,
-    StereoCoset, StereoKind, StereoTerm, Stereogenicity, TetrahedralConfiguration,
+    StereoCoset, StereoKind, StereoTerm, StereogenicUnit, Stereogenicity, TetrahedralConfiguration,
     TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{

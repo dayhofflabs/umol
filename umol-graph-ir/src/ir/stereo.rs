@@ -1872,21 +1872,66 @@ pub enum CosetOp {
     Apply(Permutation),
 }
 
-/// Topicity of two ligand positions of a stereo carrier (derived ground value).
+/// Topicity of two ligands of one stereo atom or stereo bond (derived ground value).
+///
+/// The variants are the topic relations of
+/// [Mislow and Siegel (1984)](https://doi.org/10.1021/ja00323a043), Figure 1. The symmetry
+/// operations are those that keep the stereo atom or stereo bond in place.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, VariantArray)]
 pub enum Topicity {
+    /// Ligands of the same constitution that a proper symmetry operation relates.
     Homotopic,
+    /// Ligands of the same constitution that only an improper symmetry operation relates.
     Enantiotopic,
+    /// Ligands of the same constitution that no symmetry operation relates.
     Diastereotopic,
+    /// Ligands of different constitution, "constitutionally heterotopic" in the paper.
     Distinct,
 }
 
-/// Stereogenicity classification of a stereo carrier (derived ground value).
+/// Stereogenicity of one stereo atom or stereo bond (derived ground value).
+///
+/// The definitions follow [Mislow and Siegel (1984)](https://doi.org/10.1021/ja00323a043).
+/// A stereogenic center is one that "can have two non-equivalent configurations" (footnote 24).
+/// A prostereogenic one is a center where "replacement of a single ligand leads to a stereogenic
+/// center" (p. 3326 and footnote 74). The IUPAC recommendations of
+/// [1974](https://doi.org/10.1351/pac197645010011), Rule E-4.12, and of
+/// [1996](https://doi.org/10.1351/pac199668122193) call such a center prochiral.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, VariantArray)]
 pub enum Stereogenicity {
+    /// Not stereogenic, and no replacement of a single ligand by a new one makes it stereogenic.
     Nonstereogenic,
+    /// Not stereogenic, and stereogenic after one ligand is replaced by a new one.
     Prostereogenic,
+    /// Another coset of its kind gives a different molecule.
     Stereogenic,
+}
+
+/// Class of one stereo atom or stereo bond as a stereogenic unit (derived ground value).
+///
+/// The class is a property of the constitution, decided among the stereo atoms and stereo bonds
+/// the molecule has. It does not depend on the configurations stored in them.
+///
+/// "Stereogenic unit" is the term of the IUPAC recommendations of
+/// [1996](https://doi.org/10.1351/pac199668122193) for a focus of stereoisomerism. The two kinds
+/// of stereogenic unit are those of
+/// [Razinger et al. (1993)](https://doi.org/10.1021/ci00016a003) and of
+/// [Perdih and Razinger (1994)](https://doi.org/10.1016/S0957-4166(00)86237-0).
+/// [`Self::Prostereogenic`] is the term of
+/// [Mislow and Siegel (1984)](https://doi.org/10.1021/ja00323a043), footnote 74.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum StereogenicUnit {
+    /// A stereogenic unit whose ligands are constitutionally different: the "true-stereocenter"
+    /// of Razinger et al. and the "constitutional stereogenic centre" of Perdih and Razinger.
+    Constitutional,
+    /// A stereogenic unit with constitutionally equal ligands, whose configuration changes the
+    /// stereoisomer for some assignment of the other units: the "para-stereocenter" of Razinger
+    /// et al. and the "configurational stereogenic centre" of Perdih and Razinger.
+    Configurational,
+    /// Not a stereogenic unit, and one after a single ligand is replaced by a new one.
+    Prostereogenic,
+    /// None of the other three.
+    Nonstereogenic,
 }
 
 /// Element-side stereo configuration: either undetermined (geometry not yet

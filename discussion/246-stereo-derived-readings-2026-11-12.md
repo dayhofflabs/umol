@@ -1081,12 +1081,28 @@ target.
 The tests of `umol-graph-ir` pass with the default features, and clippy passes for all its
 targets.
 
-#### S3c — `StereogenicUnit`
+#### S3c — `StereogenicUnit` **Done**
 
 - **Module:** `ir::stereo`.
 - **Adds:** the enum with its four variants. The rustdoc of `StereogenicUnit`, `Stereogenicity`
   and `Topicity` and of their variants cites the papers of the Sources section.
 - **Kind:** additive (green). `[dep: S2a, S2b]`
+
+`StereogenicUnit` is in `ir/stereo.rs` after `Stereogenicity` and is exported from `ir`. Its
+variants are in the order `Constitutional`, `Configurational`, `Prostereogenic`,
+`Nonstereogenic`. It derives what `Stereogenicity` derives except `VariantArray`, which nothing
+needs for it.
+
+The rustdoc of the three types links each paper by its DOI, in the form the workspace uses.
+
+| Type | Cited |
+| --- | --- |
+| `Topicity` | Mislow and Siegel, Figure 1; "constitutionally heterotopic" at `Distinct` |
+| `Stereogenicity` | Mislow and Siegel, footnote 24, p. 3326 and footnote 74; IUPAC 1974, Rule E-4.12, and IUPAC 1996 for "prochiral" |
+| `StereogenicUnit` | IUPAC 1996 for "stereogenic unit"; Razinger et al. and Perdih and Razinger for the two kinds, with their terms at the variants; Mislow and Siegel, footnote 74 |
+
+The five DOIs match the Crossref records of the papers. The unit tests of `umol-graph-ir` pass,
+the documentation builds without warnings, and clippy passes for all targets of the crate.
 
 ### S4 — `GraphSymmetry` and the derived readings
 
