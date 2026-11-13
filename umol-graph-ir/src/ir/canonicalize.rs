@@ -21,8 +21,8 @@ use super::reaction_span::ReactionSpan;
 use super::remap::MoleculeRemapping;
 use super::symmetry::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    rank_colors, remapping_exists, remapping_preserves_incidences, AutomorphismAdapter,
-    AutomorphismColor, CanonicalCandidate, CanonicalSearchResult, InitialColors, OrderedPartition,
+    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor,
+    CanonicalCandidate, CanonicalSearchResult, InitialColors, OrderedPartition,
 };
 #[cfg(test)]
 use super::symmetry::{same_cells, AutomorphismAdapterOutput, CanonicalSearchStats};

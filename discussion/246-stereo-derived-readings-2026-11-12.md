@@ -865,13 +865,28 @@ tests of the search that take molecules as input are in the molecule's test file
 it. The tests of `umol-graph-ir` pass with the default features, the same 12,443 unit tests as
 before.
 
-#### S1c — Colors and remapping checks of the two types
+#### S1c — Colors and remapping checks of the two types **Done**
 
 - **Module:** `ir/canonicalize/molecule.rs` → `ir/molecule/symmetry.rs`;
   `ir/canonicalize/reaction_span.rs` → `ir/reaction_span/symmetry.rs`.
 - **Changes:** `initial_colors`, `incidence_color`, `remapping_preserves_stereo` and
   `retain_stereo_preserving_generators` of each type move with their tests.
 - **Kind:** move (green). `[dep: S1b]`
+
+The four functions of each type are unchanged apart from their visibility within the crate, and
+the two canonicalization files differ only in their imports. `ir::molecule::symmetry` and the new
+`ir::reaction_span::symmetry` are visible within the crate.
+
+Six tests of each type moved unchanged, to `ir/molecule/symmetry/tests.rs` and
+`ir/reaction_span/symmetry/tests.rs`. The fixtures `initial_color_molecule` and
+`initial_color_span` moved with the tests of `initial_colors`; the canonicalization tests that
+use them import them from there, and `ir/canonicalize/tests.rs` passes
+`initial_color_molecule` on to the two test files below it until they move. The test module of
+`ir/molecule/symmetry.rs`, which was inline, is now that file.
+
+The tests of the search that take molecules as input stay with the canonicalization tests of the
+molecule, because four of the seven use canonicalization helpers. The tests of `umol-graph-ir`
+pass with the default features, the same 12,443 unit tests.
 
 #### S1d — Canonicalization of the two types
 

@@ -65,7 +65,7 @@ pub(crate) mod integrity;
 mod pushout;
 mod remap;
 pub mod spec;
-mod symmetry;
+pub(crate) mod symmetry;
 mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.

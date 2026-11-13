@@ -64,6 +64,8 @@ use super::stereo::{
 };
 use super::traits::{EntityPatch, FrameTransport, Normalize, Reframe};
 
+pub(crate) mod symmetry;
+
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. Each entity kind
 /// has one dense union id space. Entry construction preserves any valid union order; spans derived
 /// from a reaction use lhs ids first and append right-only entities. `atoms` and `bonds` are indexed

@@ -2,19 +2,23 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
+use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, EdgeId, NodeId};
 use umol_perm::{Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation};
 
 use super::super::coloring::MoleculeColoring;
-use super::super::entity::{Entity, EntityKind};
-use super::super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
-use super::super::incidence::{IncidenceGraph, IncidenceLevel};
+use super::super::electrons::ElectronCountsForm;
+use super::super::entity::{DescriptionLevel, Entity, EntityKind};
+use super::super::error::Contradiction;
+use super::super::id::{AtomId, AtomPosition, StereoAtomId, StereoBondId, StereoLigandPosition};
+use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
+use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::{
     coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
     Topicity,
 };
-use super::super::traits::AsLit;
+use super::super::symmetry::{rank_colors, InitialColors};
+use super::super::traits::{AsColor, AsLit, FrameTransport, Normalize};
 use super::Molecule;
 #[cfg(test)]
 use super::MoleculeEntries;
@@ -586,428 +590,286 @@ fn reexpress(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use pretty_assertions::assert_eq;
-    use rstest::*;
-    use umol_chem::element::Element;
+/// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
+/// `target` with the same site and the same form.
+///
+/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `source`,
+/// and `target` has the entity counts of `source`. A generator of `source` is such a remapping of
+/// `source` onto itself.
+pub(crate) fn remapping_preserves_stereo(
+    source: &Molecule,
+    target: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    images: &[NodeId],
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
+        let mapped = ligands
+            .iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, image_ligands)
+    };
+    fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
+    where
+        Form: Clone + FrameTransport<Action = Permutation> + Normalize,
+    {
+        source
+            .clone()
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(target))
+    }
 
-    use super::*;
-    use crate::ir::atom::AtomForm;
-    use crate::ir::bond::BondForm;
-    use crate::ir::coloring::ConstitutionColoring;
-    use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
-    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
-
-    fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
-        GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: true,
-            max_iterations: 16,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    for stereo in source.stereo_atoms().iter() {
+        let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(stereo.id())) else {
+            return false;
+        };
+        let image = target.stereo_atom(image_id);
+        if entity_image(Entity::Atom(stereo.site_id())) != Entity::Atom(image.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
+            return false;
+        };
+        if !form_preserved(stereo.attributes(), image.attributes(), action) {
+            return false;
         }
     }
 
-    #[fixture]
-    fn benzene_ring() -> Molecule {
-        let atoms = vec![AtomForm::from_element(Element::C); 6];
-        let bonds = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
-            .collect();
-        Molecule::from_entries(MoleculeEntries {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
-
-    // A tetrahedral center on atom 0 with the four given peripheral elements.
-    fn tetrahedral(peripherals: [Element; 4]) -> Molecule {
-        let mut atoms = vec![AtomForm::from_element(Element::C)];
-        atoms.extend(peripherals.into_iter().map(AtomForm::from_element));
-        let bonds = (1..=4)
-            .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
-            .collect();
-        Molecule::from_entries(MoleculeEntries {
-            atoms,
-            bonds,
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            )],
-            ..Default::default()
-        })
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_constitutional(benzene_ring: Molecule) {
-        let symmetry = benzene_ring.graph_symmetry(&config());
-        assert_eq!(
-            symmetry.automorphism_algorithm,
-            AutomorphismAlgorithm::Nauty
-        );
-        assert!(symmetry.same_proper_orbit(AtomId(0), AtomId(3)));
-        assert_eq!(
-            symmetry.proper_orbit_of(AtomId(0)),
-            vec![
-                AtomId(0),
-                AtomId(1),
-                AtomId(2),
-                AtomId(3),
-                AtomId(4),
-                AtomId(5),
-            ],
-        );
-        assert!(!symmetry.is_chiral());
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_chiral() {
-        // Four distinct ligands ⇒ a genuine stereocenter, no compensating symmetry.
-        let mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        let symmetry = mol.graph_symmetry(&config());
-        assert!(symmetry.is_chiral());
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_enantiotopic() {
-        // Two identical Cl ligands: enantiotopic — same star orbit, distinct proper.
-        let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        let symmetry = mol.graph_symmetry(&config());
-        assert!(!symmetry.is_chiral());
-        assert!(!symmetry.same_proper_orbit(AtomId(1), AtomId(2)));
-        assert!(symmetry.same_star_orbit(AtomId(1), AtomId(2)));
-    }
-
-    #[rstest]
-    #[case::atom(
-        MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 5],
-            bonds: (1..=4)
-                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-                .collect(),
-            stereo_atoms: vec![(
-                AtomId(0),
-                (1..=4)
-                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                    .collect(),
-                StereoAtomForm::default(),
-            )],
-            ..Default::default()
-        },
-        AtomId(1),
-        vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
-    )]
-    #[case::bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 6],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(1), AtomId(4), BondForm::from_order(1)),
-                (AtomId(1), AtomId(5), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(0),
-                (2..=5)
-                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                    .collect(),
-                StereoBondForm::default(),
-            )],
-            ..Default::default()
-        },
-        AtomId(2),
-        vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-    )]
-    fn test_molecule_graph_symmetry_kindless(
-        #[case] entries: MoleculeEntries,
-        #[case] atom: AtomId,
-        #[case] expected_orbit: Vec<AtomId>,
-    ) {
-        let molecule = Molecule::try_from_entries(entries).expect("kindless stereo is admitted");
-        for coloring in [
-            ConstitutionColoring::entity_only(),
-            ConstitutionColoring::full(),
-        ] {
-            let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
-                coloring,
-                iterate_to_fixpoint: false,
-                max_iterations: 1,
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            });
-
-            assert_eq!(symmetry.proper_orbit_of(atom), expected_orbit);
-            assert_eq!(symmetry.is_chiral(), false);
+    for stereo in source.stereo_bonds().iter() {
+        let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(stereo.id())) else {
+            return false;
+        };
+        let image = target.stereo_bond(image_id);
+        if entity_image(Entity::Bond(stereo.site_id())) != Entity::Bond(image.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
+            return false;
+        };
+        if !form_preserved(stereo.attributes(), image.attributes(), action) {
+            return false;
         }
     }
 
-    #[rstest]
-    fn test_graph_symmetry_site_stabilizer(benzene_ring: Molecule) {
-        let symmetry = benzene_ring.graph_symmetry(&config());
-        // Every stabilizer generator fixes the distinguished site.
-        let generators = symmetry.site_stabilizer(NodeId(0));
-        assert!(generators.iter().all(|g| g[0] == NodeId(0)));
-    }
-
-    #[rstest]
-    fn test_graph_symmetry_is_chiral_no_stereo(benzene_ring: Molecule) {
-        // No stereocenters ⇒ trivially achiral despite no improper generators.
-        assert!(!benzene_ring.graph_symmetry(&config()).is_chiral());
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_atom_symmetry_stereogenic() {
-        let mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        let gs = mol.graph_symmetry(&config());
-        let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-        assert!(stereo.is_stereogenic());
-        // Four distinct ligands ⇒ no local symmetry ⇒ pairwise diastereotopic.
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
-            Topicity::Diastereotopic
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_out_of_range_coset() {
-        // A malformed (out-of-range) coset must not panic graph_symmetry: the
-        // element contributes no observable descriptor and the orbit partition
-        // is still computed.
-        let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        mol.stereo_atom_mut(StereoAtomId(0))
-            .attributes_mut()
-            .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
-        let gs = mol.graph_symmetry(&config());
-        assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
-    }
-
-    #[rstest]
-    fn test_molecule_observable_descriptor() {
-        let mut mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        mol.stereo_atom_mut(StereoAtomId(0))
-            .attributes_mut()
-            .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1);
-        assert_eq!(
-            mol.observable_descriptor(
-                Entity::StereoAtom(StereoAtomId(0)),
-                &[NodeId(0), NodeId(1), NodeId(1), NodeId(3), NodeId(4)],
-            ),
-            Some(0),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_atom_symmetry_prochiral() {
-        let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        let gs = mol.graph_symmetry(&config());
-        let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-        // Two identical Cl ⇒ prochiral, not a genuine stereocenter.
-        assert!(!stereo.is_stereogenic());
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
-            Topicity::Enantiotopic
-        ); // the two Cl
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(2)),
-            Topicity::Diastereotopic
-        ); // Cl vs F
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_bond_symmetry() {
-        // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
-        let mol = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::F),
-                AtomForm::from_element(Element::Cl),
-                AtomForm::from_element(Element::Br),
-                AtomForm::from_element(Element::I),
-            ],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(1), AtomId(4), BondForm::from_order(1)),
-                (AtomId(1), AtomId(5), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(0),
-                vec![
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
-                ],
-                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-            )],
-            ..Default::default()
-        });
-        let gs = mol.graph_symmetry(&config());
-        let stereo = mol.stereo_bond_symmetry(&gs, StereoBondId(0));
-        assert!(stereo.is_stereogenic());
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
-            Topicity::Diastereotopic
-        ); // F vs Cl on C0
-    }
-
-    #[rstest]
-    #[case::singleton(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(0),
-        true,
-    )]
-    #[case::merged(
-        OrientedPermutationGroup::generate(
-            4,
-            &[OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3]))],
-        ),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(0),
-        false,
-    )]
-    #[case::invalid_generator(
-        OrientedPermutationGroup::generate(3, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(0),
-        false,
-    )]
-    #[case::invalid_coset(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(2),
-        false,
-    )]
-    #[case::undetermined(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Undetermined,
-        true,
-    )]
-    #[case::undetermined_merged(
-        OrientedPermutationGroup::generate(4, &[
-            OrientedPermutation::improper(Permutation::from_image(&[1, 0, 2, 3])),
-        ]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    #[case::cis_trans_undetermined(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::CisTrans,
-        StereoCoset::Undetermined,
-        true,
-    )]
-    #[case::cis_trans_merged(
-        OrientedPermutationGroup::generate(4, &[
-            OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3])),
-        ]),
-        StereoKind::CisTrans,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    #[case::cis_trans_invalid_action(
-        OrientedPermutationGroup::generate(4, &[
-            OrientedPermutation::proper(Permutation::from_image(&[0, 2, 1, 3])),
-        ]),
-        StereoKind::CisTrans,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    #[case::finite_domain(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::lit_set([0, 1]),
-        true,
-    )]
-    #[case::finite_singleton(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::CisTrans,
-        StereoCoset::lit_set([1]),
-        true,
-    )]
-    #[case::empty_domain(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::lit_set([]),
-        false,
-    )]
-    #[case::invalid_domain(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::lit_set([0, 2]),
-        false,
-    )]
-    #[case::nonbinary_literal(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::SquarePlanar,
-        StereoCoset::Lit(0),
-        true,
-    )]
-    #[case::nonbinary_undetermined(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::SquarePlanar,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    fn test_stereo_symmetry_is_stereogenic(
-        #[case] group: OrientedPermutationGroup,
-        #[case] kind: StereoKind,
-        #[case] coset: StereoCoset,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(
-            StereoSymmetry { group, kind, coset }.is_stereogenic(),
-            expected,
-        );
-    }
-
-    #[rstest]
-    #[case::valid(
-        &[NodeId(1), NodeId(0)],
-        Some(Permutation::from_image(&[1, 0])),
-    )]
-    #[case::collision(&[NodeId(0), NodeId(0)], None)]
-    fn test_project_onto_ligands(
-        #[case] generator: &[NodeId],
-        #[case] expected: Option<Permutation>,
-    ) {
-        assert_eq!(
-            project_onto_ligands(
-                &[
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                ],
-                generator,
-            ),
-            expected,
-        );
-    }
-
-    #[rstest]
-    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
-    #[case::lone_pair(StereoLigandKind::LonePair)]
-    #[case::virtual_ligand(StereoLigandKind::Virtual)]
-    fn test_project_onto_ligands_virtual(#[case] kind: StereoLigandKind) {
-        let ligands = [
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(0), kind),
-        ];
-        assert_eq!(
-            project_onto_ligands(&ligands, &[NodeId(0), NodeId(2), NodeId(1), NodeId(3)]),
-            Some(Permutation::from_image(&[1, 0, 2, 3])),
-        );
-    }
+    true
 }
+
+pub(crate) fn retain_stereo_preserving_generators(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    if molecule.stereo_atoms().count() == 0 && molecule.stereo_bonds().count() == 0 {
+        return;
+    }
+    generators.retain(|generator| {
+        remapping_preserves_stereo(molecule, molecule, incidence_graph, generator)
+    });
+}
+
+/// The color of the incidence at `edge`: its role and, for an atom of an aromatic system or a
+/// multicenter bond, the electron count of that atom.
+pub(crate) fn incidence_color<'a>(
+    molecule: &Molecule,
+    incidence_graph: &'a IncidenceGraph,
+    edge: EdgeId,
+) -> (&'a Incidence, Option<i64>) {
+    let incidence = incidence_graph.incidence(edge);
+    let electron_count = match incidence {
+        Incidence::AromaticAtom | Incidence::MulticenterAtom => {
+            let [first, second] = incidence_graph.graph().edge_endpoints(edge);
+            let (owner, atom) = match (
+                incidence_graph.entity(first),
+                incidence_graph.entity(second),
+            ) {
+                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
+                _ => {
+                    unreachable!("an electron contribution connects an overlay to an atom")
+                }
+            };
+            let (atom_position, electrons) = match owner {
+                Entity::AromaticSystem(id) => (
+                    molecule
+                        .aromatic_system(id)
+                        .atom_ids()
+                        .position(|id| id == atom),
+                    &molecule.aromatic_system(id).attributes().electrons,
+                ),
+                Entity::MulticenterBond(id) => (
+                    molecule
+                        .multicenter_bond(id)
+                        .atom_ids()
+                        .position(|id| id == atom),
+                    &molecule.multicenter_bond(id).attributes().electrons,
+                ),
+                _ => unreachable!(
+                    "electron contributions belong to aromatic or multicenter entities"
+                ),
+            };
+            let atom_position = atom_position.expect("incidence atom belongs to its overlay");
+            electrons.at(AtomPosition::from(atom_position))
+        }
+        _ => None,
+    };
+    (incidence, electron_count)
+}
+
+/// The integers of the colors of a normalized molecule at `level`: one per entity, by incidence
+/// node, and one per incidence, by incidence edge.
+///
+/// The colors of each entity kind are ranked in kind order, and the incidences continue after the
+/// entities. The color of an incidence is its role and, for an atom of an aromatic system or a
+/// multicenter bond, the electron count of that atom. At Topology the incidences are not ranked,
+/// since the topology search input does not read them.
+pub(crate) fn initial_colors(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
+) -> Result<InitialColors, Contradiction> {
+    let mut entities = vec![0; incidence_graph.graph().node_count()];
+    let position = |entity: Entity| incidence_graph.node_of(entity).index();
+
+    let atoms = molecule
+        .atoms()
+        .iter()
+        .map(|atom| {
+            (
+                atom.attributes().as_color(),
+                position(Entity::Atom(atom.id())),
+            )
+        })
+        .collect();
+    let mut next = rank_colors(atoms, 0, &mut entities);
+    let bonds = molecule
+        .bonds()
+        .iter()
+        .map(|bond| {
+            (
+                bond.attributes().as_color(),
+                position(Entity::Bond(bond.id())),
+            )
+        })
+        .collect();
+    next = rank_colors(bonds, next, &mut entities);
+    if level == DescriptionLevel::Topology {
+        return Ok(InitialColors {
+            entities,
+            incidences: Vec::new(),
+        });
+    }
+
+    let dative = molecule
+        .dative_bonds()
+        .iter()
+        .map(|bond| {
+            (
+                bond.attributes().as_color(),
+                position(Entity::DativeBond(bond.id())),
+            )
+        })
+        .collect();
+    next = rank_colors(dative, next, &mut entities);
+    let mut aromatic = Vec::with_capacity(molecule.aromatic_systems().count());
+    for system in molecule.aromatic_systems().iter() {
+        let attributes = system.attributes();
+        if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+            if counts.len() != system.atom_ids().len())
+        {
+            return Err(Contradiction);
+        }
+        aromatic.push((
+            attributes.as_color(),
+            position(Entity::AromaticSystem(system.id())),
+        ));
+    }
+    next = rank_colors(aromatic, next, &mut entities);
+    let mut multicenter = Vec::with_capacity(molecule.multicenter_bonds().count());
+    for bond in molecule.multicenter_bonds().iter() {
+        let attributes = bond.attributes();
+        if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+            if counts.len() != bond.atom_ids().len())
+        {
+            return Err(Contradiction);
+        }
+        multicenter.push((
+            attributes.as_color(),
+            position(Entity::MulticenterBond(bond.id())),
+        ));
+    }
+    next = rank_colors(multicenter, next, &mut entities);
+    let noncovalent = molecule
+        .noncovalent_bonds()
+        .iter()
+        .map(|bond| {
+            (
+                bond.attributes().as_color(),
+                position(Entity::NoncovalentBond(bond.id())),
+            )
+        })
+        .collect();
+    next = rank_colors(noncovalent, next, &mut entities);
+
+    if level >= DescriptionLevel::Structure {
+        let mut stereo_atoms = Vec::with_capacity(molecule.stereo_atoms().count());
+        for stereo in molecule.stereo_atoms().iter() {
+            let attributes = stereo.attributes();
+            if let Some(kind) = attributes.configuration.kind() {
+                check_stereo_atom_kind(Entity::StereoAtom(stereo.id()), kind)
+                    .map_err(|_| Contradiction)?;
+            }
+            attributes
+                .clone()
+                .reframe_by(&Permutation::identity(stereo.ligand_count()))
+                .ok_or(Contradiction)?;
+            stereo_atoms.push((
+                attributes.as_color(),
+                position(Entity::StereoAtom(stereo.id())),
+            ));
+        }
+        next = rank_colors(stereo_atoms, next, &mut entities);
+        let mut stereo_bonds = Vec::with_capacity(molecule.stereo_bonds().count());
+        for stereo in molecule.stereo_bonds().iter() {
+            let attributes = stereo.attributes();
+            if let Some(kind) = attributes.configuration.kind() {
+                check_stereo_bond_kind(Entity::StereoBond(stereo.id()), kind)
+                    .map_err(|_| Contradiction)?;
+            }
+            attributes
+                .clone()
+                .reframe_by(&Permutation::identity(stereo.ligand_count()))
+                .ok_or(Contradiction)?;
+            stereo_bonds.push((
+                attributes.as_color(),
+                position(Entity::StereoBond(stereo.id())),
+            ));
+        }
+        next = rank_colors(stereo_bonds, next, &mut entities);
+    }
+
+    let incidence_colors = incidence_graph
+        .incidences()
+        .map(|(edge, _)| {
+            (
+                incidence_color(molecule, incidence_graph, edge),
+                edge.index(),
+            )
+        })
+        .collect();
+    let mut incidences = vec![0; incidence_graph.graph().edge_count()];
+    rank_colors(incidence_colors, next, &mut incidences);
+
+    Ok(InitialColors {
+        entities,
+        incidences,
+    })
+}
+
+#[cfg(test)]
+pub(crate) mod tests;
