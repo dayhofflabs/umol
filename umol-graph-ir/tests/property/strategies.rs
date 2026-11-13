@@ -1195,6 +1195,7 @@ pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRela
         Just(TopicityRelationForm::Lit(Topicity::Homotopic)),
         Just(TopicityRelationForm::Lit(Topicity::Enantiotopic)),
         Just(TopicityRelationForm::Lit(Topicity::Diastereotopic)),
+        Just(TopicityRelationForm::Lit(Topicity::Distinct)),
         Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Homotopic
         ]))),
@@ -1203,6 +1204,9 @@ pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRela
         ]))),
         Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Diastereotopic
+        ]))),
+        Just(TopicityRelationForm::NotSet(BTreeSet::from([
+            Topicity::Distinct
         ]))),
     ]
 }

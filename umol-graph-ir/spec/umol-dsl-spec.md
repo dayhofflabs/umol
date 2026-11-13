@@ -393,15 +393,15 @@ Configuration-bearing **`#T`** / **`#C`** payloads — literals, sets, variables
 
 ### 5.9 Relation
 
-The **`relation`** leaf is the value of the stereo topicity **`#o`** and stereogenicity **`#g`** predicates (**§7.11**), over the 3-glyph topicity / stereogenicity domain.
+The **`relation`** leaf is the value of the stereo topicity **`#o`** and stereogenicity **`#g`** predicates (**§7.11**), over the four-glyph topicity domain and the three-glyph stereogenicity domain.
 
 ```
 relation  ::= '*' | ['!'] ( glyph | glyph-set )    (* * undetermined; bare glyph = singleton; a set = members; ! = complement *)
 glyph-set ::= '{' glyph (',' glyph)* '}'
-glyph     ::= '=' | '\'' | '/'
+glyph     ::= '=' | '\'' | '/' | '%'               (* % is a topicity glyph only *)
 ```
 
-**Relation forms.** A **`relation`** has four surface forms, each **faithful to its stored variant** (representation, not normalization): **`*`** (**`Undetermined`** — the full domain); a bare **`glyph`** (a **`Lit`** singleton, e.g. **`=`**); a **`glyph-set`** **`{a,b,…}`** (an explicit **`LitSet`** of members, e.g. **`{=,'}`**); or a leading **`!`** on a glyph or set (a **`NotSet`** — the **complement** of the named member(s): **`!/`** = not diastereotopic, **`!{=,'}`** = neither homotopic nor enantiotopic). This mirrors the EDN, which distinguishes the member vector **`[a b]`** (**`LitSet`**) from the complement **`{:not-in [x]}`** (**`NotSet`**, **§7.12**). Over the 3-element topicity / stereogenicity domain every non-empty subset is expressible several ways; **normalization** (a **separate** pass) reduces a set to the smaller of its positive / complement side — a 2-set to **`!x`**, a 1-set to a bare glyph — but the surface **round-trips whichever variant the form holds**. A full-domain (**`Undetermined`**) relation is a **vacuous** predicate: like the atom **`#a*`** / **`#T*`** special forms (**§7.3**) it is **admissible on parse** but **elided** from the canonical rendered string (**§7.1**) — **`#o*`** / **`#g*`** are dropped on render, equivalent to omitting the predicate.
+**Relation forms.** A **`relation`** has four surface forms, each **faithful to its stored variant** (representation, not normalization): **`*`** (**`Undetermined`** — the full domain); a bare **`glyph`** (a **`Lit`** singleton, e.g. **`=`**); a **`glyph-set`** **`{a,b,…}`** (an explicit **`LitSet`** of members, e.g. **`{=,'}`**); or a leading **`!`** on a glyph or set (a **`NotSet`** — the **complement** of the named member(s): **`!/`** = not diastereotopic, **`!{=,'}`** = neither homotopic nor enantiotopic). This mirrors the EDN, which distinguishes the member vector **`[a b]`** (**`LitSet`**) from the complement **`{:not-in [x]}`** (**`NotSet`**, **§7.12**). Over the four-element topicity domain and the three-element stereogenicity domain every non-empty subset is expressible several ways; **normalization** (a **separate** pass) reduces a set to the smaller of its positive / complement side, and to the positive side on a tie — a stereogenicity 2-set and a topicity 3-set to **`!x`**, a topicity 2-set to itself, a 1-set to a bare glyph — but the surface **round-trips whichever variant the form holds**. A full-domain (**`Undetermined`**) relation is a **vacuous** predicate: like the atom **`#a*`** / **`#T*`** special forms (**§7.3**) it is **admissible on parse** but **elided** from the canonical rendered string (**§7.1**) — **`#o*`** / **`#g*`** are dropped on render, equivalent to omitting the predicate.
 
 ---
 
@@ -785,7 +785,7 @@ ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-fra
 
 - **`#p`** — **ligand symmetry**: asserts whether a ligand permutation **is** (`boolean` **`+`** or omitted), **is not** (**`!`**), or is **undetermined** (**`*`**) a symmetry of the element. Payload **`(['`''] cycles | '~') boolean`**: **`'`** marks the permutation **improper** (orientation-reversing; default proper); **`cycles`** is the permutation in **disjoint-cycle notation** (below); the **trailing** **`boolean`** is the assertion's truth value — a scalar polarity written **after** the permutation (**`+`** / omitted true, **`!`** false, **`*`** undetermined). The **`~`** sugar denotes the **class involution** (the orientation-reversing generator for chiral classes, the configuration-swapping ligand permutation for achiral classes) and already carries the class-appropriate orientation, so it is not combined with **`'`**.
 - **`#f`** — **fluxionality**: whether a proper ligand permutation is realized by dynamics. Payload **`(cycles | '~') boolean`**; the permutation carries no **`'`** (it is a bare proper move), the **trailing** **`boolean`** its truth value. **`~`** is the class involution.
-- **`#o`** — **topicity** of a ligand pair. Payload **`ligand-pair relation`** — the **`(i,j)`** pair (two 0-indexed positions in the **`:ligands`** frame) **first**, then the **`relation`**. Its negation is **not** a trailing polarity like **`#p`** / **`#f`**: the relation's set-complement is a **leading** **`!`** on the glyph (**`!/`** = not diastereotopic; **Relation completeness** below). The glyphs are **`=`** homotopic, **`'`** enantiotopic, **`/`** diastereotopic.
+- **`#o`** — **topicity** of a ligand pair. Payload **`ligand-pair relation`** — the **`(i,j)`** pair (two 0-indexed positions in the **`:ligands`** frame) **first**, then the **`relation`**. Its negation is **not** a trailing polarity like **`#p`** / **`#f`**: the relation's set-complement is a **leading** **`!`** on the glyph (**`!/`** = not diastereotopic; **Relation completeness** below). The glyphs are **`=`** homotopic, **`'`** enantiotopic, **`/`** diastereotopic, **`%`** distinct.
 - **`#g`** — **stereogenicity** classification. Payload **`relation`**: **`=`** nonstereogenic, **`'`** prostereogenic, **`/`** stereogenic.
 
 Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**, the ligand pair for **`#o`**, none for **`#g`**) directly after the tag, then its **value**. The value forms differ: **`#p`** / **`#f`** take a **trailing** scalar **`boolean`** — its negation marker **`!`** follows the permutation (**`#p(0,1)!`**); **`#o`** / **`#g`** take a **`relation`** whose set-complement is a **leading** **`!`** on the glyph (**`#o(0,1)!/`**). The two are different value types — a three-valued boolean vs. a set with complement — so the **`!`** trails on **`#p`** / **`#f`** but leads on **`#o`** / **`#g`**.
@@ -931,7 +931,7 @@ fluxionality-form    ::= { :permutation permutation-form [:active bool] }
 ligand-pair          ::= [ nat nat ]                (* two ligand-frame positions *)
 topicity-form        ::= { :pair ligand-pair :relation topicity-relation }
 stereogenicity-form  ::= { :relation stereogenicity-relation }
-topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
+topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | :distinct | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
 stereogenicity-relation ::= :nonstereogenic | :prostereogenic | :stereogenic | [ keyword+ ] | { :not-in [ keyword+ ] } | :undetermined
 
 stereo-constraint-form ::= :undetermined | :not-stereo | :stereo

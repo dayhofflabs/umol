@@ -49,6 +49,7 @@ from umol import (
         (StereoCoset.LitSet, {0, 1}),
         (TopicityRelationForm.LitSet, {Topicity.Homotopic, Topicity.Enantiotopic}),
         (TopicityRelationForm.NotSet, {Topicity.Homotopic}),
+        (TopicityRelationForm.NotSet, {Topicity.Distinct}),
         (StereogenicityForm.LitSet, {Stereogenicity.Prostereogenic, Stereogenicity.Nonstereogenic}),
         (StereogenicityForm.NotSet, {Stereogenicity.Nonstereogenic}),
     ],

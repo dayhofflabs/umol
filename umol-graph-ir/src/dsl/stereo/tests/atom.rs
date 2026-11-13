@@ -50,6 +50,7 @@ fn test_stereo_atom_dsl_to_string(#[case] form: StereoAtomDsl, #[case] expected:
 #[case::topicity_negated("Th1#o(0,1)!'")]
 #[case::topicity_lit_set("Th1#o(0,1){=,'}")]
 #[case::topicity_not_set("Th1#o(0,1)!{=,'}")]
+#[case::topicity_distinct("Th1#o(0,1)%")]
 #[case::stereogenicity("Th1#g/")]
 #[case::stereogenicity_lit_set("Th1#g{=,/}")]
 #[case::multiple("Th1#f(0,1,2)#o(0,1)=#g/")]
@@ -85,6 +86,8 @@ fn test_stereo_atom_inline_render(#[case] input: &str, #[case] canonical: &str) 
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
 #[case::topicity_not_set("Th1#o(0,1)!{=,'}",
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
+#[case::topicity_distinct("Th1#o(0,1)%",
+    StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Distinct) }))]
 #[case::topicity_open("Th1#o(0,1)*",
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }))]
 #[case::stereogenicity("Th1#g/",

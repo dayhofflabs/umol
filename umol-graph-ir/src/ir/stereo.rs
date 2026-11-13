@@ -1878,6 +1878,7 @@ pub enum Topicity {
     Homotopic,
     Enantiotopic,
     Diastereotopic,
+    Distinct,
 }
 
 /// Stereogenicity classification of a stereo carrier (derived ground value).

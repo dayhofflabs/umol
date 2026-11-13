@@ -1087,12 +1087,13 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::singleton_to_lit(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), Ok(TopicityRelationForm::Lit(Topicity::Homotopic)))]
-    #[case::litset_polarity_to_notset(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), Ok(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic]))))]
-    #[case::full_litset_to_undetermined(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Ok(TopicityRelationForm::Undetermined))]
+    #[case::litset_polarity_to_notset(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Ok(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Distinct]))))]
+    #[case::full_litset_to_undetermined(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct])), Ok(TopicityRelationForm::Undetermined))]
     #[case::empty_litset_err(TopicityRelationForm::LitSet(BTreeSet::new()), Err(Contradiction))]
-    #[case::notset_complement_to_lit(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), Ok(TopicityRelationForm::Lit(Topicity::Diastereotopic)))]
+    #[case::notset_complement_to_lit(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Ok(TopicityRelationForm::Lit(Topicity::Distinct)))]
+    #[case::notset_tie_to_litset(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), Ok(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Diastereotopic, Topicity::Distinct]))))]
     #[case::empty_notset_to_undetermined(TopicityRelationForm::NotSet(BTreeSet::new()), Ok(TopicityRelationForm::Undetermined))]
-    #[case::full_notset_err(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Err(Contradiction))]
+    #[case::full_notset_err(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct])), Err(Contradiction))]
     fn test_topicity_relation_form_normalize(
         #[case] input: TopicityRelationForm,
         #[case] expected: Result<TopicityRelationForm, Contradiction>,
@@ -1103,6 +1104,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(TopicityRelationForm::Undetermined)]
     #[case::lit(TopicityRelationForm::Lit(Topicity::Homotopic))]
+    #[case::litset(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])))]
     #[case::notset(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])))]
     fn test_topicity_relation_form_normalize_identity(#[case] input: TopicityRelationForm) {
         assert_eq!(input.clone().normalize(), Ok(input));
@@ -1111,8 +1113,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     fn test_topicity_relation_form_normalized_eq_default(
-        #[values(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::LitSet(BTreeSet::new()))] left: TopicityRelationForm,
-        #[values(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::LitSet(BTreeSet::new()))] right: TopicityRelationForm,
+        #[values(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::LitSet(BTreeSet::new()))] left: TopicityRelationForm,
+        #[values(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::LitSet(BTreeSet::new()))] right: TopicityRelationForm,
     ) {
         assert_eq!(left.normalized_eq(&right), left.clone().normalize() == right.clone().normalize());
     }
@@ -1144,7 +1146,7 @@ mod tests {
     #[case::lit_disjoint(TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Enantiotopic), None)]
     #[case::lit_notset_in(TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), Some(TopicityRelationForm::Lit(Topicity::Homotopic)))]
     #[case::lit_notset_out(TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), None)]
-    #[case::notset_notset_to_lit(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Enantiotopic])), Some(TopicityRelationForm::Lit(Topicity::Homotopic)))]
+    #[case::notset_notset_to_lit(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic, Topicity::Distinct])), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Enantiotopic, Topicity::Distinct])), Some(TopicityRelationForm::Lit(Topicity::Homotopic)))]
     fn test_topicity_relation_form_meet(
         #[case] a: TopicityRelationForm,
         #[case] b: TopicityRelationForm,
@@ -1157,7 +1159,8 @@ mod tests {
     #[rstest]
     #[case::und(TopicityRelationForm::Undetermined, TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Undetermined)]
     #[case::lit_eq(TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Homotopic))]
-    #[case::lit_union_to_notset(TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Enantiotopic), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])))]
+    #[case::lit_union_to_litset(TopicityRelationForm::Lit(Topicity::Homotopic), TopicityRelationForm::Lit(Topicity::Enantiotopic), TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])))]
+    #[case::litset_union_to_notset(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Distinct])))]
     #[case::lit_notset_to_full(TopicityRelationForm::Lit(Topicity::Diastereotopic), TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationForm::Undetermined)]
     fn test_topicity_relation_form_join(
         #[case] a: TopicityRelationForm,
@@ -1518,7 +1521,7 @@ mod tests {
     #[case::topicity_widens(
         StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
         StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }),
-        Ok(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })))]
+        Ok(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) })))]
     #[case::different_key(
         StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
         StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
@@ -1891,7 +1894,7 @@ mod tests {
     #[case::shared_topicity_value_meet(
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
-        Some(StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))))]
+        Some(StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Enantiotopic, Topicity::Distinct])) }))))]
     #[case::ligand_symmetry_union(
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })),
         StereoAtomConstraintsForm::from_iter([
@@ -1929,7 +1932,7 @@ mod tests {
     #[case::shared_topicity_widens(
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })),
         StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })),
-        Ok(StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))))]
+        Ok(StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))))]
     #[case::ligand_symmetry_intersection(
         StereoAtomConstraintsForm::from_iter([
             StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
@@ -2326,7 +2329,7 @@ mod tests {
     #[case::shared_topicity_value_meet(
         StereoBondConstraintsForm::from(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])) })),
         StereoBondConstraintsForm::from(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic])) })),
-        Some(StereoBondConstraintsForm::from(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))))]
+        Some(StereoBondConstraintsForm::from(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Enantiotopic, Topicity::Distinct])) }))))]
     #[case::incompatible_same_key_none(
         StereoBondConstraintsForm::from(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })),
         StereoBondConstraintsForm::from(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })),

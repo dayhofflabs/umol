@@ -532,8 +532,8 @@ the class `Stereogenic`.
 - **`umol-io`.** The table reader names the two renamed variants.
 - **DSL.** The EDN keywords are `:` and the kebab case of the variant: `:prostereogenic`,
   `:nonstereogenic` and `:distinct`. In the compact attribute strings the glyphs `=`, `'` and `/`
-  stand for `Nonstereogenic`, `Prostereogenic` and `Stereogenic`, and `Distinct` gets a fourth
-  topicity glyph beside `=`, `'` and `/`.
+  stand for `Nonstereogenic`, `Prostereogenic` and `Stereogenic`, and `Distinct` has the fourth
+  topicity glyph `%` beside `=`, `'` and `/`.
 - **Python.** The `Stereogenicity` and `Topicity` enums, `StereoSelection`, the stereo operation
   configs and `StereoModel` follow the Rust changes, and `StereogenicUnit` is added. The Python
   stereo constraints views have the keyed readings, so Python gets `GraphSymmetry`,
@@ -978,7 +978,7 @@ whose `classify` is unchanged since the first run.
 The tests pass: the Rust tests of the four crates, with all features for `umol-graph-ir` and
 `umol-graph`, and 3,420 Python tests after a rebuild.
 
-#### S2b — `Topicity::Distinct`
+#### S2b — `Topicity::Distinct` **Done**
 
 - **Module:** `ir::stereo`, `dsl::stereo`, the topicity forms, `umol-py`.
 - **Adds:** the variant, its keyword `:distinct`, its glyph in the compact attribute strings, its
@@ -987,6 +987,37 @@ The tests pass: the Rust tests of the four crates, with all features for `umol-g
 - **Changes:** expected values of the lattice and normalization tests of `TopicityRelationForm`
   that enumerate all variants.
 - **Kind:** breaking (red→green within the subitem). `[dep: S2a]`
+
+The glyph is `%`. The variant is the last of the enum, its keyword is `:distinct`, and the
+Python enum has the member `Distinct`. Nothing derives the value before S4b.
+
+With four values a set of two has a complement of two, and normalization keeps the positive
+side. The tests that wrote the whole domain or relied on a set of two becoming a complement
+changed as follows, with H, E, D and X for the four variants.
+
+| Test and case | Before | After |
+| --- | --- | --- |
+| `normalize`, `litset_polarity_to_notset` | `LitSet{H,E}` gives `NotSet{D}` | `LitSet{H,E,D}` gives `NotSet{X}` |
+| `normalize`, `full_litset_to_undetermined` | `LitSet{H,E,D}` gives `Undetermined` | `LitSet{H,E,D,X}` gives `Undetermined` |
+| `normalize`, `notset_complement_to_lit` | `NotSet{H,E}` gives `Lit(D)` | `NotSet{H,E,D}` gives `Lit(X)` |
+| `normalize`, `full_notset_err` | `NotSet{H,E,D}` is a contradiction | `NotSet{H,E,D,X}` is a contradiction |
+| `normalized_eq_default`, the full set among the values | `LitSet{H,E,D}` | `LitSet{H,E,D,X}` |
+| `meet`, `notset_notset_to_lit` | `NotSet{D}` and `NotSet{E}` give `Lit(H)` | `NotSet{D,X}` and `NotSet{E,X}` give `Lit(H)` |
+| `join`, `lit_union_to_notset` | `Lit(H)` and `Lit(E)` give `NotSet{D}` | renamed `lit_union_to_litset`: they give `LitSet{H,E}` |
+| join of two topicity constraints, `topicity_widens` and `shared_topicity_widens` | `Lit(H)` and `Lit(E)` give `NotSet{D}` | they give `LitSet{H,E}` |
+| meet of two topicity constraints, `shared_topicity_value_meet`, stereo atom and stereo bond | `NotSet{D}` and `NotSet{H}` give `Lit(E)` | they give `LitSet{E,X}` |
+| `is_compatible`, `full_complement` | `Undetermined` with `NotSet{H,E,D}` is incompatible | with `NotSet{H,E,D,X}` |
+| `is_compatible`, `complement_union` | `NotSet{H}` with `NotSet{E,D}` is incompatible | with `NotSet{E,D,X}` |
+
+New rows state the tie and the new variant: `NotSet{H,E}` normalizes to `LitSet{D,X}`,
+`LitSet{H,E}` is its own normal form, `LitSet{H,E}` joined with `Lit(D)` gives `NotSet{X}`, the
+string `Th1#o(0,1)%` parses to `Lit(Distinct)` and renders unchanged, `:distinct` reads and
+writes in EDN, the Python conversion round-trips, and the property strategies generate the
+variant.
+
+The specification states the glyph, the keyword, the two domain sizes and the tie. The tests
+pass: 27,955 Rust tests of the four crates with all features for `umol-graph-ir` and
+`umol-graph`, and 3,421 Python tests after a rebuild.
 
 ### S3 — Check and partitions
 

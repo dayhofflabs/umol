@@ -479,6 +479,7 @@ pub enum Topicity {
     Homotopic,
     Enantiotopic,
     Diastereotopic,
+    Distinct,
 }
 
 impl Topicity {
@@ -487,6 +488,7 @@ impl Topicity {
             GraphIrTopicity::Homotopic => Self::Homotopic,
             GraphIrTopicity::Enantiotopic => Self::Enantiotopic,
             GraphIrTopicity::Diastereotopic => Self::Diastereotopic,
+            GraphIrTopicity::Distinct => Self::Distinct,
         }
     }
 
@@ -495,6 +497,7 @@ impl Topicity {
             Self::Homotopic => GraphIrTopicity::Homotopic,
             Self::Enantiotopic => GraphIrTopicity::Enantiotopic,
             Self::Diastereotopic => GraphIrTopicity::Diastereotopic,
+            Self::Distinct => GraphIrTopicity::Distinct,
         }
     }
 }
@@ -1756,6 +1759,7 @@ mod tests {
     #[case(GraphIrTopicity::Homotopic)]
     #[case(GraphIrTopicity::Enantiotopic)]
     #[case(GraphIrTopicity::Diastereotopic)]
+    #[case(GraphIrTopicity::Distinct)]
     fn test_topicity_roundtrip(#[case] ir_value: GraphIrTopicity) {
         assert_eq!(Topicity::from_rust(ir_value).to_rust(), ir_value);
     }

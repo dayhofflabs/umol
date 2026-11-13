@@ -608,6 +608,7 @@ fn topicity_char(i: &mut &str) -> PResult<Topicity> {
         '='.value(Topicity::Homotopic),
         '\''.value(Topicity::Enantiotopic),
         '/'.value(Topicity::Diastereotopic),
+        '%'.value(Topicity::Distinct),
     ))
     .parse_next(i)
 }
@@ -758,6 +759,7 @@ fn write_topicity_char(t: Topicity) -> char {
         Topicity::Homotopic => '=',
         Topicity::Enantiotopic => '\'',
         Topicity::Diastereotopic => '/',
+        Topicity::Distinct => '%',
     }
 }
 
@@ -1460,6 +1462,7 @@ relation_serde! {
     Topicity::Homotopic => "homotopic",
     Topicity::Enantiotopic => "enantiotopic",
     Topicity::Diastereotopic => "diastereotopic",
+    Topicity::Distinct => "distinct",
 }
 
 relation_serde! {
@@ -2149,6 +2152,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }), "{:pair [0 1] :relation :homotopic}")]
+    #[case::distinct(TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Distinct) }), "{:pair [0 1] :relation :distinct}")]
     #[case::undetermined(TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }), "{:pair [0 1] :relation :undetermined}")]
     #[case::lit_set(TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }), "{:pair [1 2] :relation [:homotopic :enantiotopic]}")]
     #[case::not_set(TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }), "{:pair [1 2] :relation {:not-in [:diastereotopic]}}")]
@@ -2159,6 +2163,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit("{:pair [0 1] :relation :homotopic}", TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
+    #[case::distinct("{:pair [0 1] :relation :distinct}", TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Distinct) }))]
     #[case::undetermined("{:pair [0 1] :relation :undetermined}", TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }))]
     #[case::lit_set("{:pair [1 2] :relation [:homotopic :enantiotopic]}", TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
     #[case::not_set("{:pair [1 2] :relation {:not-in [:diastereotopic]}}", TopicityDsl(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))]

@@ -96,8 +96,8 @@ fn test_isotope_mass_form_is_compatible(
     TopicityRelationForm::not(Topicity::Enantiotopic),
     true
 )]
-#[case::full_complement(TopicityRelationForm::Undetermined, TopicityRelationForm::not_set([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic]), false)]
-#[case::complement_union(TopicityRelationForm::not(Topicity::Homotopic), TopicityRelationForm::not_set([Topicity::Enantiotopic, Topicity::Diastereotopic]), false)]
+#[case::full_complement(TopicityRelationForm::Undetermined, TopicityRelationForm::not_set([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct]), false)]
+#[case::complement_union(TopicityRelationForm::not(Topicity::Homotopic), TopicityRelationForm::not_set([Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct]), false)]
 fn test_topicity_relation_form_is_compatible(
     #[case] a: TopicityRelationForm,
     #[case] b: TopicityRelationForm,
