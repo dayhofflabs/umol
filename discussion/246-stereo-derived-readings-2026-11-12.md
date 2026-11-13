@@ -839,7 +839,7 @@ Only import paths changed: those of the moved file and those of its one user,
 `ir/view/stereo.rs`. `ir::molecule` re-exports the three types, as it does for its other
 submodules. The tests of `umol-graph-ir` pass with the default features.
 
-#### S1b — Generic search
+#### S1b — Generic search **Done**
 
 - **Module:** `ir/canonicalize.rs` → `ir/entity.rs` and `ir/symmetry.rs`.
 - **Changes:** `DescriptionLevel` moves to `ir/entity.rs`, beside `EntityKind`. `InitialColors`,
@@ -848,6 +848,22 @@ submodules. The tests of `umol-graph-ir` pass with the default features.
   `ir/symmetry.rs` with their tests. `ir::canonicalize` keeps the trait, the context, the choice
   of level, the leaf-key helpers and the errors, and imports the search.
 - **Kind:** move (green). `[dep: S1a]`
+
+The listed items moved together with what belongs to them: `AutomorphismAdapterOutput`,
+`source_orbits_from_generators`, and the types of the canonical search, `CanonicalSearchStats`,
+`CanonicalCandidate` and `CanonicalSearchResult`. `ir::canonicalize` keeps `DeferredKey`,
+`TopologySearchInput`, `color_representatives`, `molecule_remapping` and `hash_value`.
+
+The moved code is unchanged. The items and fields that `ir::canonicalize` and the tests use are
+visible within the crate, and rustfmt rewrapped three signatures that the visibility made longer
+than the line. `ir/canonicalize.rs` differs from before only in its imports.
+
+The tests that moved are `test_description_level_order`, to `ir/entity.rs`, and, to
+`ir/symmetry/tests.rs`, `test_source_orbits_from_generators`, the five tests of
+`OrderedPartition`, `test_canonical_search_stats` with its helper, and `test_rank_colors`. The
+tests of the search that take molecules as input are in the molecule's test file and move with
+it. The tests of `umol-graph-ir` pass with the default features, the same 12,443 unit tests as
+before.
 
 #### S1c — Colors and remapping checks of the two types
 

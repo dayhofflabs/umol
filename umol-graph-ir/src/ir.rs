@@ -34,6 +34,7 @@ pub(crate) mod span;
 pub(crate) mod spin;
 pub(crate) mod stereo;
 pub(crate) mod substructure;
+pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod view;
 

@@ -109,8 +109,18 @@ impl TryFrom<u8> for EntityKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum DescriptionLevel {
+    Topology,
+    Constitution,
+    Structure,
+    Full,
+}
+
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+
     use rstest::rstest;
 
     use super::*;
@@ -183,5 +193,17 @@ mod tests {
         input.sort();
 
         assert_eq!(input, expected);
+    }
+
+    #[rstest]
+    #[case::topology_constitution(DescriptionLevel::Topology, DescriptionLevel::Constitution)]
+    #[case::constitution_structure(DescriptionLevel::Constitution, DescriptionLevel::Structure)]
+    #[case::structure_full(DescriptionLevel::Structure, DescriptionLevel::Full)]
+    fn test_description_level_order(
+        #[case] lower: DescriptionLevel,
+        #[case] upper: DescriptionLevel,
+    ) {
+        assert_eq!(lower.cmp(&upper), Ordering::Less);
+        assert_eq!(lower.max(upper), upper);
     }
 }
