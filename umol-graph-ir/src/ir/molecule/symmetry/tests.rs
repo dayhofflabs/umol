@@ -16,7 +16,7 @@ use crate::ir::{
     NoncovalentBondKind, NumForm, StereoAtomConstraintForm, StereoLigandPair, TopicityForm,
     TopicityRelationForm,
 };
-use crate::mol_dsl;
+use crate::{mol_dsl, mol_dsl_concrete};
 
 fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
     GraphSymmetryConfig {
@@ -537,6 +537,204 @@ fn test_remapping_preserves_stereo(
 
     assert_eq!(
         remapping_preserves_stereo(&source, &target, &incidence_graph, &images),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::meso_carbons_exchanged(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                           {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]}"#
+    ),
+    vec![1, 0, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15],
+    true
+)]
+#[case::chiral_carbons_exchanged(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                           {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
+    ),
+    vec![1, 0, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15],
+    false
+)]
+#[case::implicit_hydrogen_equal_ligands_exchanged(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
+    ),
+    vec![0, 1, 3, 2, 4, 6, 5, 7],
+    true
+)]
+#[case::implicit_hydrogen_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    false
+)]
+#[case::stereo_bond_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h3" "C#h" "C#h" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    true
+)]
+#[case::undetermined_coset_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    true
+)]
+#[case::out_of_range_coset_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th9"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    false
+)]
+fn test_remapping_mirrors_stereo(
+    #[case] molecule: Molecule,
+    #[case] images: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_mirrors_stereo(&molecule, &incidence_graph, &images),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::implicit_hydrogen_equal_ligands_exchanged(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
+    ),
+    vec![0, 1, 3, 2, 4, 6, 5, 7],
+    Entity::StereoAtom(StereoAtomId(0)),
+    1,
+    true
+)]
+#[case::implicit_hydrogen_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    Entity::StereoAtom(StereoAtomId(0)),
+    1,
+    false
+)]
+#[case::entity_changed_other_preserved(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+            :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
+                           {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 7, 6, 8, 9, 10, 11, 12, 14, 13, 15, 16],
+    Entity::StereoAtom(StereoAtomId(1)),
+    1,
+    true
+)]
+#[case::other_entity_changed(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+            :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
+                           {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 7, 6, 8, 9, 10, 11, 12, 14, 13, 15, 16],
+    Entity::StereoAtom(StereoAtomId(0)),
+    1,
+    false
+)]
+#[case::stereo_bond_equal_ligands_exchanged(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "F" "F" "Cl" "Br"]
+            :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#
+    ),
+    vec![0, 1, 3, 2, 4, 5, 6, 8, 7, 9, 10, 11],
+    Entity::StereoBond(StereoBondId(0)),
+    1,
+    true
+)]
+#[case::undetermined_coset_equal_ligands_exchanged(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#
+    ),
+    vec![0, 1, 3, 2, 4, 6, 5, 7],
+    Entity::StereoAtom(StereoAtomId(0)),
+    1,
+    true
+)]
+#[case::undetermined_coset_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "F" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    Entity::StereoAtom(StereoAtomId(0)),
+    1,
+    false
+)]
+#[case::out_of_range_coset_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th9"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    Entity::StereoAtom(StereoAtomId(0)),
+    0,
+    false
+)]
+#[case::kindless_identity(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "*"}]}"#
+    ),
+    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    Entity::StereoAtom(StereoAtomId(0)),
+    0,
+    false
+)]
+fn test_remapping_changes_coset(
+    #[case] molecule: Molecule,
+    #[case] images: Vec<u32>,
+    #[case] entity: Entity,
+    #[case] coset: u32,
+    #[case] expected: bool,
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
+
+    assert_eq!(
+        remapping_changes_coset(&molecule, &incidence_graph, &images, entity, coset),
         expected,
     );
 }

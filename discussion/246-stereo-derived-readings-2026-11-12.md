@@ -1021,7 +1021,7 @@ pass: 27,955 Rust tests of the four crates with all features for `umol-graph-ir`
 
 ### S3 — Check and partitions
 
-#### S3a — Checks with given cosets
+#### S3a — Checks with given cosets **Done**
 
 - **Module:** `ir::molecule::symmetry`.
 - **Adds:** the private checks `remapping_mirrors_stereo` and `remapping_changes_coset` beside
@@ -1033,6 +1033,26 @@ pass: 27,955 Rust tests of the four crates with all features for `umol-graph-ir`
   with an implicit hydrogen, a stereo entity with an undetermined coset, and a record with a
   coset outside the range of its kind.
 - **Kind:** additive (green). `[dep: S1c, S0a]`
+
+Both checks are in `ir/molecule/symmetry.rs`, right after `remapping_preserves_stereo`, which is
+unchanged. Each repeats its loop over the stereo atoms and the stereo bonds.
+
+- `remapping_mirrors_stereo` takes the mirror image of each form with the existing `mirror` and
+  compares as `remapping_preserves_stereo` does.
+- `remapping_changes_coset` gives the stereo entity its own coset as a source and the given
+  coset as an image. Its own coset is the stored one, or the first coset of its kind when the
+  stored one is not a literal. A stereo entity without a kind has no coset to change, and the
+  check fails.
+
+The two functions are compiled for tests only until S4a calls them.
+
+`test_remapping_mirrors_stereo` has seven cases and `test_remapping_changes_coset` nine, on
+1,2-dichloro-1,2-difluoroethane, 1-chloro-1-fluoropropane, dichlorofluoromethane with its
+implicit hydrogen, but-2-ene, 1-bromo-1-chloro-2,2-difluoroethene and
+bromochlorofluoroiodomethane. They cover an exchange of two equal ligands, an exchange of two
+equivalent centers, the identity, a second stereo entity that must stay, an undetermined coset,
+a coset outside the range of its kind and an entity without a kind. The tests of
+`umol-graph-ir` pass with the default features, and clippy passes for all its targets.
 
 #### S3b — Partitions with single cells
 

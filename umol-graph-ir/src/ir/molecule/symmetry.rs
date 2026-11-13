@@ -661,6 +661,193 @@ pub(crate) fn remapping_preserves_stereo(
     true
 }
 
+/// Whether the remapping `images` of `molecule` onto itself carries every stereo entity onto a
+/// stereo entity with the same site and the mirror image of its form.
+///
+/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `molecule`.
+/// A form without a mirror image, as with a coset outside the range of its kind, is not carried.
+#[cfg(test)]
+fn remapping_mirrors_stereo(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    images: &[NodeId],
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
+        let mapped = ligands
+            .iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, image_ligands)
+    };
+
+    for stereo in molecule.stereo_atoms().iter() {
+        let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(stereo.id())) else {
+            return false;
+        };
+        let image = molecule.stereo_atom(image_id);
+        if entity_image(Entity::Atom(stereo.site_id())) != Entity::Atom(image.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
+            return false;
+        };
+        let Some(mirrored) = stereo.attributes().mirror() else {
+            return false;
+        };
+        if !mirrored
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(image.attributes()))
+        {
+            return false;
+        }
+    }
+
+    for stereo in molecule.stereo_bonds().iter() {
+        let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(stereo.id())) else {
+            return false;
+        };
+        let image = molecule.stereo_bond(image_id);
+        if entity_image(Entity::Bond(stereo.site_id())) != Entity::Bond(image.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
+            return false;
+        };
+        let Some(mirrored) = stereo.attributes().mirror() else {
+            return false;
+        };
+        if !mirrored
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(image.attributes()))
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Whether the remapping `images` of `molecule` onto itself preserves every stereo entity except
+/// `entity`, whose coset it changes to `coset`.
+///
+/// Every stereo entity is carried onto a stereo entity with the same site and the same form,
+/// where `entity` has its own coset as a source and `coset` as an image. Its own coset is the
+/// stored one, or the first coset of its kind when the stored one is not a literal. `images`
+/// holds the image of each node of `incidence_graph`, the incidence graph of `molecule`. A stereo
+/// entity without a kind has no coset to change.
+#[cfg(test)]
+fn remapping_changes_coset(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    images: &[NodeId],
+    entity: Entity,
+    coset: u32,
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
+        let mapped = ligands
+            .iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, image_ligands)
+    };
+
+    for stereo in molecule.stereo_atoms().iter() {
+        let source = Entity::StereoAtom(stereo.id());
+        let target = entity_image(source);
+        let Entity::StereoAtom(image_id) = target else {
+            return false;
+        };
+        let image = molecule.stereo_atom(image_id);
+        if entity_image(Entity::Atom(stereo.site_id())) != Entity::Atom(image.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
+            return false;
+        };
+        let mut form = stereo.attributes().clone();
+        if source == entity {
+            let Some(kind) = form.configuration.kind() else {
+                return false;
+            };
+            let own = form
+                .configuration
+                .coset()
+                .and_then(AsLit::as_lit)
+                .unwrap_or(0);
+            form.configuration = StereoConfigurationForm::kinded(kind, own);
+        }
+        let mut image_form = image.attributes().clone();
+        if target == entity {
+            let Some(kind) = image_form.configuration.kind() else {
+                return false;
+            };
+            image_form.configuration = StereoConfigurationForm::kinded(kind, coset);
+        }
+        if !form
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(&image_form))
+        {
+            return false;
+        }
+    }
+
+    for stereo in molecule.stereo_bonds().iter() {
+        let source = Entity::StereoBond(stereo.id());
+        let target = entity_image(source);
+        let Entity::StereoBond(image_id) = target else {
+            return false;
+        };
+        let image = molecule.stereo_bond(image_id);
+        if entity_image(Entity::Bond(stereo.site_id())) != Entity::Bond(image.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
+            return false;
+        };
+        let mut form = stereo.attributes().clone();
+        if source == entity {
+            let Some(kind) = form.configuration.kind() else {
+                return false;
+            };
+            let own = form
+                .configuration
+                .coset()
+                .and_then(AsLit::as_lit)
+                .unwrap_or(0);
+            form.configuration = StereoConfigurationForm::kinded(kind, own);
+        }
+        let mut image_form = image.attributes().clone();
+        if target == entity {
+            let Some(kind) = image_form.configuration.kind() else {
+                return false;
+            };
+            image_form.configuration = StereoConfigurationForm::kinded(kind, coset);
+        }
+        if !form
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(&image_form))
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
 pub(crate) fn retain_stereo_preserving_generators(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
