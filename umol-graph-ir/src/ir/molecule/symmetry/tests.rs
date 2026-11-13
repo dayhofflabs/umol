@@ -10,6 +10,9 @@ use crate::ir::bond::BondForm;
 use crate::ir::coloring::ConstitutionColoring;
 use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
+use crate::ir::symmetry::{
+    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, OrderedPartition,
+};
 use crate::ir::{
     ArithExpr, AromaticSystemForm, AromaticSystemId, AtomConstraintForm, DativeBondForm,
     DativeBondId, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
@@ -1390,5 +1393,107 @@ fn test_initial_colors_error(#[case] molecule: Molecule, #[case] level: Descript
     assert_eq!(
         initial_colors(&molecule, &incidence_graph, level),
         Err(Contradiction)
+    );
+}
+
+#[rstest]
+#[case::equivalent_atom(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                           {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
+    ),
+    vec![0],
+    vec![1],
+    true
+)]
+#[case::mirror_image_atom(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                           {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]}"#
+    ),
+    vec![0],
+    vec![1],
+    false
+)]
+#[case::atom_fixed_equivalent_atom(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C#h2" "C" "C#h2" "Cl" "Cl" "H" "H"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]
+                    [0 4 "1"] [2 5 "1"] [0 6 "1"] [2 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 3 4 6] :attrs "Th0"}
+                           {:site 2 :ligands [1 3 5 7] :attrs "Th0"}]}"#
+    ),
+    vec![1, 0],
+    vec![1, 2],
+    true
+)]
+#[case::atom_fixed_mirror_image_atom(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C#h2" "C" "C#h2" "Cl" "Cl" "H" "H"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]
+                    [0 4 "1"] [2 5 "1"] [0 6 "1"] [2 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 3 4 6] :attrs "Th0"}
+                           {:site 2 :ligands [1 3 5 7] :attrs "Th1"}]}"#
+    ),
+    vec![1, 0],
+    vec![1, 2],
+    false
+)]
+#[case::different_colors(
+    mol_dsl_concrete!(
+        r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                           {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
+    ),
+    vec![0],
+    vec![3],
+    false
+)]
+fn test_remapping_exists_individualized(
+    #[case] molecule: Molecule,
+    #[case] source: Vec<u32>,
+    #[case] target: Vec<u32>,
+    #[case] expected: bool,
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let partition = |atoms: Vec<u32>| {
+        atoms.into_iter().fold(
+            OrderedPartition::from_descriptors(&adapter.colors),
+            |partition, atom| {
+                let node = incidence_graph.node_of(Entity::Atom(AtomId(atom)));
+                let cell_index = partition
+                    .cells
+                    .iter()
+                    .position(|cell| cell.contains(&node))
+                    .unwrap();
+                partition.individualize(cell_index, node)
+            },
+        )
+    };
+
+    assert_eq!(
+        remapping_exists(
+            &adapter,
+            partition(source),
+            &adapter,
+            partition(target),
+            AutomorphismAlgorithm::Nauty,
+            &|images: &[NodeId]| {
+                remapping_preserves_incidences(&adapter, &adapter, images)
+                    && remapping_preserves_stereo(&molecule, &molecule, &incidence_graph, images)
+            },
+            true,
+            &|generators: &mut Vec<Vec<NodeId>>| {
+                retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
+            },
+        ),
+        expected,
     );
 }

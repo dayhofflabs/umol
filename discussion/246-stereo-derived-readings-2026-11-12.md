@@ -1054,15 +1054,32 @@ equivalent centers, the identity, a second stereo entity that must stay, an unde
 a coset outside the range of its kind and an entity without a kind. The tests of
 `umol-graph-ir` pass with the default features, and clippy passes for all its targets.
 
-#### S3b — Partitions with single cells
+#### S3b — Partitions with single cells **Done**
 
-- **Module:** `ir::symmetry`.
+- **Module:** `ir::molecule::symmetry`, tests only.
 - **Adds:** no function. A given atom is made a single cell with the existing
   `OrderedPartition::individualize`, once per atom, in the partition of the source and in that
   of the target of `remapping_exists`.
 - **Tests:** an atom kept fixed and an atom sent to another, with `remapping_exists`, on the
   S0a fixtures; two atoms of different colors give no remapping.
 - **Kind:** additive (green). `[dep: S1b, S0a]`
+
+`test_remapping_exists_individualized` is in `ir/molecule/symmetry/tests.rs`, where the colors
+and the checks of a molecule are. Each case gives a molecule, the atoms made single cells in the
+partition of the source, and those in the partition of the target, in the same order. The call
+is the one `canonical_eq` makes at the Structure level, with the molecule as source and as
+target.
+
+| Case | Molecule | Source | Target | Remapping |
+| --- | --- | --- | --- | --- |
+| `equivalent_atom` | 1,2-dichloro-1,2-difluoroethane, chiral form | C0 | C1 | yes |
+| `mirror_image_atom` | 1,2-dichloro-1,2-difluoroethane, meso form | C0 | C1 | no |
+| `atom_fixed_equivalent_atom` | trans-1,3-dichlorocyclobutane | C1, C0 | C1, C2 | yes |
+| `atom_fixed_mirror_image_atom` | cis-1,3-dichlorocyclobutane | C1, C0 | C1, C2 | no |
+| `different_colors` | 1,2-dichloro-1,2-difluoroethane, chiral form | C0 | F3 | no |
+
+The tests of `umol-graph-ir` pass with the default features, and clippy passes for all its
+targets.
 
 #### S3c — `StereogenicUnit`
 
