@@ -1689,6 +1689,14 @@ impl AsColor for StereoAtomForm {
             stereogenicity: self.constraints.stereogenicity(),
         }
     }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        StereoAtomColor {
+            kind: self.configuration.kind(),
+            stereogenicity: &StereogenicityForm::Undetermined,
+        }
+    }
 }
 
 impl StereoBondForm {
@@ -1767,6 +1775,14 @@ impl AsColor for StereoBondForm {
         StereoBondColor {
             kind: self.configuration.kind(),
             stereogenicity: self.constraints.stereogenicity(),
+        }
+    }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        StereoBondColor {
+            kind: self.configuration.kind(),
+            stereogenicity: &StereogenicityForm::Undetermined,
         }
     }
 }

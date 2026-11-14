@@ -1522,9 +1522,9 @@ and [full medians](../scratch/246-s4a/baseline-results.json) retain the commands
 results. Source hashes match before and after both runs. The graph-IR package tests pass
 (12,538 library tests, three ignored, plus integration and documentation tests). Both benchmark
 targets pass the preflight checks, and clippy with `--all-targets -- -D warnings` passes for
-`umol-graph-ir` and `umol-graph`. Formatting and the diff check pass. S4b is next.
+`umol-graph-ir` and `umol-graph`. Formatting and the diff check pass.
 
-#### S4b — `AsColor::as_inherent_color`
+#### S4b — `AsColor::as_inherent_color` **Done**
 
 - **Module:** `ir::traits`, the eight entity-form modules and `ir::span`.
 - **Tests first:** add exact cases for both methods on each form. `as_color` retains the current
@@ -1538,6 +1538,52 @@ targets pass the preflight checks, and clippy with `--all-targets -- -D warnings
   method normalizes a form. The trait and color types keep their existing crate visibility.
 - **Kind:** additive (green). `[dep: S4a]`
 
+The method has implementations for all eight forms and `EntitySpan`. Each result borrows the
+inherent fields and uses an empty constraint store of the same color type. The empty stores are
+shared per type; stereo colors use `StereogenicityForm::Undetermined`. Full colors borrow the
+stored constraints. The four former whole-form wrappers now name their borrowed fields in the
+same declaration order as their forms. The stereo and positional projections keep their existing
+full-color definitions.
+
+The 42 new cases cover empty and nonempty stores, contradictory and raw constraints, raw scalar
+and coset forms, all four span variants, and collapse of a modification confined to constraints.
+Both color readings have equal-color hash checks. The cases assert that the supplied forms stay
+structurally unchanged. The new method and its empty-store imports are test-gated until S4c
+adds the first production callers; S4c removes those guards.
+
+The graph-IR package tests pass: 12,580 library tests, three ignored, plus integration and
+documentation tests. Clippy passes for all targets without warnings. Formatting and the diff
+check pass.
+
+The 24 `pre-246-colors` cases were compared with the same inputs, Nauty, 100 samples, 0.5 s
+warm-up and 1.5 s measurement time. The original baseline estimates and benchmark source match
+their saved hashes. Median changes in the first comparison are:
+
+| Case | Molecule C | Molecule eq | Span C | Span eq |
+| --- | ---: | ---: | ---: | ---: |
+| entity_constraints | -1.53% | -1.77% | -1.67% | +0.49% |
+| raw_forms | -2.59% | -1.70% | -1.50% | +0.66% |
+| aromatic_nonuniform | -1.36% | -1.34% | -0.22% | +0.69% |
+| multicenter_nonuniform | -1.56% | -1.05% | -0.25% | +1.02% |
+| dative_roles | -1.07% | -0.50% | +0.13% | +2.13% |
+| stereo_frame_constraints | -0.89% | -1.17% | -0.25% | +1.53% |
+
+Criterion initially flagged the raw and dative span-equality cases. A focused rerun of those
+cases and their molecule counterparts did not repeat the flags. The raw-span median was
+42.777 µs against 42.864 µs; the dative-span median was 4.551 µs against 4.540 µs, within
+Criterion's noise threshold. This check found no reproducible regression on these workloads.
+
+```text
+cargo bench --locked -p umol-graph-ir --bench canonicalize -- \
+    --warm-up-time 0.5 --measurement-time 1.5 --baseline pre-246-colors \
+    '^canonicalize/colors/'
+cargo bench --locked -p umol-graph-ir --bench canonicalize -- \
+    --warm-up-time 0.5 --measurement-time 1.5 --baseline pre-246-colors \
+    '^canonicalize/colors/(molecule|reaction_span)/canonical_eq_equal/(raw_forms|dative_roles)$'
+```
+
+The [comparison record](../scratch/246-s4b/comparison-results.json) retains both runs' medians.
+
 #### S4c — Shared search colors and canonicalization callers
 
 - **Module:** `ir::molecule::symmetry`, `ir::reaction_span::symmetry`, and the two owning
@@ -1549,8 +1595,9 @@ targets pass the preflight checks, and clippy with `--all-targets -- -D warnings
   Keep the existing incompatible electron-count, kind, frame and literal-coset cases. Establish
   unchanged canonical representatives and comparison results before changing the call sites.
 - **Changes:** add `include_constraints` to the shared color constructors and choose between the
-  two `AsColor` methods on the same ranking path. Limit stereo compatibility checks to the data
-  selected by the caller. Canonicalization passes `true` at every molecule and reaction-span
+  two `AsColor` methods on the same ranking path. Enable `as_inherent_color` and its empty-store
+  imports outside tests as these production callers land. Limit stereo compatibility checks to
+  the data selected by the caller. Canonicalization passes `true` at every molecule and reaction-span
   call and retains its own upfront normalization. Its direct `as_color` reads, leaf ordering,
   normalized stereo checks and generator filters retain their behavior.
 - **Kind:** breaking internally, red-to-green within the subitem as all call sites migrate.
@@ -1846,9 +1893,9 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S3 and S4a are complete. The remaining path is:
+S0-S3, S4a and S4b are complete. The remaining path is:
 
-S4b -> S4c -> S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S4c -> S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
 S4d also follows S4a and must finish before S4e. It is independent of S4b-S4c. The shared color
 calculation is therefore established and checked before its graph-symmetry consumer is replaced;

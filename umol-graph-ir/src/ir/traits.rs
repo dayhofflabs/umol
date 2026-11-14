@@ -201,24 +201,30 @@ pub enum ReframeKind {
 
 /// The color of a form: its frame-independent part, as a value that borrows from the form.
 ///
-/// Canonicalization ranks the colors of the entities of one kind and searches on the ranks. The
-/// receiver is a normal form.
+/// `as_color` includes the frame-independent constraints; `as_inherent_color` omits them. Both
+/// read the stored fields without normalizing the form. Canonicalization supplies normalized
+/// forms, ranks the colors of entities of one kind, and searches on the ranks.
 ///
 /// # Semantic properties
 ///
 /// Invariance: for every normal form and every compatible action, the color is equal before and
 /// after [`FrameTransport::reframe_by`].
 ///
-/// Completeness: a form without frame-relative parts is determined by its color and its positional
-/// parts. Two such normal forms with equal colors and equal positional parts are equal.
+/// Completeness of `as_color`: a form without frame-relative parts is determined by its color and
+/// its positional parts. Two such normal forms with equal colors and equal positional parts are
+/// equal.
 pub(crate) trait AsColor {
     /// The frame-independent part of the form.
     type Color<'a>: Ord + Hash
     where
         Self: 'a;
 
-    /// The color of the form.
+    /// The frame-independent inherent fields and constraints.
     fn as_color(&self) -> Self::Color<'_>;
+
+    /// The same inherent fields, with an empty constraints container.
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_>;
 }
 
 /// The frame quotient over an entity aggregate: select a determinate participant frame and restate the

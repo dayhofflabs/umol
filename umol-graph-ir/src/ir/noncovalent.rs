@@ -2,6 +2,8 @@
 
 use std::borrow::Cow;
 use std::sync::Arc;
+#[cfg(test)]
+use std::sync::LazyLock;
 use std::{array, mem};
 
 use strum::VariantArray;
@@ -704,16 +706,31 @@ impl FrameTransport for NoncovalentBondForm {
     }
 }
 
-/// The color of a [`NoncovalentBondForm`]: the whole form, since no part of it depends on a participant
-/// frame.
+/// The inherent fields and constraint container of a [`NoncovalentBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct NoncovalentBondColor<'a>(&'a NoncovalentBondForm);
+pub(crate) struct NoncovalentBondColor<'a> {
+    kind: &'a NoncovalentBondKindForm,
+    constraints: &'a NoncovalentBondConstraintsForm,
+}
 
 impl AsColor for NoncovalentBondForm {
     type Color<'a> = NoncovalentBondColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        NoncovalentBondColor(self)
+        NoncovalentBondColor {
+            kind: &self.kind,
+            constraints: &self.constraints,
+        }
+    }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        static EMPTY_CONSTRAINTS: LazyLock<NoncovalentBondConstraintsForm> =
+            LazyLock::new(NoncovalentBondConstraintsForm::new);
+        NoncovalentBondColor {
+            kind: &self.kind,
+            constraints: &EMPTY_CONSTRAINTS,
+        }
     }
 }
 
@@ -811,6 +828,7 @@ pub enum NoncovalentBondKind {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
     use std::{iter, ptr};
 
     use pretty_assertions::assert_eq;
@@ -1775,6 +1793,13 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
     }
 
     #[rstest]
@@ -1794,6 +1819,32 @@ mod tests {
         #[case] expected: Ordering,
     ) {
         assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(NoncovalentBondForm::default(), NoncovalentBondForm::default())]
+    #[case::constraint(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+    )]
+    #[case::kind(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic).with_constraint(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic)
+    )]
+    fn test_noncovalent_bond_form_as_inherent_color(
+        #[case] input: NoncovalentBondForm,
+        #[case] expected: NoncovalentBondForm,
+    ) {
+        let original = input.clone();
+        let color = input.as_inherent_color();
+        let expected_color = expected.as_color();
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 
     #[rustfmt::skip]

@@ -3,6 +3,8 @@
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
+#[cfg(test)]
+use std::sync::LazyLock;
 
 use strum::VariantArray;
 use umol_graph_core::{
@@ -816,11 +818,23 @@ impl AsColor for MulticenterBondForm {
             constraints: &self.constraints,
         }
     }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        static EMPTY_CONSTRAINTS: LazyLock<MulticenterBondConstraintsForm> =
+            LazyLock::new(MulticenterBondConstraintsForm::new);
+        MulticenterBondColor {
+            charge: &self.charge,
+            unpaired_electrons: &self.unpaired_electrons,
+            constraints: &EMPTY_CONSTRAINTS,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -2152,6 +2166,13 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
     }
 
     #[rstest]
@@ -2186,5 +2207,35 @@ mod tests {
         #[case] expected: Ordering,
     ) {
         assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(MulticenterBondForm::default(), MulticenterBondForm::default())]
+    #[case::constraint(
+        MulticenterBondForm::from_electrons(vec![2, 1, 1]).with_charge(-1).with_constraint(MulticenterBondConstraintForm::electron_count(4)),
+        MulticenterBondForm::from_electrons(vec![1, 2, 1]).with_charge(-1)
+    )]
+    #[case::contradiction(
+        MulticenterBondForm::default().with_constraint(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([]))),
+        MulticenterBondForm::default()
+    )]
+    #[case::raw_fields(
+        MulticenterBondForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([4]))),
+        MulticenterBondForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8))
+    )]
+    fn test_multicenter_bond_form_as_inherent_color(
+        #[case] input: MulticenterBondForm,
+        #[case] expected: MulticenterBondForm,
+    ) {
+        let original = input.clone();
+        let color = input.as_inherent_color();
+        let expected_color = expected.as_color();
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 }

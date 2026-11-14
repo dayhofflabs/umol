@@ -1,6 +1,8 @@
 //! Atom forms and updates shared across crates.
 
 use std::collections::BTreeSet;
+#[cfg(test)]
+use std::sync::LazyLock;
 
 use strum::VariantArray;
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
@@ -261,16 +263,46 @@ impl From<&str> for AtomForm {
     }
 }
 
-/// The color of an [`AtomForm`]: the whole form, since no part of it depends on a participant
-/// frame.
+/// The inherent fields and constraint container of an [`AtomForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct AtomColor<'a>(&'a AtomForm);
+pub(crate) struct AtomColor<'a> {
+    element: &'a ElementForm,
+    isotope_mass: &'a IsotopeMassForm,
+    charge: &'a NumForm,
+    implicit_hydrogens: &'a NumForm,
+    lone_pairs: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+    constraints: &'a AtomConstraintsForm,
+}
 
 impl AsColor for AtomForm {
     type Color<'a> = AtomColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        AtomColor(self)
+        AtomColor {
+            element: &self.element,
+            isotope_mass: &self.isotope_mass,
+            charge: &self.charge,
+            implicit_hydrogens: &self.implicit_hydrogens,
+            lone_pairs: &self.lone_pairs,
+            unpaired_electrons: &self.unpaired_electrons,
+            constraints: &self.constraints,
+        }
+    }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        static EMPTY_CONSTRAINTS: LazyLock<AtomConstraintsForm> =
+            LazyLock::new(AtomConstraintsForm::new);
+        AtomColor {
+            element: &self.element,
+            isotope_mass: &self.isotope_mass,
+            charge: &self.charge,
+            implicit_hydrogens: &self.implicit_hydrogens,
+            lone_pairs: &self.lone_pairs,
+            unpaired_electrons: &self.unpaired_electrons,
+            constraints: &EMPTY_CONSTRAINTS,
+        }
     }
 }
 
@@ -825,6 +857,7 @@ impl Lattice for IsotopeMassForm {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -1149,6 +1182,13 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
     }
 
     #[rstest]
@@ -1203,6 +1243,37 @@ mod tests {
         #[case] expected: Ordering,
     ) {
         assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(AtomForm::default(), AtomForm::default())]
+    #[case::constraints(
+        AtomForm::from_element(Element::C).with_constraints([AtomConstraintForm::valence(4), AtomConstraintForm::Degree(NumForm::Lit(3))]),
+        AtomForm::from_element(Element::C)
+    )]
+    #[case::contradiction(
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([]))),
+        AtomForm::from_element(Element::C)
+    )]
+    #[case::raw_fields(
+        AtomForm::new(ElementForm::lit_set([Element::C])).with_charge(NumForm::lit_set([1])).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::new(ElementForm::lit_set([Element::C])).with_charge(NumForm::lit_set([1]))
+    )]
+    #[case::fields(
+        AtomForm::from_element(Element::N).with_isotope_mass(15_u32).with_charge(-1).with_implicit_hydrogens(2).with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(AtomConstraintForm::valence(3)),
+        AtomForm::from_element(Element::N).with_isotope_mass(15_u32).with_charge(-1).with_implicit_hydrogens(2).with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8))
+    )]
+    fn test_atom_form_as_inherent_color(#[case] input: AtomForm, #[case] expected: AtomForm) {
+        let original = input.clone();
+        let color = input.as_inherent_color();
+        let expected_color = expected.as_color();
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 
     #[rustfmt::skip]

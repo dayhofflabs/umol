@@ -3,6 +3,8 @@
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
+#[cfg(test)]
+use std::sync::LazyLock;
 
 use strum::VariantArray;
 use umol_graph_core::{
@@ -784,22 +786,38 @@ impl From<&str> for DativeBondForm {
     }
 }
 
-/// The color of a [`DativeBondForm`]: the whole form, since no part of it depends on a participant
-/// frame.
+/// The inherent fields and constraint container of a [`DativeBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct DativeBondColor<'a>(&'a DativeBondForm);
+pub(crate) struct DativeBondColor<'a> {
+    order: &'a NumForm,
+    constraints: &'a DativeBondConstraintsForm,
+}
 
 impl AsColor for DativeBondForm {
     type Color<'a> = DativeBondColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        DativeBondColor(self)
+        DativeBondColor {
+            order: &self.order,
+            constraints: &self.constraints,
+        }
+    }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        static EMPTY_CONSTRAINTS: LazyLock<DativeBondConstraintsForm> =
+            LazyLock::new(DativeBondConstraintsForm::new);
+        DativeBondColor {
+            order: &self.order,
+            constraints: &EMPTY_CONSTRAINTS,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -1998,6 +2016,13 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
     }
 
     #[rstest]
@@ -2022,5 +2047,31 @@ mod tests {
         #[case] expected: Ordering,
     ) {
         assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(DativeBondForm::default(), DativeBondForm::default())]
+    #[case::constraint(
+        DativeBondForm::from_order(2).with_constraint(DativeBondConstraintForm::aromatic(true)),
+        DativeBondForm::from_order(2)
+    )]
+    #[case::raw_order(
+        DativeBondForm::new(NumForm::lit_set([1])).with_constraint(DativeBondConstraintForm::aromatic(true)),
+        DativeBondForm::new(NumForm::lit_set([1]))
+    )]
+    fn test_dative_bond_form_as_inherent_color(
+        #[case] input: DativeBondForm,
+        #[case] expected: DativeBondForm,
+    ) {
+        let original = input.clone();
+        let color = input.as_inherent_color();
+        let expected_color = expected.as_color();
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 }

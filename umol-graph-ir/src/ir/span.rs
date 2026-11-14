@@ -140,6 +140,24 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
             Self::Added(value) => EntitySpan::Added(value.as_color()),
         }
     }
+
+    #[cfg(test)]
+    fn as_inherent_color(&self) -> Self::Color<'_> {
+        match self {
+            Self::Unchanged(value) => EntitySpan::Unchanged(value.as_inherent_color()),
+            Self::Removed(value) => EntitySpan::Removed(value.as_inherent_color()),
+            Self::Modified { lhs, rhs } => {
+                let lhs = lhs.as_inherent_color();
+                let rhs = rhs.as_inherent_color();
+                if lhs == rhs {
+                    EntitySpan::Unchanged(lhs)
+                } else {
+                    EntitySpan::Modified { lhs, rhs }
+                }
+            }
+            Self::Added(value) => EntitySpan::Added(value.as_inherent_color()),
+        }
+    }
 }
 
 /// A molecule-level constraint's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`.
@@ -212,13 +230,14 @@ impl FrameTransport for ConstraintSpan {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
 
     use rstest::*;
     use umol_chem::element::Element;
     use umol_perm::{DynPermutation, Permutation};
 
     use super::super::aromatic::AromaticSystemForm;
-    use super::super::atom::AtomForm;
+    use super::super::atom::{AtomForm, ElementForm};
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, RelationalConstraint,
     };
@@ -438,6 +457,77 @@ mod tests {
         #[case] expected: Ordering,
     ) {
         assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+        if expected == Ordering::Equal {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
+    }
+
+    #[rstest]
+    #[case::unchanged(
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4))),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C))
+    )]
+    #[case::removed(
+        EntitySpan::Removed(AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4))),
+        EntitySpan::Removed(AtomForm::from_element(Element::C))
+    )]
+    #[case::added(
+        EntitySpan::Added(AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4))),
+        EntitySpan::Added(AtomForm::from_element(Element::C))
+    )]
+    #[case::modified_constraints(
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(3)),
+            rhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        },
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C))
+    )]
+    #[case::modified_fields(
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            rhs: AtomForm::from_element(Element::N).with_constraint(AtomConstraintForm::valence(3)),
+        },
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::from_element(Element::N),
+        }
+    )]
+    #[case::raw_modified(
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::new(ElementForm::lit_set([Element::C])),
+        },
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::new(ElementForm::lit_set([Element::C])),
+        }
+    )]
+    #[case::raw_fields(
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([0]))
+            .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([])))),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([0])))
+    )]
+    fn test_entity_span_as_inherent_color(
+        #[case] input: EntitySpan<AtomForm>,
+        #[case] expected: EntitySpan<AtomForm>,
+    ) {
+        let original = input.clone();
+        let color = input.as_inherent_color();
+        let expected_color = expected.as_color();
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 
     #[rstest]
