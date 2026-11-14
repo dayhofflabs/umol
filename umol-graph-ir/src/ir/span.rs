@@ -124,6 +124,11 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
     where
         Self: 'a;
 
+    type InherentColor<'a>
+        = EntitySpan<T::InherentColor<'a>>
+    where
+        Self: 'a;
+
     fn as_color(&self) -> Self::Color<'_> {
         match self {
             Self::Unchanged(value) => EntitySpan::Unchanged(value.as_color()),
@@ -141,7 +146,7 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
         match self {
             Self::Unchanged(value) => EntitySpan::Unchanged(value.as_inherent_color()),
             Self::Removed(value) => EntitySpan::Removed(value.as_inherent_color()),
@@ -519,7 +524,7 @@ mod tests {
     ) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

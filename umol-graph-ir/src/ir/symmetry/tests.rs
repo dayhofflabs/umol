@@ -1,8 +1,14 @@
 //! Unit tests for the partitions and the search.
 
+use std::mem::size_of;
+
 use rstest::rstest;
 
 use super::*;
+use crate::ir::atom::{AtomColor, AtomForm};
+use crate::ir::bond::{BondColor, BondForm};
+use crate::ir::dative::{DativeBondColor, DativeBondForm};
+use crate::ir::noncovalent::{NoncovalentBondColor, NoncovalentBondForm};
 
 fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
     AutomorphismAdapter {
@@ -302,4 +308,13 @@ fn test_rank_colors(
 ) {
     assert_eq!(rank_colors(colors, first, &mut ranks), expected_next);
     assert_eq!(ranks, expected_ranks);
+}
+
+#[rstest]
+#[case::atom(size_of::<AtomColor<'_>>(), size_of::<&AtomForm>())]
+#[case::bond(size_of::<BondColor<'_>>(), size_of::<&BondForm>())]
+#[case::dative(size_of::<DativeBondColor<'_>>(), size_of::<&DativeBondForm>())]
+#[case::noncovalent(size_of::<NoncovalentBondColor<'_>>(), size_of::<&NoncovalentBondForm>())]
+fn test_as_color_size(#[case] actual: usize, #[case] expected: usize) {
+    assert_eq!(actual, expected);
 }

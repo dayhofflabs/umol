@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::mem;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
@@ -807,8 +807,16 @@ pub(crate) struct AromaticSystemColor<'a> {
     constraints: &'a AromaticSystemConstraintsForm,
 }
 
+/// The inherent color of [`AromaticSystemForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentAromaticSystemColor<'a> {
+    charge: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+}
+
 impl AsColor for AromaticSystemForm {
     type Color<'a> = AromaticSystemColor<'a>;
+    type InherentColor<'a> = InherentAromaticSystemColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         AromaticSystemColor {
@@ -818,13 +826,10 @@ impl AsColor for AromaticSystemForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        static EMPTY_CONSTRAINTS: LazyLock<AromaticSystemConstraintsForm> =
-            LazyLock::new(AromaticSystemConstraintsForm::new);
-        AromaticSystemColor {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentAromaticSystemColor {
             charge: &self.charge,
             unpaired_electrons: &self.unpaired_electrons,
-            constraints: &EMPTY_CONSTRAINTS,
         }
     }
 }
@@ -2227,7 +2232,7 @@ mod tests {
     ) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

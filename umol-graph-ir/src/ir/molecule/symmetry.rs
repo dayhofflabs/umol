@@ -17,8 +17,10 @@ use super::super::stereo::{
     coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
     Topicity,
 };
-use super::super::symmetry::{rank_colors, InitialColors};
-use super::super::traits::{AsColor, AsLit, FrameTransport, Normalize};
+use super::super::symmetry::{
+    rank_colors, ColorProjection, FullColorProjection, InherentColorProjection, InitialColors,
+};
+use super::super::traits::{AsLit, FrameTransport, Normalize};
 use super::Molecule;
 #[cfg(test)]
 use super::MoleculeEntries;
@@ -918,11 +920,24 @@ pub(crate) fn incidence_color<'a>(
 /// `include_constraints` selects the frame-independent entity constraints in the colors and the
 /// frame-relative stereo constraints in compatibility checks. Configuration compatibility is
 /// checked in both modes. No form is normalized.
+#[inline]
 pub(crate) fn initial_colors(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     level: DescriptionLevel,
     include_constraints: bool,
+) -> Result<InitialColors, Contradiction> {
+    if include_constraints {
+        initial_colors_with::<FullColorProjection>(molecule, incidence_graph, level)
+    } else {
+        initial_colors_with::<InherentColorProjection>(molecule, incidence_graph, level)
+    }
+}
+
+fn initial_colors_with<P: ColorProjection>(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    level: DescriptionLevel,
 ) -> Result<InitialColors, Contradiction> {
     let mut entities = vec![0; incidence_graph.graph().node_count()];
     let position = |entity: Entity| incidence_graph.node_of(entity).index();
@@ -932,11 +947,7 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|atom| {
             (
-                if include_constraints {
-                    atom.attributes().as_color()
-                } else {
-                    atom.attributes().as_inherent_color()
-                },
+                P::color(atom.attributes()),
                 position(Entity::Atom(atom.id())),
             )
         })
@@ -947,11 +958,7 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|bond| {
             (
-                if include_constraints {
-                    bond.attributes().as_color()
-                } else {
-                    bond.attributes().as_inherent_color()
-                },
+                P::color(bond.attributes()),
                 position(Entity::Bond(bond.id())),
             )
         })
@@ -969,11 +976,7 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|bond| {
             (
-                if include_constraints {
-                    bond.attributes().as_color()
-                } else {
-                    bond.attributes().as_inherent_color()
-                },
+                P::color(bond.attributes()),
                 position(Entity::DativeBond(bond.id())),
             )
         })
@@ -988,11 +991,7 @@ pub(crate) fn initial_colors(
             return Err(Contradiction);
         }
         aromatic.push((
-            if include_constraints {
-                attributes.as_color()
-            } else {
-                attributes.as_inherent_color()
-            },
+            P::color(attributes),
             position(Entity::AromaticSystem(system.id())),
         ));
     }
@@ -1006,11 +1005,7 @@ pub(crate) fn initial_colors(
             return Err(Contradiction);
         }
         multicenter.push((
-            if include_constraints {
-                attributes.as_color()
-            } else {
-                attributes.as_inherent_color()
-            },
+            P::color(attributes),
             position(Entity::MulticenterBond(bond.id())),
         ));
     }
@@ -1020,11 +1015,7 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|bond| {
             (
-                if include_constraints {
-                    bond.attributes().as_color()
-                } else {
-                    bond.attributes().as_inherent_color()
-                },
+                P::color(bond.attributes()),
                 position(Entity::NoncovalentBond(bond.id())),
             )
         })
@@ -1040,7 +1031,7 @@ pub(crate) fn initial_colors(
                     .map_err(|_| Contradiction)?;
             }
             let action = Permutation::identity(stereo.ligand_count());
-            if include_constraints {
+            if P::INCLUDE_CONSTRAINTS {
                 attributes
                     .clone()
                     .reframe_by(&action)
@@ -1053,11 +1044,7 @@ pub(crate) fn initial_colors(
                     .ok_or(Contradiction)?;
             }
             stereo_atoms.push((
-                if include_constraints {
-                    attributes.as_color()
-                } else {
-                    attributes.as_inherent_color()
-                },
+                P::color(attributes),
                 position(Entity::StereoAtom(stereo.id())),
             ));
         }
@@ -1070,7 +1057,7 @@ pub(crate) fn initial_colors(
                     .map_err(|_| Contradiction)?;
             }
             let action = Permutation::identity(stereo.ligand_count());
-            if include_constraints {
+            if P::INCLUDE_CONSTRAINTS {
                 attributes
                     .clone()
                     .reframe_by(&action)
@@ -1086,11 +1073,7 @@ pub(crate) fn initial_colors(
                     .ok_or(Contradiction)?;
             }
             stereo_bonds.push((
-                if include_constraints {
-                    attributes.as_color()
-                } else {
-                    attributes.as_inherent_color()
-                },
+                P::color(attributes),
                 position(Entity::StereoBond(stereo.id())),
             ));
         }

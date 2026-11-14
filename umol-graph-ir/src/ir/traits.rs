@@ -219,11 +219,16 @@ pub(crate) trait AsColor {
     where
         Self: 'a;
 
+    /// The frame-independent inherent fields.
+    type InherentColor<'a>: Ord + Hash
+    where
+        Self: 'a;
+
     /// The frame-independent inherent fields and constraints.
     fn as_color(&self) -> Self::Color<'_>;
 
-    /// The same inherent fields, with an empty constraints container.
-    fn as_inherent_color(&self) -> Self::Color<'_>;
+    /// The frame-independent inherent fields without constraints.
+    fn as_inherent_color(&self) -> Self::InherentColor<'_>;
 }
 
 /// The frame quotient over an entity aggregate: select a determinate participant frame and restate the

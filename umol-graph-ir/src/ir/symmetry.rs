@@ -9,6 +9,35 @@ use umol_graph_core::{
 };
 
 use super::incidence::{Incidence, IncidenceGraph};
+use super::traits::AsColor;
+
+pub(crate) trait ColorProjection {
+    type Color<'a, T: AsColor + 'a>: Ord;
+    const INCLUDE_CONSTRAINTS: bool;
+    fn color<T: AsColor>(form: &T) -> Self::Color<'_, T>;
+}
+
+pub(crate) struct FullColorProjection;
+
+impl ColorProjection for FullColorProjection {
+    type Color<'a, T: AsColor + 'a> = T::Color<'a>;
+    const INCLUDE_CONSTRAINTS: bool = true;
+
+    fn color<T: AsColor>(form: &T) -> Self::Color<'_, T> {
+        form.as_color()
+    }
+}
+
+pub(crate) struct InherentColorProjection;
+
+impl ColorProjection for InherentColorProjection {
+    type Color<'a, T: AsColor + 'a> = T::InherentColor<'a>;
+    const INCLUDE_CONSTRAINTS: bool = false;
+
+    fn color<T: AsColor>(form: &T) -> Self::Color<'_, T> {
+        form.as_inherent_color()
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct InitialColors {

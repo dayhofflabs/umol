@@ -517,7 +517,7 @@ fn test_stereo_bond_form_as_inherent_color(
 ) {
     let original = input.clone();
     let color = input.as_inherent_color();
-    let expected_color = expected.as_color();
+    let expected_color = expected.as_inherent_color();
     assert_eq!(color, expected_color);
     let mut actual_hash = DefaultHasher::new();
     let mut expected_hash = DefaultHasher::new();

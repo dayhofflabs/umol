@@ -1,7 +1,6 @@
 //! Atom forms and updates shared across crates.
 
 use std::collections::BTreeSet;
-use std::sync::LazyLock;
 
 use strum::VariantArray;
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
@@ -264,42 +263,35 @@ impl From<&str> for AtomForm {
 
 /// The inherent fields and constraint container of an [`AtomForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct AtomColor<'a> {
+pub(crate) struct AtomColor<'a>(&'a AtomForm);
+
+/// The inherent color of [`AtomForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentAtomColor<'a> {
     element: &'a ElementForm,
     isotope_mass: &'a IsotopeMassForm,
     charge: &'a NumForm,
     implicit_hydrogens: &'a NumForm,
     lone_pairs: &'a NumForm,
     unpaired_electrons: &'a UnpairedElectronsForm,
-    constraints: &'a AtomConstraintsForm,
 }
 
 impl AsColor for AtomForm {
     type Color<'a> = AtomColor<'a>;
+    type InherentColor<'a> = InherentAtomColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        AtomColor {
-            element: &self.element,
-            isotope_mass: &self.isotope_mass,
-            charge: &self.charge,
-            implicit_hydrogens: &self.implicit_hydrogens,
-            lone_pairs: &self.lone_pairs,
-            unpaired_electrons: &self.unpaired_electrons,
-            constraints: &self.constraints,
-        }
+        AtomColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        static EMPTY_CONSTRAINTS: LazyLock<AtomConstraintsForm> =
-            LazyLock::new(AtomConstraintsForm::new);
-        AtomColor {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentAtomColor {
             element: &self.element,
             isotope_mass: &self.isotope_mass,
             charge: &self.charge,
             implicit_hydrogens: &self.implicit_hydrogens,
             lone_pairs: &self.lone_pairs,
             unpaired_electrons: &self.unpaired_electrons,
-            constraints: &EMPTY_CONSTRAINTS,
         }
     }
 }
@@ -1264,7 +1256,7 @@ mod tests {
     fn test_atom_form_as_inherent_color(#[case] input: AtomForm, #[case] expected: AtomForm) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

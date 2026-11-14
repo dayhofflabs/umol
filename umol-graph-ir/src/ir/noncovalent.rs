@@ -1,7 +1,7 @@
 //! Noncovalent bond form.
 
 use std::borrow::Cow;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use std::{array, mem};
 
 use strum::VariantArray;
@@ -706,28 +706,24 @@ impl FrameTransport for NoncovalentBondForm {
 
 /// The inherent fields and constraint container of a [`NoncovalentBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct NoncovalentBondColor<'a> {
+pub(crate) struct NoncovalentBondColor<'a>(&'a NoncovalentBondForm);
+
+/// The inherent color of [`NoncovalentBondForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentNoncovalentBondColor<'a> {
     kind: &'a NoncovalentBondKindForm,
-    constraints: &'a NoncovalentBondConstraintsForm,
 }
 
 impl AsColor for NoncovalentBondForm {
     type Color<'a> = NoncovalentBondColor<'a>;
+    type InherentColor<'a> = InherentNoncovalentBondColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        NoncovalentBondColor {
-            kind: &self.kind,
-            constraints: &self.constraints,
-        }
+        NoncovalentBondColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        static EMPTY_CONSTRAINTS: LazyLock<NoncovalentBondConstraintsForm> =
-            LazyLock::new(NoncovalentBondConstraintsForm::new);
-        NoncovalentBondColor {
-            kind: &self.kind,
-            constraints: &EMPTY_CONSTRAINTS,
-        }
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentNoncovalentBondColor { kind: &self.kind }
     }
 }
 
@@ -1834,7 +1830,7 @@ mod tests {
     ) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

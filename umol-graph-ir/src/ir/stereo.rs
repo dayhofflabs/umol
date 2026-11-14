@@ -1680,8 +1680,15 @@ pub(crate) struct StereoAtomColor<'a> {
     stereogenicity: &'a StereogenicityForm,
 }
 
+/// The inherent color of [`StereoAtomForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentStereoAtomColor {
+    kind: Option<StereoKind>,
+}
+
 impl AsColor for StereoAtomForm {
     type Color<'a> = StereoAtomColor<'a>;
+    type InherentColor<'a> = InherentStereoAtomColor;
 
     fn as_color(&self) -> Self::Color<'_> {
         StereoAtomColor {
@@ -1690,10 +1697,9 @@ impl AsColor for StereoAtomForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        StereoAtomColor {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentStereoAtomColor {
             kind: self.configuration.kind(),
-            stereogenicity: &StereogenicityForm::Undetermined,
         }
     }
 }
@@ -1767,8 +1773,15 @@ pub(crate) struct StereoBondColor<'a> {
     stereogenicity: &'a StereogenicityForm,
 }
 
+/// The inherent color of [`StereoBondForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentStereoBondColor {
+    kind: Option<StereoKind>,
+}
+
 impl AsColor for StereoBondForm {
     type Color<'a> = StereoBondColor<'a>;
+    type InherentColor<'a> = InherentStereoBondColor;
 
     fn as_color(&self) -> Self::Color<'_> {
         StereoBondColor {
@@ -1777,10 +1790,9 @@ impl AsColor for StereoBondForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        StereoBondColor {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentStereoBondColor {
             kind: self.configuration.kind(),
-            stereogenicity: &StereogenicityForm::Undetermined,
         }
     }
 }

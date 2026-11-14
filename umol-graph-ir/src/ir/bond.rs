@@ -1,7 +1,5 @@
 //! Bond forms and updates shared across crates.
 
-use std::sync::LazyLock;
-
 use strum::VariantArray;
 use umol_graph_ir_macros::{Lattice, Normalize};
 
@@ -173,33 +171,29 @@ impl From<&str> for BondForm {
 
 /// The inherent fields and constraint container of a [`BondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct BondColor<'a> {
+pub(crate) struct BondColor<'a>(&'a BondForm);
+
+/// The inherent color of [`BondForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentBondColor<'a> {
     order: &'a NumForm,
     charge: &'a NumForm,
     unpaired_electrons: &'a UnpairedElectronsForm,
-    constraints: &'a BondConstraintsForm,
 }
 
 impl AsColor for BondForm {
     type Color<'a> = BondColor<'a>;
+    type InherentColor<'a> = InherentBondColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        BondColor {
-            order: &self.order,
-            charge: &self.charge,
-            unpaired_electrons: &self.unpaired_electrons,
-            constraints: &self.constraints,
-        }
+        BondColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        static EMPTY_CONSTRAINTS: LazyLock<BondConstraintsForm> =
-            LazyLock::new(BondConstraintsForm::new);
-        BondColor {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentBondColor {
             order: &self.order,
             charge: &self.charge,
             unpaired_electrons: &self.unpaired_electrons,
-            constraints: &EMPTY_CONSTRAINTS,
         }
     }
 }
@@ -576,7 +570,7 @@ mod tests {
     fn test_bond_form_as_inherent_color(#[case] input: BondForm, #[case] expected: BondForm) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

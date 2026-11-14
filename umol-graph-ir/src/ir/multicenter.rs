@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::mem;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
@@ -806,8 +806,16 @@ pub(crate) struct MulticenterBondColor<'a> {
     constraints: &'a MulticenterBondConstraintsForm,
 }
 
+/// The inherent color of [`MulticenterBondForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentMulticenterBondColor<'a> {
+    charge: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+}
+
 impl AsColor for MulticenterBondForm {
     type Color<'a> = MulticenterBondColor<'a>;
+    type InherentColor<'a> = InherentMulticenterBondColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         MulticenterBondColor {
@@ -817,13 +825,10 @@ impl AsColor for MulticenterBondForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        static EMPTY_CONSTRAINTS: LazyLock<MulticenterBondConstraintsForm> =
-            LazyLock::new(MulticenterBondConstraintsForm::new);
-        MulticenterBondColor {
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentMulticenterBondColor {
             charge: &self.charge,
             unpaired_electrons: &self.unpaired_electrons,
-            constraints: &EMPTY_CONSTRAINTS,
         }
     }
 }
@@ -2226,7 +2231,7 @@ mod tests {
     ) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

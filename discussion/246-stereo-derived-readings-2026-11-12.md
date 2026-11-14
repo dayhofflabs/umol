@@ -295,9 +295,9 @@ The readings never use the `Full` level, so molecule-level constraints are compa
 neither value. Canonicalization always compares constraints, as the guides require of every
 equality, and what it computes does not change.
 
-**`AsColor`.** A color consists of the inherent fields of the form and of its constraints. The
-trait gets a second method, which returns the same color type with an empty constraints
-container:
+**`AsColor`.** The full and inherent readings have separate associated color types. The full
+reading retains its original representation and comparisons. The inherent reading contains the
+frame-independent inherent fields without constraints:
 
 ```rust
 pub(crate) trait AsColor {
@@ -305,26 +305,30 @@ pub(crate) trait AsColor {
     where
         Self: 'a;
 
+    type InherentColor<'a>: Ord + Hash
+    where
+        Self: 'a;
+
     /// The inherent fields and the constraints.
     fn as_color(&self) -> Self::Color<'_>;
 
-    /// The inherent fields, with an empty constraints container.
-    fn as_inherent_color(&self) -> Self::Color<'_>;
+    /// The inherent fields without constraints.
+    fn as_inherent_color(&self) -> Self::InherentColor<'_>;
 }
 ```
 
-- A constraints form is a container and can be empty, so "not compared" has no representation
-  of its own. The color of a stereo atom or stereo bond holds the kind and the stereogenicity
-  assertion, and an absent assertion is `StereogenicityForm::Undetermined` already.
-- There is one color type per form, which states what a color consists of. Its fields are
-  compared in the order of the form, so `as_color` gives canonicalization the order of colors it
-  has today.
-- `initial_colors` and the graph-symmetry checks take `include_constraints` as a parameter.
-  `initial_colors` picks the method and ranks the result on one code path, because the type is
-  the same for both. The molecule and reaction-span canonicalization callers pass `true`.
-  Their stereo checks continue to compare the whole forms with `normalized_eq`.
-- Canonicalization reads colors directly in 30 places, and none of them changes. A parameter on
-  `as_color` in place of the second method would put an argument at each of them.
+- The full colors keep their existing field order and comparison implementations. The atom,
+  bond, dative-bond and noncovalent-bond colors remain single-reference wrappers. A color carries
+  no runtime constraints flag.
+- The inherent colors contain the selected inherent fields. For stereo atoms and stereo bonds
+  that is the kind; the stereogenicity assertion belongs to the full color. Each span reading
+  composes its selected color type and collapses a modification whose two projected sides agree.
+- `initial_colors` takes `include_constraints` and selects `FullColorProjection` or
+  `InherentColorProjection` once before the entity loops. Both instantiate the same generic
+  calculation. The existing ranker sorts the selected values and groups them with equality;
+  its algorithm is unchanged. The graph-symmetry checks retain their constraints option.
+- The molecule and reaction-span canonicalization callers pass `true`. Their direct `as_color`
+  reads, full-color order, upfront normalization and normalized stereo comparisons are unchanged.
 
 **Rejected: constraints never part of a color.** A color would be the inherent fields for every
 user, and the check would compare the constraints where they count. Canonicalization would then
@@ -1528,35 +1532,39 @@ targets pass the preflight checks, and clippy with `--all-targets -- -D warnings
 
 - **Module:** `ir::traits`, the eight entity-form modules and `ir::span`.
 - **Tests first:** add exact cases for both methods on each form. `as_color` retains the current
-  order and constraint distinctions; `as_inherent_color` omits only constraints and has the same
-  color type. Cover empty and nonempty stores, raw singleton/set expressions, each span variant,
-  and a modified span whose sides differ only in excluded constraints. Check raw input retention
-  and equal-color hash consistency.
-- **Changes:** add the second trait method and its implementations. Represent the excluded
-  constraints by the empty container, or the existing undetermined stereogenicity assertion for
-  stereo colors. Preserve the declaration/comparison order of the existing full colors. Neither
-  method normalizes a form. The trait and color types keep their existing crate visibility.
+  order and constraint distinctions; `as_inherent_color` omits only constraints and has a separate
+  associated color type. Cover empty and nonempty stores, raw singleton/set expressions, each
+  span variant, and a modified span whose sides differ only in excluded constraints. Check raw
+  input retention and equal-color hash consistency.
+- **Changes:** add the associated `InherentColor` type, the second trait method and their
+  implementations. Inherent colors omit the constraints, including the stereogenicity assertion
+  for stereo colors. Preserve the representation and declaration/comparison order of the existing
+  full colors. Neither method normalizes a form. The trait and color types keep their existing
+  crate visibility.
 - **Kind:** additive (green). `[dep: S4a]`
 
-The method has implementations for all eight forms and `EntitySpan`. Each result borrows the
-inherent fields and uses an empty constraint store of the same color type. The empty stores are
-shared per type; stereo colors use `StereogenicityForm::Undetermined`. Full colors borrow the
-stored constraints. The four former whole-form wrappers now name their borrowed fields in the
-same declaration order as their forms. The stereo and positional projections keep their existing
-full-color definitions.
+The method has implementations for all eight forms and `EntitySpan`. Each inherent color
+borrows the selected fields, or holds the stereo kind, without a constraints container. Full
+colors retain their original representations and comparisons. The four whole-form wrappers are
+single references, and the stereo and positional projections keep their full-color definitions.
+S4e restores these wrappers and separates the inherent types after measuring the initial wider
+representation.
 
 The 42 new cases cover empty and nonempty stores, contradictory and raw constraints, raw scalar
 and coset forms, all four span variants, and collapse of a modification confined to constraints.
 Both color readings have equal-color hash checks. The cases assert that the supplied forms stay
-structurally unchanged. S4c enables the new method and its empty-store imports for production use.
+structurally unchanged. Direct inherent-color assertions use the inherent projection of the
+expected forms because the two readings have different Rust types. The exact shared-rank and
+canonicalization expectations are unchanged. S4c enables the method for production use.
 
-The graph-IR package tests pass: 12,580 library tests, three ignored, plus integration and
-documentation tests. Clippy passes for all targets without warnings. Formatting and the diff
-check pass.
+The initial graph-IR package gate passed: 12,580 library tests, three ignored, plus integration
+and documentation tests. Clippy passed for all targets without warnings. Formatting and the
+diff check passed.
 
-The 24 `pre-246-colors` cases were compared with the same inputs, Nauty, 100 samples, 0.5 s
-warm-up and 1.5 s measurement time. The original baseline estimates and benchmark source match
-their saved hashes. Median changes in the first comparison are:
+Before S4e's representation correction, the 24 `pre-246-colors` cases were compared with the
+same inputs, Nauty, 100 samples, 0.5 s warm-up and 1.5 s measurement time. The original baseline
+estimates and benchmark source match their saved hashes. Median changes in the first comparison
+are:
 
 | Case | Molecule C | Molecule eq | Span C | Span eq |
 | --- | ---: | ---: | ---: | ---: |
@@ -1585,32 +1593,35 @@ The [comparison record](../scratch/246-s4b/comparison-results.json) retains both
 
 #### S4c — Shared search colors and canonicalization callers **Done**
 
-- **Module:** `ir::molecule::symmetry`, `ir::reaction_span::symmetry`, and the two owning
-  canonicalization modules.
+- **Module:** `ir::symmetry`, `ir::molecule::symmetry`, `ir::reaction_span::symmetry`, and the two
+  owning canonicalization modules.
 - **Tests first:** extend `initial_colors` cases for both values of `include_constraints`, for
   all entity kinds and spans. Check incidence roles and per-participant electron counts, raw
   literals versus singleton sets, and constraint distinctions. Excluded constraints must not
   be normalized or checked for frame compatibility. Included constraints are read as stored.
   Keep the existing incompatible electron-count, kind, frame and literal-coset cases. Establish
   unchanged canonical representatives and comparison results before changing the call sites.
-- **Changes:** add `include_constraints` to the shared color constructors and choose between the
-  two `AsColor` methods on the same ranking path. Enable `as_inherent_color` and its empty-store
-  imports outside tests as these production callers land. Limit stereo compatibility checks to
-  the data selected by the caller. Canonicalization passes `true` at every molecule and reaction-span
-  call and retains its own upfront normalization. Its direct `as_color` reads, leaf ordering,
-  normalized stereo checks and generator filters retain their behavior.
+- **Changes:** add `include_constraints` to the shared color constructors. Select the full or
+  inherent projection once and instantiate the same generic calculation for its associated color
+  type. Keep the existing ranker unchanged. Enable `as_inherent_color` outside tests as these
+  production callers land. Limit stereo compatibility checks to the data selected by the caller.
+  Canonicalization passes `true` at every molecule and reaction-span call and retains its own
+  upfront normalization. Its direct `as_color` reads, leaf ordering, normalized stereo checks
+  and generator filters retain their behavior.
 - **Kind:** breaking internally, red-to-green within the subitem as all call sites migrate.
   `[dep: S4b]`
 
-Both shared color constructors now take `include_constraints` and select the corresponding
-`AsColor` reading on the existing ranking path. Excluded stereo constraints are neither
-transported nor checked. Configuration compatibility remains checked in both modes, on each
-present side of a span. The electron-count, site-kind, frame and outer literal-coset checks
-remain. Neither constructor normalizes the supplied forms.
+Both shared color constructors take `include_constraints`. A dispatcher selects the full or
+inherent `ColorProjection` once; each aggregate's generic calculation then ranks the selected
+associated color type with the existing ranker. The projection supplies a constant for the stereo
+compatibility checks. Excluded stereo constraints are neither transported nor checked.
+Configuration compatibility remains checked in both modes, on each present side of a span.
+The electron-count, site-kind, frame and outer literal-coset checks remain. Neither constructor
+normalizes the supplied forms.
 
 Canonicalization changes only at its nine call sites, which pass `true`. Its normalization,
 direct color reads, leaf ordering, normalized comparisons and generator filters are unchanged.
-The trait method and empty-store imports are enabled outside tests.
+The trait method is enabled outside tests.
 
 The 224 color cases cover both modes, all entity kinds, span variants, raw forms, incidence
 roles, electron counts and incompatible selected data. Excluded incompatible constraints
@@ -1665,16 +1676,56 @@ tests. [Clippy](../scratch/246-s4d/clippy.txt) passes with all features and targ
 denied. Formatting and the diff check pass. S4e supplies the benchmark comparison and
 dependent-crate gate.
 
-#### S4e — Shared-foundation gate
+#### S4e — Shared-foundation gate **Done**
 
 - **Module:** the S4b-S4d modules, their tests and the canonicalization benchmarks.
 - **Check:** run the affected form, span, color and canonicalization tests and the explicitly
   enabled graph-IR property suite. Compare the canonicalization groups against `pre-246` and
-  the added groups against `pre-246-colors`. Report medians and affected cases; a reproducible
-  regression in unchanged canonicalization behavior is resolved before S5 begins. Run the
-  dependent-crate stage gate after the internal signature migration. No new implementation is
-  added in this subitem.
-- **Kind:** verification (green). `[dep: S4c, S4d]`
+  the added groups against `pre-246-colors`. Report medians and affected cases. Resolve measured
+  regressions or settle the accepted cost before S5 begins. Run the dependent-crate stage gate
+  after the internal signature migration. Corrections established by this gate are completed
+  before the graph-symmetry consumer migration.
+- **Kind:** verification and its shared-color correction (green). `[dep: S4c, S4d]`
+
+The initial comparison covered all 215 original canonicalization cases and all 24 added color
+cases. Its [run context](../scratch/246-s4e/context.json),
+[grouped report](../scratch/246-s4e/results.md) and
+[complete estimates](../scratch/246-s4e/comparison-results.json) retain those measurements. They
+precede the representation correction and are not timings of the integrated generic version.
+
+A fresh comparison against `16f06bae5`, before S4b and with the identical benchmark harness,
+localized an added cost to S4b's wider full-color values. The correction retains the original
+full-color representations and derived comparisons, adds separate inherent-color types, and
+selects the generic calculation once before the entity loops. The existing ranker and both
+canonicalization modules are unchanged by this correction. A Boolean is not stored in a color.
+
+The four size controls were written and failed before the correction, then passed with the
+single-reference atom, bond, dative-bond and noncovalent-bond wrappers. The scratch trial passed
+467 focused color cases and 520 canonicalization cases; those filtered counts may overlap.
+All eight full-color definitions and methods were checked against the reference implementation.
+
+The focused reference-candidate-candidate-reference comparison used Nauty, 80 samples, a 0.2 s
+warm-up and a 0.8 s measurement time per case. It took 11.8 s. The table uses the geometric mean
+of the two median estimates for each binary:
+
+| Case | Reference µs | Generic µs | Change |
+| --- | ---: | ---: | ---: |
+| molecule, unequal colors, symmetric butan-2-ol | 8.61063 | 8.61913 | +0.10% |
+| modified span, unequal colors, symmetric charge sum | 4.79817 | 4.82826 | +0.63% |
+
+The [trial report](../scratch/246-s4e/generic-color-trial/report.md),
+[measurements](../scratch/246-s4e/generic-color-trial/measurements.json) and
+[run commands](../scratch/246-s4e/generic-color-trial/runs.json) retain the evidence. The focused
+comparison and this design were accepted for integration. These are preliminary results for the
+two measured workloads; they do not establish performance parity across the complete suite.
+
+The integrated Rust sources match the reviewed trial. The [workspace test gate](../scratch/246-s4e/generic-color-trial/workspace-tests.txt)
+passes with Python 3.13 active and `umol-graph-ir/proptest`, `umol-graph/proptest` and
+`umol-graph/conformance` enabled: 32,287 passed and ten ignored. This includes the affected form,
+span, color and canonicalization cases and the required property and conformance suites.
+[Workspace clippy](../scratch/246-s4e/generic-color-trial/clippy.txt) passes with those features,
+all targets and warnings denied. Formatting, the scope review and the diff check pass. S4 is
+complete.
 
 ### S5 — Symmetry data, molecule-backed queries and consumer migration
 
@@ -1935,9 +1986,9 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S3 and S4a-S4d are complete. The remaining path is:
+S0-S4 are complete. The remaining path is:
 
-S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
 S4e checks the shared color calculation and shallow application before their graph-symmetry
 consumer is replaced. Baselines precede each affected implementation, and every required test

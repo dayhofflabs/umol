@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::mem;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
@@ -786,28 +786,24 @@ impl From<&str> for DativeBondForm {
 
 /// The inherent fields and constraint container of a [`DativeBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct DativeBondColor<'a> {
+pub(crate) struct DativeBondColor<'a>(&'a DativeBondForm);
+
+/// The inherent color of [`DativeBondForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct InherentDativeBondColor<'a> {
     order: &'a NumForm,
-    constraints: &'a DativeBondConstraintsForm,
 }
 
 impl AsColor for DativeBondForm {
     type Color<'a> = DativeBondColor<'a>;
+    type InherentColor<'a> = InherentDativeBondColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
-        DativeBondColor {
-            order: &self.order,
-            constraints: &self.constraints,
-        }
+        DativeBondColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::Color<'_> {
-        static EMPTY_CONSTRAINTS: LazyLock<DativeBondConstraintsForm> =
-            LazyLock::new(DativeBondConstraintsForm::new);
-        DativeBondColor {
-            order: &self.order,
-            constraints: &EMPTY_CONSTRAINTS,
-        }
+    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+        InherentDativeBondColor { order: &self.order }
     }
 }
 
@@ -2062,7 +2058,7 @@ mod tests {
     ) {
         let original = input.clone();
         let color = input.as_inherent_color();
-        let expected_color = expected.as_color();
+        let expected_color = expected.as_inherent_color();
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();
