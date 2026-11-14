@@ -2586,13 +2586,21 @@ pub(crate) fn coset_join(a: &StereoCoset, b: &StereoCoset, kind: StereoKind) -> 
     }
 }
 
-/// Apply a ligand-order permutation to a coset under `kind`.
+/// Apply a ligand-order permutation to the outer coset form under `kind`.
+///
+/// Literals and set members are carried directly, preserving the set variant. A term is kept
+/// unchanged when the action fixes every coset; otherwise `Apply` wraps the whole supplied term.
+/// No existing operator or variable domain is normalized. Returns `None` for an incompatible
+/// action or an out-of-range literal or set member.
 pub(crate) fn coset_apply_permutation(
     coset: &StereoCoset,
     permutation: Permutation,
     kind: StereoKind,
 ) -> Option<StereoCoset> {
     let s = kind.class_key().space();
+    if !s.allows(permutation) {
+        return None;
+    }
     match coset {
         StereoCoset::Undetermined => Some(StereoCoset::Undetermined),
         StereoCoset::Lit(i) if permutation == Permutation::identity(kind.degree()) => {
@@ -2605,11 +2613,16 @@ pub(crate) fn coset_apply_permutation(
                 .map(|i| s.reindex(*i, permutation))
                 .collect::<Option<_>>()?,
         )),
-        StereoCoset::Term(t) => canon_coset(
-            StereoCoset::term(StereoTerm::apply((**t).clone(), permutation)),
-            kind,
-        )
-        .ok(),
+        StereoCoset::Term(t) => {
+            let identity = Permutation::identity(kind.degree());
+            Some(
+                if permutation == identity || kind.coset_action_eq(permutation, identity) {
+                    coset.clone()
+                } else {
+                    StereoCoset::term(StereoTerm::apply((**t).clone(), permutation))
+                },
+            )
+        }
     }
 }
 
@@ -2624,7 +2637,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::Correspondence;
-    use umol_perm::Orientation;
+    use umol_perm::{Orientation, PermutationGroup};
 
     use super::super::boolean::BooleanForm;
     use super::super::constraint::{StereogenicityForm, TopicityRelationForm};
@@ -5151,34 +5164,216 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(StereoCoset::Lit(0), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Lit(1))]
-    #[case::undetermined(StereoCoset::Undetermined, Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Undetermined)]
-    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(0)), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Lit(1))]
+    #[case::singleton(StereoCoset::lit_set([0]), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::lit_set([1]))]
+    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(0)), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Term(Box::new(StereoTerm::Apply(Box::new(StereoTerm::Lit(0)), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::term_set(StereoCoset::term(StereoTerm::lit_set([0, 1])), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Term(Box::new(StereoTerm::Apply(Box::new(StereoTerm::LitSet([0, 1].into())), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::full_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [0, 1])), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Term(Box::new(StereoTerm::Apply(Box::new(StereoTerm::Var(Box::new(("x".into(), Some([0, 1].into()))))), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::empty_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [])), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCoset::Term(Box::new(StereoTerm::Apply(Box::new(StereoTerm::Var(Box::new(("x".into(), Some([].into()))))), Permutation::from_image(&[1, 0, 2, 3])))))]
+    #[case::nested(
+        StereoCoset::term(StereoTerm::mirror(StereoTerm::mirror(StereoTerm::var("x")))),
+        Permutation::from_image(&[1, 0, 2, 3]),
+        StereoKind::Tetrahedral,
+        StereoCoset::Term(Box::new(StereoTerm::Apply(
+            Box::new(StereoTerm::Mirror(Box::new(StereoTerm::Mirror(Box::new(
+                StereoTerm::Var(Box::new(("x".into(), None))),
+            ))))),
+            Permutation::from_image(&[1, 0, 2, 3]),
+        ))),
+    )]
     fn test_coset_apply_permutation(#[case] coset: StereoCoset, #[case] permutation: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCoset) {
         assert_eq!(coset_apply_permutation(&coset, permutation, kind), Some(expected));
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::tetrahedral(StereoCoset::Lit(1), StereoKind::Tetrahedral)]
-    #[case::cis_trans(StereoCoset::Lit(0), StereoKind::CisTrans)]
-    #[case::octahedral(StereoCoset::Lit(29), StereoKind::Octahedral)]
-    fn test_coset_apply_permutation_identity(#[case] coset: StereoCoset, #[case] kind: StereoKind) {
+    #[case::tetrahedral(StereoCoset::Lit(1), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::cis_trans(StereoCoset::Lit(0), Permutation::identity(4), StereoKind::CisTrans)]
+    #[case::axial(StereoCoset::Lit(1), Permutation::identity(4), StereoKind::Axial)]
+    #[case::square_planar(StereoCoset::Lit(2), Permutation::identity(4), StereoKind::SquarePlanar)]
+    #[case::trigonal_bipyramidal(StereoCoset::Lit(19), Permutation::identity(5), StereoKind::TrigonalBipyramidal)]
+    #[case::octahedral(StereoCoset::Lit(29), Permutation::identity(6), StereoKind::Octahedral)]
+    #[case::undetermined(StereoCoset::Undetermined, Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral)]
+    #[case::empty_set(StereoCoset::lit_set([]), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral)]
+    #[case::singleton(StereoCoset::lit_set([0]), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::set(StereoCoset::lit_set([0, 1]), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral)]
+    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(2)), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::term_set(StereoCoset::term(StereoTerm::lit_set([0, 2])), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::empty_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [])), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::full_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [0, 1])), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::singleton_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [0])), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::out_of_range_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [2])), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::nested_mirror(StereoCoset::term(StereoTerm::mirror(StereoTerm::mirror(StereoTerm::var("x")))), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::nested_apply(StereoCoset::term(StereoTerm::swap(StereoTerm::apply(StereoTerm::var_in("x", [0, 1]), Permutation::identity(3)))), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::tetrahedral_kernel(StereoCoset::term(StereoTerm::mirror(StereoTerm::var_in("x", [0, 1]))), Permutation::from_image(&[1, 2, 0, 3]), StereoKind::Tetrahedral)]
+    #[case::cis_trans_kernel(StereoCoset::term(StereoTerm::var("x")), Permutation::from_image(&[2, 3, 0, 1]), StereoKind::CisTrans)]
+    fn test_coset_apply_permutation_identity(#[case] coset: StereoCoset, #[case] permutation: Permutation, #[case] kind: StereoKind) {
         assert_eq!(
-            coset_apply_permutation(&coset, Permutation::identity(kind.degree()), kind),
+            coset_apply_permutation(&coset, permutation, kind),
             Some(coset),
         );
     }
 
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral)]
+    #[case::cis_trans(StereoKind::CisTrans)]
+    #[case::axial(StereoKind::Axial)]
+    #[case::square_planar(StereoKind::SquarePlanar)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal)]
+    #[case::octahedral(StereoKind::Octahedral)]
+    fn test_coset_apply_permutation_algebra(#[case] kind: StereoKind) {
+        let actions = PermutationGroup::symmetric(kind.degree())
+            .elements()
+            .iter()
+            .copied()
+            .filter(|action| kind.class_key().space().allows(*action))
+            .collect::<Vec<_>>();
+        let mut values = vec![
+            StereoCoset::Undetermined,
+            StereoCoset::lit_set([]),
+            StereoCoset::lit_set([0]),
+            StereoCoset::lit_set([0, kind.count() as u32 - 1]),
+            StereoCoset::lit_set(0..kind.count() as u32),
+        ];
+        values.extend((0..kind.count() as u32).map(StereoCoset::Lit));
+        for value in &values {
+            for &action in &actions {
+                let image = coset_apply_permutation(value, action, kind).unwrap();
+                assert_eq!(
+                    coset_apply_permutation(&image, action.inverse(), kind),
+                    Some(value.clone()),
+                );
+                assert_eq!(
+                    StereoConfigurationForm::kinded(kind, image.clone()),
+                    StereoConfigurationForm::kinded(kind, value.clone())
+                        .apply(action)
+                        .unwrap(),
+                );
+                for &partner in actions.iter().take(8) {
+                    assert_eq!(
+                        coset_apply_permutation(&image, partner, kind),
+                        coset_apply_permutation(value, action.compose(partner), kind),
+                    );
+                }
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::variable(StereoTerm::var_in("x", [0]))]
+    #[case::literal(StereoTerm::Lit(0))]
+    #[case::nested(StereoTerm::mirror(StereoTerm::mirror(StereoTerm::var("x"))))]
+    fn test_coset_apply_permutation_symbolic(
+        #[case] term: StereoTerm,
+        #[values(
+            StereoKind::Tetrahedral,
+            StereoKind::CisTrans,
+            StereoKind::Axial,
+            StereoKind::SquarePlanar,
+            StereoKind::TrigonalBipyramidal,
+            StereoKind::Octahedral
+        )]
+        kind: StereoKind,
+    ) {
+        let action = kind.involution();
+        let source = StereoCoset::term(term.clone());
+        let image = coset_apply_permutation(&source, action, kind).unwrap();
+        assert_eq!(
+            image,
+            StereoCoset::Term(Box::new(StereoTerm::Apply(Box::new(term.clone()), action))),
+        );
+        let restored = coset_apply_permutation(&image, action.inverse(), kind).unwrap();
+        assert_eq!(
+            restored,
+            StereoCoset::Term(Box::new(StereoTerm::Apply(
+                Box::new(StereoTerm::Apply(Box::new(term), action)),
+                action.inverse(),
+            ))),
+        );
+        assert_eq!(
+            coset_apply_permutation(&source, action.compose(action.inverse()), kind),
+            Some(source.clone()),
+        );
+        assert_eq!(canon_coset(restored, kind), canon_coset(source, kind));
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral)]
+    #[case::cis_trans(StereoKind::CisTrans)]
+    #[case::axial(StereoKind::Axial)]
+    #[case::square_planar(StereoKind::SquarePlanar)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal)]
+    #[case::octahedral(StereoKind::Octahedral)]
+    fn test_coset_apply_permutation_normalized(#[case] kind: StereoKind) {
+        let values = [
+            StereoCoset::Undetermined,
+            StereoCoset::Lit(0),
+            StereoCoset::lit_set([0]),
+            StereoCoset::lit_set([0, kind.count() as u32 - 1]),
+            StereoCoset::term(StereoTerm::var("x")),
+            StereoCoset::term(StereoTerm::var_in("x", 0..kind.count() as u32)),
+            StereoCoset::term(StereoTerm::mirror(StereoTerm::swap(StereoTerm::var("x")))),
+            StereoCoset::term(StereoTerm::apply(StereoTerm::Lit(0), kind.involution())),
+        ]
+        .into_iter()
+        .map(|value| {
+            StereoConfigurationForm::kinded(kind, value)
+                .normalize()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+        for &action in PermutationGroup::symmetric(kind.degree()).elements() {
+            if !kind.class_key().space().allows(action) {
+                continue;
+            }
+            for source in &values {
+                for mirror in [false, true] {
+                    let expected = if mirror {
+                        source.mirror().unwrap().reframe_by(&action).unwrap()
+                    } else {
+                        source.clone().reframe_by(&action).unwrap()
+                    };
+                    let configuration_action = if mirror {
+                        kind.mirror_permutation().compose(action)
+                    } else {
+                        action
+                    };
+                    let actual = StereoConfigurationForm::kinded(
+                        kind,
+                        coset_apply_permutation(
+                            source.coset().unwrap(),
+                            configuration_action,
+                            kind,
+                        )
+                        .unwrap(),
+                    );
+                    assert!(actual.normalized_eq(&expected));
+                    for target in &values {
+                        assert_eq!(actual.normalized_eq(target), expected.normalized_eq(target),);
+                    }
+                }
+            }
+        }
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::literal(StereoCoset::Lit(2), Permutation::identity(4))]
-    #[case::set(StereoCoset::lit_set([0, 2]), Permutation::identity(4))]
-    #[case::term_literal(StereoCoset::term(StereoTerm::Lit(2)), Permutation::identity(4))]
-    #[case::term_set(StereoCoset::term(StereoTerm::lit_set([0, 2])), Permutation::identity(4))]
-    #[case::empty_variable_domain(StereoCoset::term(StereoTerm::var_in("x", [])), Permutation::identity(4))]
-    #[case::wrong_degree(StereoCoset::Lit(0), Permutation::identity(3))]
-    fn test_coset_apply_permutation_error(#[case] coset: StereoCoset, #[case] permutation: Permutation) {
+    #[case::literal(StereoCoset::Lit(2), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::set(StereoCoset::lit_set([0, 2]), Permutation::identity(4), StereoKind::Tetrahedral)]
+    #[case::literal_action(StereoCoset::Lit(2), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral)]
+    #[case::set_action(StereoCoset::lit_set([0, 2]), Permutation::from_image(&[1, 0, 2, 3]), StereoKind::Tetrahedral)]
+    #[case::wrong_degree_literal(StereoCoset::Lit(0), Permutation::identity(3), StereoKind::Tetrahedral)]
+    #[case::wrong_degree_set(StereoCoset::lit_set([0]), Permutation::identity(3), StereoKind::Tetrahedral)]
+    #[case::wrong_degree_empty_set(StereoCoset::lit_set([]), Permutation::identity(3), StereoKind::Tetrahedral)]
+    #[case::wrong_degree_undetermined(StereoCoset::Undetermined, Permutation::identity(3), StereoKind::Tetrahedral)]
+    #[case::wrong_degree_term(StereoCoset::term(StereoTerm::var("x")), Permutation::identity(3), StereoKind::Tetrahedral)]
+    #[case::outside_parent_literal(StereoCoset::Lit(0), Permutation::from_image(&[1, 2, 0, 3]), StereoKind::CisTrans)]
+    #[case::outside_parent_set(StereoCoset::lit_set([0]), Permutation::from_image(&[1, 2, 0, 3]), StereoKind::CisTrans)]
+    #[case::outside_parent_empty_set(StereoCoset::lit_set([]), Permutation::from_image(&[1, 2, 0, 3]), StereoKind::CisTrans)]
+    #[case::outside_parent_undetermined(StereoCoset::Undetermined, Permutation::from_image(&[1, 2, 0, 3]), StereoKind::CisTrans)]
+    #[case::outside_parent_term(StereoCoset::term(StereoTerm::var("x")), Permutation::from_image(&[1, 2, 0, 3]), StereoKind::CisTrans)]
+    fn test_coset_apply_permutation_error(#[case] coset: StereoCoset, #[case] permutation: Permutation, #[case] kind: StereoKind) {
         assert_eq!(
-            coset_apply_permutation(&coset, permutation, StereoKind::Tetrahedral),
+            coset_apply_permutation(&coset, permutation, kind),
             None,
         );
     }

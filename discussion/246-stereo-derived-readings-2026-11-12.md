@@ -1623,7 +1623,7 @@ tests. [Clippy](../scratch/246-s4c/clippy.txt) passes with all features and targ
 denied. Formatting and the diff check pass. The benchmark comparison remains the S4e gate,
 after S4d.
 
-#### S4d — Shallow coset application
+#### S4d — Shallow coset application **Done**
 
 - **Module:** `ir::stereo` and its existing tests.
 - **Tests first:** state exact results for literals, undetermined values, finite sets and terms,
@@ -1642,6 +1642,28 @@ after S4d.
   on the kind's cosets without rewriting its operand. Keep canonicalization's normalized
   comparisons and the existing public expression constructors.
 - **Kind:** internal behavior change, green at the subitem boundary. `[dep: S4a, S3a]`
+
+`coset_apply_permutation` checks action compatibility before dispatching on the outer form.
+Literals and set members are transported directly; empty and singleton sets keep their variants.
+An action that fixes every coset of the kind preserves a supplied term exactly, including its
+operators and explicit variable domain. Other actions construct `Apply` around that whole term.
+The helper no longer calls `canon_coset`. Incompatible actions fail for every outer variant,
+including `Undetermined` and empty sets. Outer literal and set-member range checks remain.
+
+The 71 application cases cover exact results, raw terms, identity actions on cosets, and action
+and range failures. Across all six kinds, the algebra cases check inverses under every allowed
+action and compositions with up to eight partner actions per action. Symbolic cases assert the
+exact trees produced by separately applied actions and check their normalized value equivalence
+independently. They also check exact operand preservation when the new actions are composed first.
+Comparison controls use normalized inputs and retain `normalized_eq`, with and without a
+composed mirror action.
+The public expression constructors, frame transport and canonicalization sources are unchanged.
+
+The [all-features graph-IR test run](../scratch/246-s4d/package-tests.txt) passes: 12,791 library
+tests, three ignored, plus 559 property tests, one ignored, and the integration and documentation
+tests. [Clippy](../scratch/246-s4d/clippy.txt) passes with all features and targets and warnings
+denied. Formatting and the diff check pass. S4e supplies the benchmark comparison and
+dependent-crate gate.
 
 #### S4e — Shared-foundation gate
 
@@ -1913,13 +1935,12 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S3 and S4a-S4c are complete. The remaining path is:
+S0-S3 and S4a-S4d are complete. The remaining path is:
 
-S4d -> S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
-S4d is next and must finish before S4e. The shared color
-calculation is established and checked before its graph-symmetry consumer is replaced;
-shallow application is established before raw graph checks use it. Baselines precede each affected
-implementation, and every required test is written before the production change in its subitem.
+S4e checks the shared color calculation and shallow application before their graph-symmetry
+consumer is replaced. Baselines precede each affected implementation, and every required test
+is written before the production change in its subitem.
 No remaining stage is deferred: the shared colors, migrated consumers, keyed readings and Python
 surface are all part of this work.
