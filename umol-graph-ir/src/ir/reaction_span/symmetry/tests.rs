@@ -6,14 +6,218 @@ use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 
 use super::*;
+use crate::ir::molecule::symmetry::tests::constrained_color_molecule;
+use crate::ir::stereo::{StereoAtomSpans, StereoBondSpans};
 use crate::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomForm, BondForm, DativeBondForm, DativeBondId, Deltas,
-    IncidenceLevel, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
-    NoncovalentBondKind, Reaction, ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomForm,
-    StereoAtomId, StereoBondForm, StereoBondId, StereoKind, StereoLigandKind, StereoLigandPair,
-    Topicity, TopicityForm, TopicityRelationForm,
+    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, BondForm, Constraint,
+    ConstraintSpan, DativeBondForm, DativeBondId, Deltas, ElementForm, IncidenceLevel, Molecule,
+    MoleculeConstraint, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm,
+    NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, ReactionSpanEntries,
+    StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigandKind, StereoLigandPair,
+    StereoLigandPosition, StereoTerm, StereogenicityForm, Topicity, TopicityForm,
+    TopicityRelationForm,
 };
 use crate::mol_dsl;
+
+#[fixture]
+fn constrained_color_span(constrained_color_molecule: Molecule) -> ReactionSpan {
+    Reaction::new(constrained_color_molecule, Deltas::default())
+        .to_reaction_span()
+        .unwrap()
+}
+
+#[rstest]
+#[case::atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), [true, false])]
+#[case::bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), [true, false])]
+#[case::dative(Entity::DativeBond(DativeBondId(0)), Entity::DativeBond(DativeBondId(1)), [true, false])]
+#[case::aromatic(Entity::AromaticSystem(AromaticSystemId(0)), Entity::AromaticSystem(AromaticSystemId(1)), [true, false])]
+#[case::multicenter(Entity::MulticenterBond(MulticenterBondId(0)), Entity::MulticenterBond(MulticenterBondId(1)), [true, false])]
+#[case::noncovalent(Entity::NoncovalentBond(NoncovalentBondId(0)), Entity::NoncovalentBond(NoncovalentBondId(1)), [true, false])]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), [true, false])]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(0)), Entity::StereoBond(StereoBondId(1)), [true, false])]
+fn test_initial_colors_constraints(
+    constrained_color_span: ReactionSpan,
+    #[case] lhs: Entity,
+    #[case] rhs: Entity,
+    #[case] expected: [bool; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let span = constrained_color_span;
+    let original = span.clone();
+    let graph = span.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(
+        &span,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .unwrap();
+    assert_eq!(
+        colors.entities[graph.node_of(lhs).index()] == colors.entities[graph.node_of(rhs).index()],
+        expected[usize::from(include_constraints)]
+    );
+    assert_eq!(span, original);
+}
+
+#[rstest]
+#[case::unchanged(
+    [EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4))),
+     EntitySpan::Unchanged(AtomForm::from_element(Element::C))], [true, false]
+)]
+#[case::removed(
+    [EntitySpan::Removed(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4))),
+     EntitySpan::Removed(AtomForm::from_element(Element::C))], [true, false]
+)]
+#[case::added(
+    [EntitySpan::Added(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4))),
+     EntitySpan::Added(AtomForm::from_element(Element::C))], [true, false]
+)]
+#[case::modified(
+    [EntitySpan::Modified {
+        lhs: AtomForm::from_element(Element::C),
+        rhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+     }, EntitySpan::Unchanged(AtomForm::from_element(Element::C))], [true, false]
+)]
+#[case::raw_modified_constraint(
+    [EntitySpan::Modified {
+        lhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        rhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([4]))),
+     }, EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)))], [true, false]
+)]
+#[case::raw_modified_field(
+    [EntitySpan::Modified {
+        lhs: AtomForm::from_element(Element::C),
+        rhs: AtomForm::new(ElementForm::lit_set([Element::C])),
+     }, EntitySpan::Unchanged(AtomForm::from_element(Element::C))], [false, false]
+)]
+fn test_initial_colors_span(
+    #[case] atoms: [EntitySpan<AtomForm>; 2],
+    #[case] expected: [bool; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let span = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: atoms.into(),
+        constraints: vec![ConstraintSpan::Unchanged(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: NumForm::lit_set([]),
+            },
+        ))],
+        ..Default::default()
+    });
+    let original = span.clone();
+    let graph = span.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(
+        &span,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .unwrap();
+    assert_eq!(
+        colors.entities[graph.node_of(Entity::Atom(AtomId(0))).index()]
+            == colors.entities[graph.node_of(Entity::Atom(AtomId(1))).index()],
+        expected[usize::from(include_constraints)]
+    );
+    assert_eq!(span, original);
+}
+
+#[rstest]
+#[case::unchanged(EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))), [Ok(true), Err(Contradiction)])]
+#[case::removed(EntitySpan::Removed(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))), [Ok(false), Err(Contradiction)])]
+#[case::added(EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))), [Ok(false), Err(Contradiction)])]
+#[case::modified_lhs(EntitySpan::Modified { lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })), rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32) }, [Ok(true), Err(Contradiction)])]
+#[case::modified_rhs(EntitySpan::Modified { lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32), rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })) }, [Ok(true), Err(Contradiction)])]
+#[case::contradiction(EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([])))), [Ok(true), Ok(false)])]
+#[case::raw_configurations(EntitySpan::Modified { lhs: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", []))), rhs: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0])) }, [Ok(true), Ok(true)])]
+#[case::configuration_frame(EntitySpan::Modified { lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32), rhs: StereoAtomForm::new(StereoKind::Octahedral, 0_u32) }, [Err(Contradiction), Err(Contradiction)])]
+fn test_initial_colors_stereo_atom(
+    initial_color_span: ReactionSpan,
+    #[case] attributes: EntitySpan<StereoAtomForm>,
+    #[case] expected: [Result<bool, Contradiction>; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let mut span = initial_color_span;
+    let entries = span
+        .stereo_atoms()
+        .ids()
+        .map(|id| {
+            (
+                span.stereo_atoms().site(id),
+                span.stereo_atoms().ligands(id).to_vec(),
+                if id == StereoAtomId(0) {
+                    attributes.clone()
+                } else {
+                    span.stereo_atoms().attributes(id).clone()
+                },
+            )
+        })
+        .collect();
+    span.stereo_atoms = StereoAtomSpans::new(entries);
+    let original = span.clone();
+    let graph = span.incidence_graph(IncidenceLevel::Full);
+    let actual = initial_colors(
+        &span,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .map(|colors| {
+        colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(0))).index()]
+            == colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(1))).index()]
+    });
+    assert_eq!(actual, expected[usize::from(include_constraints)]);
+    assert_eq!(span, original);
+}
+
+#[rstest]
+#[case::unchanged(EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))), [Ok(true), Err(Contradiction)])]
+#[case::removed(EntitySpan::Removed(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))), [Ok(false), Err(Contradiction)])]
+#[case::added(EntitySpan::Added(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) }))), [Ok(false), Err(Contradiction)])]
+#[case::modified_lhs(EntitySpan::Modified { lhs: StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })), rhs: StereoBondForm::new(StereoKind::CisTrans, 0_u32) }, [Ok(true), Err(Contradiction)])]
+#[case::modified_rhs(EntitySpan::Modified { lhs: StereoBondForm::new(StereoKind::CisTrans, 0_u32), rhs: StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })) }, [Ok(true), Err(Contradiction)])]
+#[case::contradiction(EntitySpan::Unchanged(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([])))), [Ok(true), Ok(false)])]
+#[case::raw_configurations(EntitySpan::Modified { lhs: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var_in("x", []))), rhs: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0])) }, [Ok(true), Ok(true)])]
+#[case::configuration_frame(EntitySpan::Modified { lhs: StereoBondForm::new(StereoKind::CisTrans, 0_u32), rhs: StereoBondForm::new(StereoKind::Tetrahedral, 0_u32) }, [Err(Contradiction), Err(Contradiction)])]
+fn test_initial_colors_stereo_bond(
+    initial_color_span: ReactionSpan,
+    #[case] attributes: EntitySpan<StereoBondForm>,
+    #[case] expected: [Result<bool, Contradiction>; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let mut span = initial_color_span;
+    let entries = span
+        .stereo_bonds()
+        .ids()
+        .map(|id| {
+            (
+                span.stereo_bonds().site(id),
+                span.stereo_bonds().ligands(id).to_vec(),
+                if id == StereoBondId(0) {
+                    attributes.clone()
+                } else {
+                    span.stereo_bonds().attributes(id).clone()
+                },
+            )
+        })
+        .collect();
+    span.stereo_bonds = StereoBondSpans::new(entries);
+    let original = span.clone();
+    let graph = span.incidence_graph(IncidenceLevel::Full);
+    let actual = initial_colors(
+        &span,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .map(|colors| {
+        colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(0))).index()]
+            == colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(1))).index()]
+    });
+    assert_eq!(actual, expected[usize::from(include_constraints)]);
+    assert_eq!(span, original);
+}
 
 #[rstest]
 #[case::rotation(
@@ -1127,7 +1331,7 @@ fn test_initial_colors(
         .normalize()
         .expect("fixed span normalizes");
     let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure)
+    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure, true)
         .expect("fixed span has colors");
 
     assert_eq!(
@@ -1167,10 +1371,17 @@ fn test_initial_colors_order(
     #[case] lhs: Entity,
     #[case] rhs: Entity,
     #[case] expected: Ordering,
+    #[values(false, true)] include_constraints: bool,
 ) {
     let span = initial_color_span;
     let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    let colors = initial_colors(
+        &span,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .unwrap();
     assert_eq!(
         colors.entities[incidence_graph.node_of(lhs).index()]
             .cmp(&colors.entities[incidence_graph.node_of(rhs).index()]),
@@ -1229,13 +1440,19 @@ fn test_initial_colors_incidence(
     #[case] lhs: [Entity; 2],
     #[case] rhs: [Entity; 2],
     #[case] expected: bool,
+    #[values(false, true)] include_constraints: bool,
 ) {
     let span = initial_color_span
         .normalize()
         .expect("fixed span normalizes");
     let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure)
-        .expect("fixed span has colors");
+    let colors = initial_colors(
+        &span,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .expect("fixed span has colors");
     let color = |[owner, atom]: [Entity; 2]| {
         let nodes = [owner, atom].map(|entity| incidence_graph.node_of(entity));
         let (edge, _) = incidence_graph
@@ -1307,7 +1524,11 @@ fn test_initial_colors_incidence(
     }),
     DescriptionLevel::Structure
 )]
-fn test_initial_colors_error(#[case] span: ReactionSpan, #[case] level: DescriptionLevel) {
+fn test_initial_colors_error(
+    #[case] span: ReactionSpan,
+    #[case] level: DescriptionLevel,
+    #[values(false, true)] include_constraints: bool,
+) {
     let incidence_graph = span.incidence_graph(match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
         DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -1315,7 +1536,7 @@ fn test_initial_colors_error(#[case] span: ReactionSpan, #[case] level: Descript
     });
 
     assert_eq!(
-        initial_colors(&span, &incidence_graph, level),
+        initial_colors(&span, &incidence_graph, level, include_constraints),
         Err(Contradiction)
     );
 }

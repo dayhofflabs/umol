@@ -666,8 +666,13 @@ fn test_canonicalize_structure_visited_leaves(
 ) {
     let molecule = molecule.normalize().expect("fixed molecule normalizes");
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure)
-        .expect("fixed molecule has colors");
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        true,
+    )
+    .expect("fixed molecule has colors");
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
@@ -751,8 +756,13 @@ fn test_canonicalize_structure_orbit_pruning(
         .normalize()
         .expect("fixed molecule normalizes");
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure)
-        .expect("fixed molecule has colors");
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        true,
+    )
+    .expect("fixed molecule has colors");
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
@@ -983,10 +993,20 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
     let target = target.normalize().unwrap();
     let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
     let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
-    let source_colors =
-        initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap();
-    let target_colors =
-        initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap();
+    let source_colors = initial_colors(
+        &source,
+        &source_incidence,
+        DescriptionLevel::Constitution,
+        true,
+    )
+    .unwrap();
+    let target_colors = initial_colors(
+        &target,
+        &target_incidence,
+        DescriptionLevel::Constitution,
+        true,
+    )
+    .unwrap();
 
     assert_eq!(
         same_colors(
@@ -1074,7 +1094,13 @@ fn test_topology_search_input(
 ) {
     let molecule = molecule.normalize().unwrap();
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Topology).unwrap();
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Topology,
+        true,
+    )
+    .unwrap();
     let input = topology_search_input(&molecule, &incidence_graph, &colors.entities);
 
     assert_eq!(input.adapter.graph, expected_graph);
@@ -1419,7 +1445,13 @@ fn test_automorphism_adapter_new(
 ) {
     let molecule = molecule.normalize().unwrap();
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        true,
+    )
+    .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let source = incidence_graph.graph();
 
@@ -1470,8 +1502,13 @@ fn test_automorphism_adapter_automorphisms() {
         ..Default::default()
     });
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let colors =
-        initial_colors(&molecule, &incidence_graph, DescriptionLevel::Constitution).unwrap();
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Constitution,
+        true,
+    )
+    .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
 
     assert_eq!(
@@ -1676,11 +1713,23 @@ fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] e
     let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
     let source_adapter = AutomorphismAdapter::new(
         &source_incidence,
-        &initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap(),
+        &initial_colors(
+            &source,
+            &source_incidence,
+            DescriptionLevel::Constitution,
+            true,
+        )
+        .unwrap(),
     );
     let target_adapter = AutomorphismAdapter::new(
         &target_incidence,
-        &initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap(),
+        &initial_colors(
+            &target,
+            &target_incidence,
+            DescriptionLevel::Constitution,
+            true,
+        )
+        .unwrap(),
     );
     let source_partition =
         OrderedPartition::from_descriptors(&source_adapter.colors).refine(source_adapter.graph());
@@ -1755,11 +1804,23 @@ fn test_remapping_preserves_incidences(
     let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
     let source_adapter = AutomorphismAdapter::new(
         &source_incidence,
-        &initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap(),
+        &initial_colors(
+            &source,
+            &source_incidence,
+            DescriptionLevel::Constitution,
+            true,
+        )
+        .unwrap(),
     );
     let target_adapter = AutomorphismAdapter::new(
         &target_incidence,
-        &initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap(),
+        &initial_colors(
+            &target,
+            &target_incidence,
+            DescriptionLevel::Constitution,
+            true,
+        )
+        .unwrap(),
     );
     let images = images.into_iter().map(NodeId).collect::<Vec<_>>();
 
@@ -1791,8 +1852,13 @@ fn test_canonical_search_color_labels() {
         ..Default::default()
     });
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let colors =
-        initial_colors(&molecule, &incidence_graph, DescriptionLevel::Constitution).unwrap();
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Constitution,
+        true,
+    )
+    .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let mut relabeled = adapter.clone();
     relabeled.colors.iter_mut().for_each(|color| {
@@ -1886,9 +1952,9 @@ fn test_remapping_exists(
     let source_incidence = source.incidence_graph(IncidenceLevel::Topology);
     let target_incidence = target.incidence_graph(IncidenceLevel::Topology);
     let source_colors =
-        initial_colors(&source, &source_incidence, DescriptionLevel::Topology).unwrap();
+        initial_colors(&source, &source_incidence, DescriptionLevel::Topology, true).unwrap();
     let target_colors =
-        initial_colors(&target, &target_incidence, DescriptionLevel::Topology).unwrap();
+        initial_colors(&target, &target_incidence, DescriptionLevel::Topology, true).unwrap();
     let TopologySearchInput {
         adapter: source_adapter,
         initial_partition: source_partition,

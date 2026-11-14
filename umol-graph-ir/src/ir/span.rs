@@ -141,7 +141,6 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         match self {
             Self::Unchanged(value) => EntitySpan::Unchanged(value.as_inherent_color()),

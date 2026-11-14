@@ -560,7 +560,12 @@ fn canonicalize_topology(
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Topology)?;
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Topology,
+        true,
+    )?;
     let TopologySearchInput {
         adapter,
         initial_partition,
@@ -597,7 +602,12 @@ fn canonicalize_constitution(
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Constitution)?;
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Constitution,
+        true,
+    )?;
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
@@ -632,7 +642,12 @@ fn canonicalize_structure(
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure)?;
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        true,
+    )?;
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
@@ -671,7 +686,7 @@ fn canonicalize_full(
 ) -> Result<(Molecule, MoleculeRemapping), MoleculeCanonicalizeError> {
     let molecule = molecule.normalize()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Full)?;
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Full, true)?;
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let build_key = |order: &[NodeId]| color_key(&molecule, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
@@ -737,8 +752,8 @@ impl Molecule {
         let source_incidence = source.incidence_graph(incidence_level);
         let target_incidence = target.incidence_graph(incidence_level);
         let (source_colors, target_colors) = match (
-            initial_colors(&source, &source_incidence, level),
-            initial_colors(&target, &target_incidence, level),
+            initial_colors(&source, &source_incidence, level, true),
+            initial_colors(&target, &target_incidence, level, true),
         ) {
             (Ok(source_colors), Ok(target_colors)) => (source_colors, target_colors),
             (Err(_), Err(_)) => return self.framed_eq(other),

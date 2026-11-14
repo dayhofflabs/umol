@@ -614,10 +614,20 @@ fn test_same_colors(
     let target = target.normalize().unwrap();
     let source_incidence = source.incidence_graph(IncidenceLevel::Constitution);
     let target_incidence = target.incidence_graph(IncidenceLevel::Constitution);
-    let source_colors =
-        initial_colors(&source, &source_incidence, DescriptionLevel::Constitution).unwrap();
-    let target_colors =
-        initial_colors(&target, &target_incidence, DescriptionLevel::Constitution).unwrap();
+    let source_colors = initial_colors(
+        &source,
+        &source_incidence,
+        DescriptionLevel::Constitution,
+        true,
+    )
+    .unwrap();
+    let target_colors = initial_colors(
+        &target,
+        &target_incidence,
+        DescriptionLevel::Constitution,
+        true,
+    )
+    .unwrap();
 
     assert_eq!(
         same_colors(
@@ -727,7 +737,7 @@ fn test_topology_search_input(
 ) {
     let span = span.normalize().unwrap();
     let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
-    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Topology).unwrap();
+    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Topology, true).unwrap();
     let input = topology_search_input(&span, &incidence_graph, &colors.entities);
 
     assert_eq!(input.adapter.graph, expected_graph);

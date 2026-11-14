@@ -1,6 +1,5 @@
 //! Bond forms and updates shared across crates.
 
-#[cfg(test)]
 use std::sync::LazyLock;
 
 use strum::VariantArray;
@@ -193,7 +192,6 @@ impl AsColor for BondForm {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         static EMPTY_CONSTRAINTS: LazyLock<BondConstraintsForm> =
             LazyLock::new(BondConstraintsForm::new);

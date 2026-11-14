@@ -223,7 +223,6 @@ pub(crate) trait AsColor {
     fn as_color(&self) -> Self::Color<'_>;
 
     /// The same inherent fields, with an empty constraints container.
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_>;
 }
 

@@ -1548,8 +1548,7 @@ full-color definitions.
 The 42 new cases cover empty and nonempty stores, contradictory and raw constraints, raw scalar
 and coset forms, all four span variants, and collapse of a modification confined to constraints.
 Both color readings have equal-color hash checks. The cases assert that the supplied forms stay
-structurally unchanged. The new method and its empty-store imports are test-gated until S4c
-adds the first production callers; S4c removes those guards.
+structurally unchanged. S4c enables the new method and its empty-store imports for production use.
 
 The graph-IR package tests pass: 12,580 library tests, three ignored, plus integration and
 documentation tests. Clippy passes for all targets without warnings. Formatting and the diff
@@ -1584,7 +1583,7 @@ cargo bench --locked -p umol-graph-ir --bench canonicalize -- \
 
 The [comparison record](../scratch/246-s4b/comparison-results.json) retains both runs' medians.
 
-#### S4c — Shared search colors and canonicalization callers
+#### S4c — Shared search colors and canonicalization callers **Done**
 
 - **Module:** `ir::molecule::symmetry`, `ir::reaction_span::symmetry`, and the two owning
   canonicalization modules.
@@ -1602,6 +1601,27 @@ The [comparison record](../scratch/246-s4b/comparison-results.json) retains both
   normalized stereo checks and generator filters retain their behavior.
 - **Kind:** breaking internally, red-to-green within the subitem as all call sites migrate.
   `[dep: S4b]`
+
+Both shared color constructors now take `include_constraints` and select the corresponding
+`AsColor` reading on the existing ranking path. Excluded stereo constraints are neither
+transported nor checked. Configuration compatibility remains checked in both modes, on each
+present side of a span. The electron-count, site-kind, frame and outer literal-coset checks
+remain. Neither constructor normalizes the supplied forms.
+
+Canonicalization changes only at its nine call sites, which pass `true`. Its normalization,
+direct color reads, leaf ordering, normalized comparisons and generator filters are unchanged.
+The trait method and empty-store imports are enabled outside tests.
+
+The 224 color cases cover both modes, all entity kinds, span variants, raw forms, incidence
+roles, electron counts and incompatible selected data. Excluded incompatible constraints
+succeed; incompatible configurations fail in both modes. Raw contradictory constraints are
+read as stored when included. The existing canonicalization expectations are unchanged.
+
+The [all-features graph-IR test run](../scratch/246-s4c/package-tests.txt) passes: 12,732 library
+tests, three ignored, plus 559 property tests, one ignored, and the integration and documentation
+tests. [Clippy](../scratch/246-s4c/clippy.txt) passes with all features and targets and warnings
+denied. Formatting and the diff check pass. The benchmark comparison remains the S4e gate,
+after S4d.
 
 #### S4d — Shallow coset application
 
@@ -1893,12 +1913,12 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S3, S4a and S4b are complete. The remaining path is:
+S0-S3 and S4a-S4c are complete. The remaining path is:
 
-S4c -> S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S4d -> S4e -> S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
-S4d also follows S4a and must finish before S4e. It is independent of S4b-S4c. The shared color
-calculation is therefore established and checked before its graph-symmetry consumer is replaced;
+S4d is next and must finish before S4e. The shared color
+calculation is established and checked before its graph-symmetry consumer is replaced;
 shallow application is established before raw graph checks use it. Baselines precede each affected
 implementation, and every required test is written before the production change in its subitem.
 No remaining stage is deferred: the shared colors, migrated consumers, keyed readings and Python

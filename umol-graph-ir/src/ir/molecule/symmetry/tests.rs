@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
+use umol_perm::Orientation;
 
 use super::*;
 use crate::ir::atom::AtomForm;
@@ -16,9 +17,13 @@ use crate::ir::symmetry::{
     remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, OrderedPartition,
 };
 use crate::ir::{
-    ArithExpr, AromaticSystemForm, AromaticSystemId, AtomConstraintForm, DativeBondForm,
-    DativeBondId, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
-    NoncovalentBondKind, NumForm, StereoAtomConstraintForm, StereoLigandPair, TopicityForm,
+    ArithExpr, AromaticSystemConstraintForm, AromaticSystemForm, AromaticSystemId,
+    AtomConstraintForm, BondConstraintForm, BooleanForm, Constraint, DativeBondConstraintForm,
+    DativeBondForm, DativeBondId, ElementForm, LigandPermutation, LigandSymmetryForm,
+    MoleculeConstraint, MulticenterBondConstraintForm, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondConstraintForm, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind,
+    NumForm, OrientedLigandPermutation, StereoAtomConstraintForm, StereoBondConstraintForm,
+    StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, TopicityForm,
     TopicityRelationForm,
 };
 use crate::{mol_dsl, mol_dsl_concrete};
@@ -1234,6 +1239,223 @@ pub(crate) fn initial_color_molecule() -> Molecule {
     })
 }
 
+#[fixture]
+pub(crate) fn constrained_color_molecule(initial_color_molecule: Molecule) -> Molecule {
+    let mut molecule = initial_color_molecule;
+    *molecule.atom_mut(AtomId(1)).attributes_mut() = AtomForm::from_element(Element::C)
+        .with_charge(3)
+        .with_constraint(AtomConstraintForm::valence(4));
+    *molecule.bond_mut(BondId(1)).attributes_mut() =
+        BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true));
+    *molecule.dative_bond_mut(DativeBondId(1)).attributes_mut() =
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::aromatic(true));
+    *molecule
+        .aromatic_system_mut(AromaticSystemId(1))
+        .attributes_mut() = AromaticSystemForm::from_electrons(vec![2, 1])
+        .with_constraint(AromaticSystemConstraintForm::electron_count(3));
+    *molecule
+        .multicenter_bond_mut(MulticenterBondId(1))
+        .attributes_mut() = MulticenterBondForm::from_electrons(vec![2, 1])
+        .with_constraint(MulticenterBondConstraintForm::electron_count(3));
+    *molecule
+        .noncovalent_bond_mut(NoncovalentBondId(1))
+        .attributes_mut() = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+        .with_constraint(NoncovalentBondConstraintForm::Intramolecular(
+            BooleanForm::Lit(true),
+        ));
+    *molecule.stereo_atom_mut(StereoAtomId(1)).attributes_mut() =
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            )),
+        );
+    *molecule.stereo_bond_mut(StereoBondId(1)).attributes_mut() =
+        StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            )),
+        );
+    molecule
+}
+
+#[rstest]
+#[case::atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), [true, false])]
+#[case::bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), [true, false])]
+#[case::dative(Entity::DativeBond(DativeBondId(0)), Entity::DativeBond(DativeBondId(1)), [true, false])]
+#[case::aromatic(Entity::AromaticSystem(AromaticSystemId(0)), Entity::AromaticSystem(AromaticSystemId(1)), [true, false])]
+#[case::multicenter(Entity::MulticenterBond(MulticenterBondId(0)), Entity::MulticenterBond(MulticenterBondId(1)), [true, false])]
+#[case::noncovalent(Entity::NoncovalentBond(NoncovalentBondId(0)), Entity::NoncovalentBond(NoncovalentBondId(1)), [true, false])]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), [true, false])]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(0)), Entity::StereoBond(StereoBondId(1)), [true, false])]
+fn test_initial_colors_constraints(
+    constrained_color_molecule: Molecule,
+    #[case] lhs: Entity,
+    #[case] rhs: Entity,
+    #[case] expected: [bool; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let molecule = constrained_color_molecule;
+    let original = molecule.clone();
+    let graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(
+        &molecule,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .unwrap();
+    assert_eq!(
+        colors.entities[graph.node_of(lhs).index()] == colors.entities[graph.node_of(rhs).index()],
+        expected[usize::from(include_constraints)]
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::raw_element(AtomForm::from_element(Element::C), AtomForm::new(ElementForm::lit_set([Element::C])), [false, false])]
+#[case::raw_charge(AtomForm::from_element(Element::C).with_charge(1), AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])), [false, false])]
+#[case::raw_constraint(
+    AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+    AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([4]))),
+    [true, false]
+)]
+#[case::contradictory_constraint(
+    AtomForm::from_element(Element::C),
+    AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([]))),
+    [true, false]
+)]
+fn test_initial_colors_raw(
+    #[case] lhs: AtomForm,
+    #[case] rhs: AtomForm,
+    #[case] expected: [bool; 2],
+    #[values(false, true)] include_constraints: bool,
+    #[values(DescriptionLevel::Structure, DescriptionLevel::Full)] level: DescriptionLevel,
+) {
+    let molecule = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![lhs, rhs],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: None,
+            sum: NumForm::lit_set([]),
+        })
+        .into(),
+        ..Default::default()
+    });
+    let original = molecule.clone();
+    let graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(&molecule, &graph, level, include_constraints).unwrap();
+    assert_eq!(
+        colors.entities[graph.node_of(Entity::Atom(AtomId(0))).index()]
+            == colors.entities[graph.node_of(Entity::Atom(AtomId(1))).index()],
+        expected[usize::from(include_constraints)]
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::raw_set(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0])), [Ok(true), Ok(true)])]
+#[case::raw_term(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var_in("x", []))), [Ok(true), Ok(true)])]
+#[case::contradiction(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), [Ok(true), Ok(false)])]
+#[case::position(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })), [Ok(true), Err(Contradiction)])]
+#[case::permutation(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })), [Ok(true), Err(Contradiction)])]
+fn test_initial_colors_stereo_atom(
+    initial_color_molecule: Molecule,
+    #[case] attributes: StereoAtomForm,
+    #[case] expected: [Result<bool, Contradiction>; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let mut molecule = initial_color_molecule;
+    *molecule.stereo_atom_mut(StereoAtomId(0)).attributes_mut() = attributes;
+    let original = molecule.clone();
+    let graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let actual = initial_colors(
+        &molecule,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .map(|colors| {
+        colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(0))).index()]
+            == colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(1))).index()]
+    });
+    assert_eq!(actual, expected[usize::from(include_constraints)]);
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::raw_set(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0])), [Ok(true), Ok(true)])]
+#[case::raw_term(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var_in("x", []))), [Ok(true), Ok(true)])]
+#[case::contradiction(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), [Ok(true), Ok(false)])]
+#[case::position(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })), [Ok(true), Err(Contradiction)])]
+#[case::permutation(StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })), [Ok(true), Err(Contradiction)])]
+fn test_initial_colors_stereo_bond(
+    initial_color_molecule: Molecule,
+    #[case] attributes: StereoBondForm,
+    #[case] expected: [Result<bool, Contradiction>; 2],
+    #[values(false, true)] include_constraints: bool,
+) {
+    let mut molecule = initial_color_molecule;
+    *molecule.stereo_bond_mut(StereoBondId(0)).attributes_mut() = attributes;
+    let original = molecule.clone();
+    let graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let actual = initial_colors(
+        &molecule,
+        &graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .map(|colors| {
+        colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(0))).index()]
+            == colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(1))).index()]
+    });
+    assert_eq!(actual, expected[usize::from(include_constraints)]);
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::atom_kind(
+    Entity::StereoAtom(StereoAtomId(0)),
+    StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32)
+)]
+#[case::atom_frame(
+    Entity::StereoAtom(StereoAtomId(0)),
+    StereoConfigurationForm::kinded(StereoKind::Octahedral, 0_u32)
+)]
+#[case::bond_kind(
+    Entity::StereoBond(StereoBondId(0)),
+    StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32)
+)]
+#[case::bond_coset(
+    Entity::StereoBond(StereoBondId(0)),
+    StereoConfigurationForm::kinded(StereoKind::CisTrans, 2_u32)
+)]
+fn test_initial_colors_configuration_error(
+    initial_color_molecule: Molecule,
+    #[case] entity: Entity,
+    #[case] configuration: StereoConfigurationForm,
+    #[values(false, true)] include_constraints: bool,
+) {
+    let mut molecule = initial_color_molecule;
+    match entity {
+        Entity::StereoAtom(id) => {
+            molecule.stereo_atom_mut(id).attributes_mut().configuration = configuration
+        }
+        Entity::StereoBond(id) => {
+            molecule.stereo_bond_mut(id).attributes_mut().configuration = configuration
+        }
+        _ => unreachable!(),
+    }
+    let graph = molecule.incidence_graph(IncidenceLevel::Full);
+    assert_eq!(
+        initial_colors(
+            &molecule,
+            &graph,
+            DescriptionLevel::Structure,
+            include_constraints
+        ),
+        Err(Contradiction)
+    );
+}
+
 #[rstest]
 #[case::atom_constraint(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), false)]
 #[case::atom_element(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
@@ -1301,8 +1523,13 @@ fn test_initial_colors(
         .normalize()
         .expect("fixed molecule normalizes");
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure)
-        .expect("fixed molecule has colors");
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        true,
+    )
+    .expect("fixed molecule has colors");
 
     assert_eq!(
         colors.entities[incidence_graph.node_of(lhs).index()]
@@ -1349,10 +1576,17 @@ fn test_initial_colors_order(
     #[case] lhs: Entity,
     #[case] rhs: Entity,
     #[case] expected: Ordering,
+    #[values(false, true)] include_constraints: bool,
 ) {
     let molecule = initial_color_molecule;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .unwrap();
     assert_eq!(
         colors.entities[incidence_graph.node_of(lhs).index()]
             .cmp(&colors.entities[incidence_graph.node_of(rhs).index()]),
@@ -1361,13 +1595,21 @@ fn test_initial_colors_order(
 }
 
 #[rstest]
-fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
+fn test_initial_colors_incidence(
+    initial_color_molecule: Molecule,
+    #[values(false, true)] include_constraints: bool,
+) {
     let molecule = initial_color_molecule
         .normalize()
         .expect("fixed molecule normalizes");
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure)
-        .expect("fixed molecule has colors");
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        include_constraints,
+    )
+    .expect("fixed molecule has colors");
     let contributions = [1, 2, 2, 1, 1, 2, 1, 2, 2, 1];
     let incidences = incidence_graph
         .incidences()
@@ -1434,7 +1676,11 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
     }),
     DescriptionLevel::Structure
 )]
-fn test_initial_colors_error(#[case] molecule: Molecule, #[case] level: DescriptionLevel) {
+fn test_initial_colors_error(
+    #[case] molecule: Molecule,
+    #[case] level: DescriptionLevel,
+    #[values(false, true)] include_constraints: bool,
+) {
     let incidence_graph = molecule.incidence_graph(match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
         DescriptionLevel::Constitution => IncidenceLevel::Constitution,
@@ -1442,7 +1688,7 @@ fn test_initial_colors_error(#[case] molecule: Molecule, #[case] level: Descript
     });
 
     assert_eq!(
-        initial_colors(&molecule, &incidence_graph, level),
+        initial_colors(&molecule, &incidence_graph, level, include_constraints),
         Err(Contradiction)
     );
 }
@@ -1512,7 +1758,13 @@ fn test_remapping_exists_individualized(
     #[case] expected: bool,
 ) {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    let colors = initial_colors(
+        &molecule,
+        &incidence_graph,
+        DescriptionLevel::Structure,
+        true,
+    )
+    .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let partition = |atoms: Vec<u32>| {
         atoms.into_iter().fold(

@@ -1,9 +1,7 @@
 //! Noncovalent bond form.
 
 use std::borrow::Cow;
-use std::sync::Arc;
-#[cfg(test)]
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::{array, mem};
 
 use strum::VariantArray;
@@ -723,7 +721,6 @@ impl AsColor for NoncovalentBondForm {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         static EMPTY_CONSTRAINTS: LazyLock<NoncovalentBondConstraintsForm> =
             LazyLock::new(NoncovalentBondConstraintsForm::new);

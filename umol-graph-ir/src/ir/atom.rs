@@ -1,7 +1,6 @@
 //! Atom forms and updates shared across crates.
 
 use std::collections::BTreeSet;
-#[cfg(test)]
 use std::sync::LazyLock;
 
 use strum::VariantArray;
@@ -290,7 +289,6 @@ impl AsColor for AtomForm {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         static EMPTY_CONSTRAINTS: LazyLock<AtomConstraintsForm> =
             LazyLock::new(AtomConstraintsForm::new);

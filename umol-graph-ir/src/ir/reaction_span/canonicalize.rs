@@ -651,7 +651,7 @@ fn canonical_candidate(
         DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
-    let colors = initial_colors(span, &incidence_graph, level)?;
+    let colors = initial_colors(span, &incidence_graph, level, true)?;
     let build_key = |order: &[NodeId]| color_key(span, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(span, &incidence_graph, level, order);
@@ -765,8 +765,8 @@ impl ReactionSpan {
         let source_incidence = source.incidence_graph(incidence_level);
         let target_incidence = target.incidence_graph(incidence_level);
         let (source_colors, target_colors) = match (
-            initial_colors(&source, &source_incidence, level),
-            initial_colors(&target, &target_incidence, level),
+            initial_colors(&source, &source_incidence, level, true),
+            initial_colors(&target, &target_incidence, level, true),
         ) {
             (Ok(source_colors), Ok(target_colors)) => (source_colors, target_colors),
             (Err(_), Err(_)) => return self.framed_eq(other),

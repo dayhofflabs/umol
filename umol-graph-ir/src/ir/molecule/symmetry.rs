@@ -908,17 +908,21 @@ pub(crate) fn incidence_color<'a>(
     (incidence, electron_count)
 }
 
-/// The integers of the colors of a normalized molecule at `level`: one per entity, by incidence
+/// The integers of the colors of the supplied molecule at `level`: one per entity, by incidence
 /// node, and one per incidence, by incidence edge.
 ///
 /// The colors of each entity kind are ranked in kind order, and the incidences continue after the
 /// entities. The color of an incidence is its role and, for an atom of an aromatic system or a
 /// multicenter bond, the electron count of that atom. At Topology the incidences are not ranked,
 /// since the topology search input does not read them.
+/// `include_constraints` selects the frame-independent entity constraints in the colors and the
+/// frame-relative stereo constraints in compatibility checks. Configuration compatibility is
+/// checked in both modes. No form is normalized.
 pub(crate) fn initial_colors(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     level: DescriptionLevel,
+    include_constraints: bool,
 ) -> Result<InitialColors, Contradiction> {
     let mut entities = vec![0; incidence_graph.graph().node_count()];
     let position = |entity: Entity| incidence_graph.node_of(entity).index();
@@ -928,7 +932,11 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|atom| {
             (
-                atom.attributes().as_color(),
+                if include_constraints {
+                    atom.attributes().as_color()
+                } else {
+                    atom.attributes().as_inherent_color()
+                },
                 position(Entity::Atom(atom.id())),
             )
         })
@@ -939,7 +947,11 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|bond| {
             (
-                bond.attributes().as_color(),
+                if include_constraints {
+                    bond.attributes().as_color()
+                } else {
+                    bond.attributes().as_inherent_color()
+                },
                 position(Entity::Bond(bond.id())),
             )
         })
@@ -957,7 +969,11 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|bond| {
             (
-                bond.attributes().as_color(),
+                if include_constraints {
+                    bond.attributes().as_color()
+                } else {
+                    bond.attributes().as_inherent_color()
+                },
                 position(Entity::DativeBond(bond.id())),
             )
         })
@@ -972,7 +988,11 @@ pub(crate) fn initial_colors(
             return Err(Contradiction);
         }
         aromatic.push((
-            attributes.as_color(),
+            if include_constraints {
+                attributes.as_color()
+            } else {
+                attributes.as_inherent_color()
+            },
             position(Entity::AromaticSystem(system.id())),
         ));
     }
@@ -986,7 +1006,11 @@ pub(crate) fn initial_colors(
             return Err(Contradiction);
         }
         multicenter.push((
-            attributes.as_color(),
+            if include_constraints {
+                attributes.as_color()
+            } else {
+                attributes.as_inherent_color()
+            },
             position(Entity::MulticenterBond(bond.id())),
         ));
     }
@@ -996,7 +1020,11 @@ pub(crate) fn initial_colors(
         .iter()
         .map(|bond| {
             (
-                bond.attributes().as_color(),
+                if include_constraints {
+                    bond.attributes().as_color()
+                } else {
+                    bond.attributes().as_inherent_color()
+                },
                 position(Entity::NoncovalentBond(bond.id())),
             )
         })
@@ -1011,12 +1039,25 @@ pub(crate) fn initial_colors(
                 check_stereo_atom_kind(Entity::StereoAtom(stereo.id()), kind)
                     .map_err(|_| Contradiction)?;
             }
-            attributes
-                .clone()
-                .reframe_by(&Permutation::identity(stereo.ligand_count()))
-                .ok_or(Contradiction)?;
+            let action = Permutation::identity(stereo.ligand_count());
+            if include_constraints {
+                attributes
+                    .clone()
+                    .reframe_by(&action)
+                    .ok_or(Contradiction)?;
+            } else {
+                attributes
+                    .configuration
+                    .clone()
+                    .reframe_by(&action)
+                    .ok_or(Contradiction)?;
+            }
             stereo_atoms.push((
-                attributes.as_color(),
+                if include_constraints {
+                    attributes.as_color()
+                } else {
+                    attributes.as_inherent_color()
+                },
                 position(Entity::StereoAtom(stereo.id())),
             ));
         }
@@ -1028,12 +1069,28 @@ pub(crate) fn initial_colors(
                 check_stereo_bond_kind(Entity::StereoBond(stereo.id()), kind)
                     .map_err(|_| Contradiction)?;
             }
-            attributes
-                .clone()
-                .reframe_by(&Permutation::identity(stereo.ligand_count()))
-                .ok_or(Contradiction)?;
+            let action = Permutation::identity(stereo.ligand_count());
+            if include_constraints {
+                attributes
+                    .clone()
+                    .reframe_by(&action)
+                    .ok_or(Contradiction)?;
+            } else {
+                if !StereoKind::CisTrans.class_key().space().allows(action) {
+                    return Err(Contradiction);
+                }
+                attributes
+                    .configuration
+                    .clone()
+                    .reframe_by(&action)
+                    .ok_or(Contradiction)?;
+            }
             stereo_bonds.push((
-                attributes.as_color(),
+                if include_constraints {
+                    attributes.as_color()
+                } else {
+                    attributes.as_inherent_color()
+                },
                 position(Entity::StereoBond(stereo.id())),
             ));
         }

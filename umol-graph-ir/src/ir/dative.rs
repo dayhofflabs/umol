@@ -2,9 +2,7 @@
 
 use std::borrow::Cow;
 use std::mem;
-use std::sync::Arc;
-#[cfg(test)]
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use strum::VariantArray;
 use umol_graph_core::{
@@ -803,7 +801,6 @@ impl AsColor for DativeBondForm {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         static EMPTY_CONSTRAINTS: LazyLock<DativeBondConstraintsForm> =
             LazyLock::new(DativeBondConstraintsForm::new);

@@ -1690,7 +1690,6 @@ impl AsColor for StereoAtomForm {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         StereoAtomColor {
             kind: self.configuration.kind(),
@@ -1778,7 +1777,6 @@ impl AsColor for StereoBondForm {
         }
     }
 
-    #[cfg(test)]
     fn as_inherent_color(&self) -> Self::Color<'_> {
         StereoBondColor {
             kind: self.configuration.kind(),
