@@ -13,12 +13,14 @@ use umol_graph::ops::stereo::{StereoDerivation, StereoPerceiver, StereoSelection
 use umol_graph::ops::validate::StereoConformanceValidator;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
-    ConstitutionColoring, GraphSymmetryConfig, Molecule, MoleculeEntries, RingConfig, RingModel,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
+    AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm, BondId, CisTransStereoForm,
+    ConstitutionColoring, ElementForm, GraphSymmetryConfig, Molecule, MoleculeEntries, NumForm,
+    RingConfig, RingModel, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm,
+    StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    StereoLigandPosition, StereoTerm, Stereogenicity, StereogenicityForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
+use umol_perm::{Orientation, OrientedPermutation, Permutation};
 
 pub(super) fn bench_stereo(c: &mut Criterion) {
     let mut cases = vec![
@@ -452,6 +454,150 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             b.iter(|| {
                 for symmetry in black_box(&symmetries) {
                     black_box(symmetry.stereogenicity());
+                }
+            });
+        });
+    }
+    let meso = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                       {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]
+    }"#
+    );
+    let mut chiral = meso.clone();
+    chiral
+        .stereo_atom_mut(StereoAtomId(1))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32);
+    let mut raw_term = meso.clone();
+    raw_term
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::kinded(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::Lit(0)),
+    );
+    let mut raw_singleton = meso.clone();
+    raw_singleton.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::lit_set([Element::C]);
+    raw_singleton
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration =
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0]));
+    let mut constrained = meso.clone();
+    constrained.atom_mut(AtomId(2)).attributes_mut().constraints =
+        AtomConstraintForm::Valence(NumForm::lit_set([1])).into();
+    constrained
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .constraints = StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([
+        Stereogenicity::Stereogenic,
+    ]))
+    .into();
+    let prostereogenic = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
+                       {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]
+    }"#
+    );
+    let trichloropentane_meso = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#h3" "C" "C" "C" "C#h3" "Cl" "Cl" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]
+                [1 8 "1"] [2 9 "1"] [3 10 "1"]]
+        :stereo-atoms [{:site 1 :ligands [0 2 5 8] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 6 9] :attrs "Th0"}
+                       {:site 3 :ligands [2 4 7 10] :attrs "Th0"}]
+    }"#
+    );
+    let mut trichloropentane_chiral = trichloropentane_meso.clone();
+    trichloropentane_chiral
+        .stereo_atom_mut(StereoAtomId(2))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32);
+    let ligand_swap =
+        OrientedPermutation::new(Permutation::from_image(&[1, 0, 2, 3]), Orientation::Proper);
+    for (name, molecule) in [
+        ("readings_meso", meso),
+        ("readings_chiral", chiral),
+        ("readings_prostereogenic", prostereogenic),
+        ("readings_trichloropentane_meso", trichloropentane_meso),
+        ("readings_trichloropentane_chiral", trichloropentane_chiral),
+        ("readings_raw_term", raw_term),
+        ("readings_raw_singleton", raw_singleton),
+        ("readings_constraints", constrained),
+    ] {
+        assert_eq!(molecule.clone().edit().finish(), Ok(molecule.clone()));
+        let graph = molecule.graph_symmetry(&config);
+        let proper: Vec<_> = molecule
+            .atoms()
+            .ids()
+            .map(|id| graph.proper_orbit_of(id))
+            .collect();
+        let star: Vec<_> = molecule
+            .atoms()
+            .ids()
+            .map(|id| graph.star_orbit_of(id))
+            .collect();
+        eprintln!("stereo_readings_input\t{name}\tcounts={:?}\tchiral={}\tproper={proper:?}\tstar={star:?}",
+            molecule.entity_counts(), graph.is_chiral());
+        group.bench_function(BenchmarkId::new("graph_symmetry", name), |b| {
+            b.iter(|| black_box(black_box(&molecule).graph_symmetry(black_box(&config))));
+        });
+        group.bench_function(BenchmarkId::new("local_symmetry", name), |b| {
+            b.iter(|| {
+                let molecule = black_box(&molecule);
+                let graph = black_box(&graph);
+                for id in molecule.stereo_atoms().ids() {
+                    black_box(molecule.stereo_atom_symmetry(graph, id));
+                }
+                for id in molecule.stereo_bonds().ids() {
+                    black_box(molecule.stereo_bond_symmetry(graph, id));
+                }
+            });
+        });
+        group.bench_function(BenchmarkId::new("build_molecule_readings", name), |b| {
+            b.iter(|| {
+                let molecule = black_box(&molecule);
+                let graph = molecule.graph_symmetry(black_box(&config));
+                black_box(graph.is_chiral());
+                black_box(graph.same_proper_orbit(AtomId(0), AtomId(1)));
+                black_box(graph.same_star_orbit(AtomId(0), AtomId(1)));
+                for id in molecule.atoms().ids() {
+                    black_box(graph.proper_orbit_of(id));
+                    black_box(graph.star_orbit_of(id));
+                }
+            });
+        });
+        group.bench_function(BenchmarkId::new("build_stereo_readings", name), |b| {
+            b.iter(|| {
+                let molecule = black_box(&molecule);
+                let graph = molecule.graph_symmetry(black_box(&config));
+                let symmetries = molecule
+                    .stereo_atoms()
+                    .ids()
+                    .map(|id| molecule.stereo_atom_symmetry(&graph, id))
+                    .chain(
+                        molecule
+                            .stereo_bonds()
+                            .ids()
+                            .map(|id| molecule.stereo_bond_symmetry(&graph, id)),
+                    );
+                for symmetry in symmetries {
+                    black_box(symmetry.stereogenicity());
+                    for first in 0..symmetry.kind().degree() {
+                        for second in first + 1..symmetry.kind().degree() {
+                            black_box(symmetry.topicity(
+                                StereoLigandPosition::from(first),
+                                StereoLigandPosition::from(second),
+                            ));
+                        }
+                    }
+                    black_box(symmetry.group().contains(ligand_swap));
                 }
             });
         });

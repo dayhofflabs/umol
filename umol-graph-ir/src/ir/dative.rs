@@ -799,6 +799,7 @@ impl AsColor for DativeBondForm {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -1997,5 +1998,29 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    }
+
+    #[rstest]
+    #[case::order_priority(
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::aromatic(true)),
+        DativeBondForm::from_order(2),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        DativeBondForm::from_order(1),
+        DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::aromatic(true)),
+        Ordering::Less
+    )]
+    #[case::raw_order(
+        DativeBondForm::from_order(1),
+        DativeBondForm::new(NumForm::lit_set([1])),
+        Ordering::Less
+    )]
+    fn test_dative_bond_form_as_color_order(
+        #[case] lhs: DativeBondForm,
+        #[case] rhs: DativeBondForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
     }
 }

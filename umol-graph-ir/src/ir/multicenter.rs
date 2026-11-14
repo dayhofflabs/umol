@@ -820,6 +820,7 @@ impl AsColor for MulticenterBondForm {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -2151,5 +2152,39 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    }
+
+    #[rstest]
+    #[case::charge_priority(
+        MulticenterBondForm::default().with_charge(-1).with_unpaired_electrons((1_u8, 2_u8)),
+        MulticenterBondForm::default().with_charge(1),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        MulticenterBondForm::default().with_constraint(MulticenterBondConstraintForm::electron_count(6)),
+        MulticenterBondForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        MulticenterBondForm::default().with_constraint(MulticenterBondConstraintForm::electron_count(4)),
+        MulticenterBondForm::default().with_constraint(MulticenterBondConstraintForm::electron_count(6)),
+        Ordering::Less
+    )]
+    #[case::raw_charge(
+        MulticenterBondForm::default().with_charge(-1),
+        MulticenterBondForm::default().with_charge(NumForm::lit_set([-1])),
+        Ordering::Less
+    )]
+    #[case::positional_electrons(
+        MulticenterBondForm::from_electrons(vec![2, 1, 1]),
+        MulticenterBondForm::from_electrons(vec![1, 2, 1]),
+        Ordering::Equal
+    )]
+    fn test_multicenter_bond_form_as_color_order(
+        #[case] lhs: MulticenterBondForm,
+        #[case] rhs: MulticenterBondForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
     }
 }

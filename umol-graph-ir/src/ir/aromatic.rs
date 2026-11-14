@@ -821,6 +821,7 @@ impl AsColor for AromaticSystemForm {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -2152,5 +2153,39 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    }
+
+    #[rstest]
+    #[case::charge_priority(
+        AromaticSystemForm::default().with_charge(-1).with_unpaired_electrons((1_u8, 2_u8)),
+        AromaticSystemForm::default().with_charge(1),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        AromaticSystemForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(4)),
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        Ordering::Less
+    )]
+    #[case::raw_charge(
+        AromaticSystemForm::default().with_charge(-1),
+        AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])),
+        Ordering::Less
+    )]
+    #[case::positional_electrons(
+        AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+        AromaticSystemForm::from_electrons(vec![1, 2, 1]),
+        Ordering::Equal
+    )]
+    fn test_aromatic_system_form_as_color_order(
+        #[case] lhs: AromaticSystemForm,
+        #[case] rhs: AromaticSystemForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
     }
 }

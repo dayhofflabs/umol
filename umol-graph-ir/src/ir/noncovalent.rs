@@ -810,6 +810,7 @@ pub enum NoncovalentBondKind {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
     use std::{iter, ptr};
 
     use pretty_assertions::assert_eq;
@@ -1774,6 +1775,25 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    }
+
+    #[rstest]
+    #[case::kind_priority(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true))),
+        Ordering::Less
+    )]
+    fn test_noncovalent_bond_form_as_color_order(
+        #[case] lhs: NoncovalentBondForm,
+        #[case] rhs: NoncovalentBondForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
     }
 
     #[rustfmt::skip]

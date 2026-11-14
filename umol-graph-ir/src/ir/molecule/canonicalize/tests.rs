@@ -14,14 +14,60 @@ use crate::ir::canonicalize::tests::{
 use crate::ir::symmetry::{same_cells, AutomorphismAdapterOutput, CanonicalSearchStats};
 use crate::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Constraint, Contradiction, DativeBondForm, DativeBondId, Entity, Incidence, IncidenceLevel,
-    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
-    MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindForm, NumForm, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId,
-    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
+    Constraint, Contradiction, DativeBondForm, DativeBondId, ElementForm, Entity, Incidence,
+    IncidenceLevel, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
+    MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
+    NoncovalentBondKind, NoncovalentBondKindForm, NumForm, StereoAtomConstraintForm,
+    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
+    TopicityForm, TopicityRelationForm,
 };
 use crate::mol_dsl;
+
+#[rstest]
+#[case::element_order(
+    vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::C)],
+    vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)]
+)]
+#[case::raw_element(
+    vec![AtomForm::from_element(Element::N), AtomForm::new(ElementForm::lit_set([Element::C]))],
+    vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)]
+)]
+#[case::raw_constraint(
+    vec![AtomForm::from_element(Element::C)
+        .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([4])))],
+    vec![AtomForm::from_element(Element::C)
+        .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4)))]
+)]
+#[case::constraint_order(
+    vec![
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::from_element(Element::C),
+    ],
+    vec![
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+    ]
+)]
+fn test_molecule_canonicalize_colors(
+    canonicalize_context: CanonicalizeContext,
+    #[case] atoms: Vec<AtomForm>,
+    #[case] expected_atoms: Vec<AtomForm>,
+) {
+    let molecule = Molecule::from_entries(MoleculeEntries {
+        atoms,
+        ..Default::default()
+    });
+    let expected = Molecule::from_entries(MoleculeEntries {
+        atoms: expected_atoms,
+        ..Default::default()
+    });
+    assert_eq!(
+        molecule.clone().canonicalize(&canonicalize_context),
+        Ok(expected.clone())
+    );
+    assert!(molecule.canonical_eq(&expected, &canonicalize_context));
+}
 
 #[fixture]
 fn stereo_atom_canonicalization_molecule() -> Molecule {

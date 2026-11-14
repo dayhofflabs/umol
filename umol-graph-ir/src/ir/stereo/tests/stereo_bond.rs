@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use pretty_assertions::assert_eq;
 
 use super::*;
@@ -448,4 +450,33 @@ fn test_stereo_bond_form_as_color(
     #[case] expected: bool,
 ) {
     assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+}
+
+#[rstest]
+#[case::kind_priority(
+    StereoBondForm::default().with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    Ordering::Less
+)]
+#[case::constraint(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    Ordering::Less
+)]
+#[case::raw_constraint(
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))),
+    Ordering::Less
+)]
+#[case::raw_coset(
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0])),
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    Ordering::Equal
+)]
+fn test_stereo_bond_form_as_color_order(
+    #[case] lhs: StereoBondForm,
+    #[case] rhs: StereoBondForm,
+    #[case] expected: Ordering,
+) {
+    assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
 }

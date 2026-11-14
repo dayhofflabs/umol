@@ -184,6 +184,8 @@ impl AsColor for BondForm {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -491,5 +493,39 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    }
+
+    #[rstest]
+    #[case::order_priority(
+        BondForm::from_order(1).with_charge(2).with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::from_order(2).with_charge(-2),
+        Ordering::Less
+    )]
+    #[case::charge_priority(
+        BondForm::default().with_charge(-1).with_unpaired_electrons((1_u8, 2_u8)),
+        BondForm::default().with_charge(1),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        BondForm::default().with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        BondForm::default(),
+        BondForm::default().with_constraint(BondConstraintForm::aromatic(true)),
+        Ordering::Less
+    )]
+    #[case::raw_order(
+        BondForm::from_order(1),
+        BondForm::new(NumForm::lit_set([1])),
+        Ordering::Less
+    )]
+    fn test_bond_form_as_color_order(
+        #[case] lhs: BondForm,
+        #[case] rhs: BondForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
     }
 }

@@ -11,14 +11,17 @@ use umol_edn::FromEdn;
 use umol_graph_core::{AutomorphismAlgorithm, EdgeId, GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
-    AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, Constraint, DativeBondForm,
-    DativeBondId, Delta, Deltas, FrameTransport, IncidenceLevel, Molecule, MoleculeConstraint,
-    MoleculeEntries, MoleculeRemapping, MulticenterBondForm, MulticenterBondId,
-    NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, Reframe,
-    StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId,
-    StereoBondDelta, StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
+    AromaticSystemConstraintForm, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
+    AtomDelta, AtomFieldChange, AtomForm, AtomId, BondConstraintForm, BondForm, BondId,
+    BooleanForm, Canonicalize, CanonicalizeContext, Constraint, DativeBondConstraintForm,
+    DativeBondForm, DativeBondId, Delta, Deltas, ElementForm, FrameTransport, IncidenceLevel,
+    Molecule, MoleculeConstraint, MoleculeEntries, MoleculeRemapping,
+    MulticenterBondConstraintForm, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondConstraintForm, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind,
+    NumForm, Reaction, Reframe, StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange,
+    StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta, StereoBondFieldChange,
+    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity,
     TopicityForm, TopicityRelationForm,
 };
 use umol_perm::Permutation;
@@ -1384,6 +1387,166 @@ fn bench_reaction_span(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_colors(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        automorphism_algorithm: ALGORITHM,
+    };
+    let mut constrained = overlay_heavy();
+    constrained.bond_mut(BondId(0)).attributes_mut().constraints =
+        BondConstraintForm::aromatic(true).into();
+    constrained
+        .dative_bond_mut(DativeBondId(0))
+        .attributes_mut()
+        .constraints = DativeBondConstraintForm::aromatic(true).into();
+    *constrained
+        .aromatic_system_mut(AromaticSystemId(0))
+        .attributes_mut() = AromaticSystemForm::from_electrons(vec![2, 1, 1, 1])
+        .with_constraint(AromaticSystemConstraintForm::electron_count(5));
+    *constrained
+        .multicenter_bond_mut(MulticenterBondId(0))
+        .attributes_mut() = MulticenterBondForm::from_electrons(vec![2, 1, 1])
+        .with_constraint(MulticenterBondConstraintForm::electron_count(4));
+    constrained
+        .noncovalent_bond_mut(NoncovalentBondId(0))
+        .attributes_mut()
+        .constraints = NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(true)).into();
+    constrained
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .constraints = StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+        Stereogenicity::Stereogenic,
+    ))
+    .into();
+    constrained
+        .stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .constraints = StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+        Stereogenicity::Stereogenic,
+    ))
+    .into();
+
+    let mut raw = constrained.clone();
+    raw.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::lit_set([Element::C]);
+    raw.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::lit_set([0]);
+    raw.bond_mut(BondId(0)).attributes_mut().order = NumForm::lit_set([1]);
+    raw.dative_bond_mut(DativeBondId(0)).attributes_mut().order = NumForm::lit_set([1]);
+    raw.aromatic_system_mut(AromaticSystemId(0))
+        .attributes_mut()
+        .charge = NumForm::lit_set([0]);
+    raw.multicenter_bond_mut(MulticenterBondId(0))
+        .attributes_mut()
+        .charge = NumForm::lit_set([0]);
+    raw.stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration =
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0]));
+    raw.stereo_bond_mut(StereoBondId(0))
+        .attributes_mut()
+        .configuration = StereoConfigurationForm::kinded(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::Lit(0)),
+    );
+
+    let cases = vec![
+        CorpusCase {
+            name: "entity_constraints",
+            molecule: constrained,
+        },
+        CorpusCase {
+            name: "raw_forms",
+            molecule: raw,
+        },
+        CorpusCase {
+            name: "aromatic_nonuniform",
+            molecule: aromatic_electron_counts(),
+        },
+        CorpusCase {
+            name: "multicenter_nonuniform",
+            molecule: Molecule::from_entries(MoleculeEntries {
+                atoms: vec![atom(Element::C); 3],
+                multicenter: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    MulticenterBondForm::from_electrons(vec![2, 1, 1]),
+                )],
+                ..Default::default()
+            }),
+        },
+        CorpusCase {
+            name: "dative_roles",
+            molecule: Molecule::from_entries(MoleculeEntries {
+                atoms: vec![atom(Element::B); 2],
+                dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
+                ..Default::default()
+            }),
+        },
+        CorpusCase {
+            name: "stereo_frame_constraints",
+            molecule: frame_relative_stereo_constraint(),
+        },
+    ];
+    let inputs = cases
+        .into_iter()
+        .map(|case| {
+            let renumbered = case
+                .molecule
+                .clone()
+                .remap(&reverse_remapping(&case.molecule));
+            let span = atom_addition(case.molecule.clone(), Element::N)
+                .to_reaction_span()
+                .unwrap();
+            let renumbered_span = atom_addition(renumbered.clone(), Element::N)
+                .to_reaction_span()
+                .unwrap();
+            assert!(case.molecule.canonical_eq(&renumbered, &context));
+            assert!(span.canonical_eq(&renumbered_span, &context));
+            eprintln!(
+                "color_input\t{}\tcounts={:?}\tspan_counts={:?}",
+                case.name,
+                case.molecule.entity_counts(),
+                span.entity_counts()
+            );
+            (case, renumbered, span, renumbered_span)
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("canonicalize/colors/molecule/canonicalize");
+    for (case, _, _, _) in &inputs {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| black_box(molecule.canonicalize(&context).unwrap()),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+    let mut group = c.benchmark_group("canonicalize/colors/molecule/canonical_eq_equal");
+    for (case, renumbered, _, _) in &inputs {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).canonical_eq(black_box(renumbered), &context));
+        });
+    }
+    group.finish();
+    let mut group = c.benchmark_group("canonicalize/colors/reaction_span/canonicalize");
+    for (case, _, span, _) in &inputs {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || span.clone(),
+                |span| black_box(span.canonicalize(&context).unwrap()),
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+    let mut group = c.benchmark_group("canonicalize/colors/reaction_span/canonical_eq_equal");
+    for (case, _, span, renumbered_span) in &inputs {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(span).canonical_eq(black_box(renumbered_span), &context));
+        });
+    }
+    group.finish();
+}
+
 fn bench_inline_constraint(c: &mut Criterion) {
     let context = CanonicalizeContext {
         automorphism_algorithm: ALGORITHM,
@@ -1645,6 +1808,7 @@ criterion_group!(
     bench_complete_comparison,
     bench_reaction_span,
     bench_inline_constraint,
+    bench_colors,
     bench_canonical_eq_unequal,
 );
 criterion_main!(canonicalize);

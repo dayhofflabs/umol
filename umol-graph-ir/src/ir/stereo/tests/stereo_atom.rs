@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use pretty_assertions::assert_eq;
 
 use super::*;
@@ -554,4 +556,38 @@ fn test_stereo_atom_form_as_color(
     #[case] expected: bool,
 ) {
     assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+}
+
+#[rstest]
+#[case::kind_priority(
+    StereoAtomForm::default().with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    Ordering::Less
+)]
+#[case::kind(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoAtomForm::new(StereoKind::SquarePlanar, 0_u32),
+    Ordering::Less
+)]
+#[case::constraint(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    Ordering::Less
+)]
+#[case::raw_constraint(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))),
+    Ordering::Less
+)]
+#[case::raw_coset(
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0])),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    Ordering::Equal
+)]
+fn test_stereo_atom_form_as_color_order(
+    #[case] lhs: StereoAtomForm,
+    #[case] rhs: StereoAtomForm,
+    #[case] expected: Ordering,
+) {
+    assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
 }

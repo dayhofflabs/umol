@@ -219,7 +219,9 @@ mod tests {
 
     use super::super::aromatic::AromaticSystemForm;
     use super::super::atom::AtomForm;
-    use super::super::constraint::{AtomConstraintForm, RelationalConstraint};
+    use super::super::constraint::{
+        AromaticSystemConstraintForm, AtomConstraintForm, RelationalConstraint,
+    };
     use super::super::frame::{
         AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
         NoncovalentBondsFrameAction, StereoAtomsFrameAction, StereoBondsFrameAction,
@@ -395,6 +397,39 @@ mod tests {
             rhs: AromaticSystemForm::default(),
         },
         EntitySpan::Added(AromaticSystemForm::default().with_charge(-1)),
+        Ordering::Less
+    )]
+    #[case::raw_charge(
+        EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(-1)),
+        EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(NumForm::lit_set([-1]))),
+        Ordering::Less
+    )]
+    #[case::modified_raw_charge(
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default().with_charge(-1),
+            rhs: AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])),
+        },
+        EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(-1)),
+        Ordering::Greater
+    )]
+    #[case::modified_constraint(
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default(),
+            rhs: AromaticSystemForm::default()
+                .with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        },
+        EntitySpan::Unchanged(AromaticSystemForm::default()),
+        Ordering::Greater
+    )]
+    #[case::modified_side_order(
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default().with_charge(-1),
+            rhs: AromaticSystemForm::default().with_charge(1),
+        },
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default().with_charge(1),
+            rhs: AromaticSystemForm::default().with_charge(-1),
+        },
         Ordering::Less
     )]
     fn test_entity_span_as_color(

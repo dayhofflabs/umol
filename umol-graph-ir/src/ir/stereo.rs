@@ -2601,8 +2601,8 @@ pub(crate) fn coset_apply_permutation(
 
 #[cfg(test)]
 mod tests {
-    mod atom_form;
-    mod bond_form;
+    mod stereo_atom;
+    mod stereo_bond;
 
     use std::collections::BTreeSet;
     use std::ptr;

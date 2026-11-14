@@ -824,6 +824,8 @@ impl Lattice for IsotopeMassForm {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -1147,6 +1149,60 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    }
+
+    #[rstest]
+    #[case::element_priority(
+        AtomForm::from_element(Element::C).with_charge(2).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::from_element(Element::N).with_charge(-2),
+        Ordering::Less
+    )]
+    #[case::isotope_priority(
+        AtomForm::from_element(Element::C).with_isotope_mass(12_u32).with_charge(2),
+        AtomForm::from_element(Element::C).with_isotope_mass(13_u32).with_charge(-2),
+        Ordering::Less
+    )]
+    #[case::charge_priority(
+        AtomForm::default().with_charge(-1).with_implicit_hydrogens(3),
+        AtomForm::default().with_charge(1).with_implicit_hydrogens(0),
+        Ordering::Less
+    )]
+    #[case::hydrogen_priority(
+        AtomForm::default().with_implicit_hydrogens(1).with_lone_pairs(3),
+        AtomForm::default().with_implicit_hydrogens(2).with_lone_pairs(0),
+        Ordering::Less
+    )]
+    #[case::lone_pair_priority(
+        AtomForm::default().with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8)),
+        AtomForm::default().with_lone_pairs(2),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(3)),
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(4)),
+        Ordering::Less
+    )]
+    #[case::raw_element(
+        AtomForm::from_element(Element::C),
+        AtomForm::new(ElementForm::lit_set([Element::C])),
+        Ordering::Less
+    )]
+    #[case::raw_constraint(
+        AtomForm::default().with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+        AtomForm::default().with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([4]))),
+        Ordering::Less
+    )]
+    fn test_atom_form_as_color_order(
+        #[case] lhs: AtomForm,
+        #[case] rhs: AtomForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
     }
 
     #[rustfmt::skip]

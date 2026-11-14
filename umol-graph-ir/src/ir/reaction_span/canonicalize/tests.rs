@@ -9,15 +9,67 @@ use super::*;
 use crate::ir::canonicalize::tests::{canonicalize_context, explicitly_dense_equivalent};
 use crate::ir::molecule::symmetry::tests::initial_color_molecule;
 use crate::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomDelta, AtomFieldChange, AtomForm, AtomId, BondForm,
-    BondId, Constraint, ConstraintDelta, DativeBondForm, DativeBondId, Delta, Deltas, Entity,
-    IncidenceLevel, Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
-    MulticenterBondForm, MulticenterBondId, NoncovalentBondDelta, NoncovalentBondForm,
-    NoncovalentBondId, NoncovalentBondKind, NumForm, ReactionSpanEntries, RelationalConstraint,
-    StereoAtomDelta, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind,
+    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
+    AtomId, BondForm, BondId, Constraint, ConstraintDelta, DativeBondForm, DativeBondId, Delta,
+    Deltas, ElementForm, Entity, IncidenceLevel, Molecule, MoleculeConstraint,
+    MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondDelta, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
+    ReactionSpanEntries, RelationalConstraint, StereoAtomDelta, StereoAtomForm, StereoAtomId,
+    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
 use crate::mol_dsl;
+
+#[rstest]
+#[case::unchanged(
+    EntitySpan::Unchanged(AtomForm::new(ElementForm::lit_set([Element::C]))),
+    EntitySpan::Unchanged(AtomForm::from_element(Element::C))
+)]
+#[case::removed(
+    EntitySpan::Removed(AtomForm::new(ElementForm::lit_set([Element::C]))),
+    EntitySpan::Removed(AtomForm::from_element(Element::C))
+)]
+#[case::added(
+    EntitySpan::Added(AtomForm::new(ElementForm::lit_set([Element::C]))),
+    EntitySpan::Added(AtomForm::from_element(Element::C))
+)]
+#[case::modified_raw(
+    EntitySpan::Modified {
+        lhs: AtomForm::from_element(Element::C),
+        rhs: AtomForm::new(ElementForm::lit_set([Element::C])),
+    },
+    EntitySpan::Unchanged(AtomForm::from_element(Element::C))
+)]
+#[case::modified_constraint(
+    EntitySpan::Modified {
+        lhs: AtomForm::from_element(Element::C),
+        rhs: AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([4]))),
+    },
+    EntitySpan::Modified {
+        lhs: AtomForm::from_element(Element::C),
+        rhs: AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+    }
+)]
+fn test_reaction_span_canonicalize_colors(
+    canonicalize_context: CanonicalizeContext,
+    #[case] atom: EntitySpan<AtomForm>,
+    #[case] expected_atom: EntitySpan<AtomForm>,
+) {
+    let span = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![atom],
+        ..Default::default()
+    });
+    let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![expected_atom],
+        ..Default::default()
+    });
+    assert_eq!(
+        span.clone().canonicalize(&canonicalize_context),
+        Ok(expected.clone())
+    );
+    assert!(span.canonical_eq(&expected, &canonicalize_context));
+}
 
 #[rstest]
 #[case::topology(

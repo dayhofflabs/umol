@@ -1,5 +1,7 @@
 //! Unit tests for the colors and the remapping checks of a reaction span.
 
+use std::cmp::Ordering;
+
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 
@@ -1132,6 +1134,47 @@ fn test_initial_colors(
         colors.entities[incidence_graph.node_of(lhs).index()]
             == colors.entities[incidence_graph.node_of(rhs).index()],
         expected
+    );
+}
+
+#[rstest]
+#[case::removed(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), Ordering::Less)]
+#[case::modified(Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Ordering::Less)]
+#[case::added(Entity::Atom(AtomId(4)), Entity::Atom(AtomId(2)), Ordering::Less)]
+#[case::modified_sides(Entity::Atom(AtomId(4)), Entity::Atom(AtomId(6)), Ordering::Less)]
+#[case::aromatic_frame(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    Ordering::Equal
+)]
+#[case::aromatic_field(
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    Entity::AromaticSystem(AromaticSystemId(2)),
+    Ordering::Less
+)]
+#[case::stereo_atom_frame(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(1)),
+    Ordering::Equal
+)]
+#[case::stereo_bond_frame(
+    Entity::StereoBond(StereoBondId(0)),
+    Entity::StereoBond(StereoBondId(1)),
+    Ordering::Equal
+)]
+fn test_initial_colors_order(
+    initial_color_span: ReactionSpan,
+    #[case] lhs: Entity,
+    #[case] rhs: Entity,
+    #[case] expected: Ordering,
+) {
+    let span = initial_color_span;
+    let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    assert_eq!(
+        colors.entities[incidence_graph.node_of(lhs).index()]
+            .cmp(&colors.entities[incidence_graph.node_of(rhs).index()]),
+        expected,
     );
 }
 

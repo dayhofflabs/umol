@@ -1,5 +1,7 @@
 //! Unit tests for the symmetry, the colors and the remapping checks of a molecule.
 
+use std::cmp::Ordering;
+
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
@@ -1306,6 +1308,55 @@ fn test_initial_colors(
         colors.entities[incidence_graph.node_of(lhs).index()]
             == colors.entities[incidence_graph.node_of(rhs).index()],
         expected
+    );
+}
+
+#[rstest]
+#[case::raw_atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Ordering::Less)]
+#[case::raw_bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), Ordering::Less)]
+#[case::raw_dative(
+    Entity::DativeBond(DativeBondId(0)),
+    Entity::DativeBond(DativeBondId(1)),
+    Ordering::Less
+)]
+#[case::aromatic_frame(
+    Entity::AromaticSystem(AromaticSystemId(0)),
+    Entity::AromaticSystem(AromaticSystemId(1)),
+    Ordering::Equal
+)]
+#[case::multicenter_frame(
+    Entity::MulticenterBond(MulticenterBondId(0)),
+    Entity::MulticenterBond(MulticenterBondId(1)),
+    Ordering::Equal
+)]
+#[case::noncovalent_kind(
+    Entity::NoncovalentBond(NoncovalentBondId(0)),
+    Entity::NoncovalentBond(NoncovalentBondId(2)),
+    Ordering::Less
+)]
+#[case::stereo_atom_coset(
+    Entity::StereoAtom(StereoAtomId(0)),
+    Entity::StereoAtom(StereoAtomId(1)),
+    Ordering::Equal
+)]
+#[case::stereo_bond_coset(
+    Entity::StereoBond(StereoBondId(0)),
+    Entity::StereoBond(StereoBondId(1)),
+    Ordering::Equal
+)]
+fn test_initial_colors_order(
+    initial_color_molecule: Molecule,
+    #[case] lhs: Entity,
+    #[case] rhs: Entity,
+    #[case] expected: Ordering,
+) {
+    let molecule = initial_color_molecule;
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let colors = initial_colors(&molecule, &incidence_graph, DescriptionLevel::Structure).unwrap();
+    assert_eq!(
+        colors.entities[incidence_graph.node_of(lhs).index()]
+            .cmp(&colors.entities[incidence_graph.node_of(rhs).index()]),
+        expected,
     );
 }
 
