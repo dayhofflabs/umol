@@ -1098,6 +1098,37 @@ fn test_molecule_graph_symmetry_encoding(
 }
 
 #[rstest]
+#[case::square_planar(
+    mol_dsl_concrete!(r#"{
+        :atoms ["Pt" "Cl" "Cl" "Cl" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
+    }"#),
+    vec![0, 1, 1, 1, 1],
+)]
+#[case::different_rings(
+    mol_dsl_concrete!(r#"{
+        :atoms ["C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]
+                [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 3 "1"]]
+    }"#),
+    vec![0, 0, 0, 1, 1, 1, 1, 1, 1],
+)]
+fn test_molecule_same_proper_orbit(#[case] molecule: Molecule, #[case] orbit_classes: Vec<u32>) {
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig::default())
+        .into_graph_symmetry();
+    for (a, &a_class) in orbit_classes.iter().enumerate() {
+        for (b, &b_class) in orbit_classes.iter().enumerate() {
+            assert_eq!(
+                molecule.same_proper_orbit(&symmetry, AtomId(a as u32), AtomId(b as u32)),
+                a_class == b_class,
+            );
+        }
+    }
+}
+
+#[rstest]
 #[case::empty(r#"{:atoms []}"#, vec![])]
 #[case::no_records(r#"{:atoms ["C#h4"]}"#, vec![])]
 #[case::kindless(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "*"}]}"#, vec![])]
@@ -1121,6 +1152,15 @@ fn test_molecule_graph_symmetry_encoding(
                    {:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#,
     vec![(Entity::StereoBond(StereoBondId(0)), StereogenicSiteKind::Constitutional),
          (Entity::StereoBond(StereoBondId(2)), StereogenicSiteKind::Constitutional)])]
+#[case::different_ligand_cycles(r#"{
+    :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "F" "Cl"]
+    :bonds [[0 1 "1"] [0 8 "1"] [0 15 "1"] [0 16 "1"]
+            [1 2 "1"] [1 3 "1"] [1 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]
+            [2 3 "1"] [3 4 "1"] [4 2 "1"] [5 6 "1"] [6 7 "1"] [7 5 "1"]
+            [8 9 "1"] [8 10 "1"] [8 11 "1"] [8 12 "1"] [8 13 "1"] [8 14 "1"]
+            [9 10 "1"] [10 11 "1"] [11 12 "1"] [12 13 "1"] [13 14 "1"] [14 9 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 8 15 16] :attrs "Th*"}]
+}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Constitutional)])]
 fn test_molecule_stereogenic_site_kinds(
     #[case] dsl: &str,
     #[case] expected: Vec<(Entity, StereogenicSiteKind)>,

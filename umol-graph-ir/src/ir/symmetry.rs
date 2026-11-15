@@ -2,6 +2,7 @@
 //! and the search for a remapping that passes a check.
 
 use std::collections::BTreeMap;
+use std::ops::ControlFlow;
 use std::{iter, mem};
 
 use umol_graph_core::{
@@ -751,10 +752,8 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
 
 /// Whether a remapping from `source` to `target` passes `check`.
 ///
-/// Both partitions are refined, and cells that differ give false. When every entity cell then
-/// holds one node, the cells give the one remapping, and `check` decides. Otherwise the remapping
-/// along the path of first nodes is tried, and if it fails, `target` is searched and every leaf is
-/// paired with the end of that path.
+/// Both partitions are refined, and cells that differ give false. The first candidate that
+/// passes `check` ends the search.
 ///
 /// `check` receives the image of each entity node of `source`. It must give the same answer for
 /// two remappings that differ by an automorphism of `target` that the search keeps, which
@@ -775,11 +774,51 @@ where
     Check: Fn(&[NodeId]) -> bool,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
+    visit_remapping_candidates(
+        source,
+        source_partition,
+        target,
+        target_partition,
+        algorithm,
+        &mut |images| {
+            if check(images) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        },
+        apply_generator_filter,
+        filter_generators,
+    )
+    .is_break()
+}
+
+/// Visit candidate entity remappings from `source` to `target` until completion or `Break`.
+///
+/// Candidates need not preserve incidences. Branch pruning can omit candidates related by
+/// kept target generators; every question answered by the visitor must be invariant under
+/// those generators. The adapter colors must stand for the same colors. Each image slice
+/// borrows a candidate buffer for the duration of the call; candidate order is unspecified.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn visit_remapping_candidates<B, Visitor, FilterGenerators>(
+    source: &AutomorphismAdapter,
+    source_partition: OrderedPartition,
+    target: &AutomorphismAdapter,
+    target_partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    visitor: &mut Visitor,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> ControlFlow<B>
+where
+    Visitor: FnMut(&[NodeId]) -> ControlFlow<B>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
     let entity_count = source.source_node_count;
     let source_root = source_partition.refine(source.graph());
     let target_root = target_partition.refine(target.graph());
     if !same_cells(source, &source_root, target, &target_root) {
-        return false;
+        return ControlFlow::Continue(());
     }
     let images = |source_order: &[NodeId], target_order: &[NodeId]| {
         let mut images = vec![NodeId(0); entity_count];
@@ -792,7 +831,7 @@ where
         .first_non_singleton_entity_cell(entity_count)
         .is_none()
     {
-        return check(&images(
+        return visitor(&images(
             &source_root.entity_order(entity_count),
             &target_root.entity_order(entity_count),
         ));
@@ -817,26 +856,54 @@ where
         }
     }
     let source_order = source_path.entity_order(entity_count);
-    if target_path
-        .is_some_and(|path| check(&images(&source_order, &path.entity_order(entity_count))))
-    {
-        return true;
+    let first_images =
+        target_path.map(|path| images(&source_order, &path.entity_order(entity_count)));
+    if let Some(images) = &first_images {
+        if let ControlFlow::Break(value) = visitor(images) {
+            return ControlFlow::Break(value);
+        }
     }
 
-    let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
-        key: !check(&images(&source_order, order)),
-        entity_order: Vec::new(),
-    };
-    !canonical_search_impl(
-        target,
-        target_root,
-        algorithm,
-        &leaf_candidate,
-        apply_generator_filter,
-        filter_generators,
-    )
-    .candidate
-    .key
+    let mut pending = vec![target_root];
+    while let Some(partition) = pending.pop() {
+        let partition = partition.refine(target.graph());
+        let Some(cell_index) = partition.first_non_singleton_entity_cell(entity_count) else {
+            let images = images(&source_order, &partition.entity_order(entity_count));
+            if first_images.as_deref() != Some(images.as_slice()) {
+                if let ControlFlow::Break(value) = visitor(&images) {
+                    return ControlFlow::Break(value);
+                }
+            }
+            continue;
+        };
+
+        let mut automorphisms = target.automorphisms_for_partition(&partition, algorithm);
+        if apply_generator_filter {
+            filter_generators(&mut automorphisms.source_generators);
+            automorphisms.source_orbits =
+                source_orbits_from_generators(entity_count, &automorphisms.source_generators);
+        }
+        let mut representatives = BTreeMap::<NodeId, NodeId>::new();
+        for &candidate in &partition.cells[cell_index] {
+            representatives
+                .entry(automorphisms.source_orbits[candidate.index()])
+                .and_modify(|representative| *representative = (*representative).min(candidate))
+                .or_insert(candidate);
+        }
+        let mut candidates = representatives.into_values().collect::<Vec<_>>();
+        let mut ranks = vec![0; entity_count];
+        for (rank, node) in automorphisms.source_canonical_labels.iter().enumerate() {
+            ranks[node.index()] = rank;
+        }
+        candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+        pending.extend(
+            candidates
+                .into_iter()
+                .rev()
+                .map(|node| partition.individualize(cell_index, node)),
+        );
+    }
+    ControlFlow::Continue(())
 }
 
 /// Assign dense integers to the colors of one entity kind or of the incidences, in the order of the

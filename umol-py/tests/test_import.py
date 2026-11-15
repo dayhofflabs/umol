@@ -225,6 +225,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoTerm
     StereoSelection
     StereoSite
+    StereogenicSiteKind
     Stereogenicity
     StereogenicityForm
     StructuralFeatureSet

@@ -30,7 +30,7 @@ use umol_graph_ir::ir::{
     StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
     StereoLigandPair as GraphIrStereoLigandPair,
     StereoLigandPosition as GraphIrStereoLigandPosition, StereoTerm as GraphIrStereoTerm,
-    Stereogenicity as GraphIrStereogenicity,
+    StereogenicSiteKind as GraphIrStereogenicSiteKind, Stereogenicity as GraphIrStereogenicity,
     TetrahedralConfiguration as GraphIrTetrahedralConfiguration,
     TetrahedralStereoForm as GraphIrTetrahedralStereoForm, Topicity as GraphIrTopicity,
 };
@@ -527,6 +527,37 @@ impl Stereogenicity {
             Self::Nonstereogenic => GraphIrStereogenicity::Nonstereogenic,
             Self::Prostereogenic => GraphIrStereogenicity::Prostereogenic,
             Self::Stereogenic => GraphIrStereogenicity::Stereogenic,
+        }
+    }
+}
+
+/// Classification of a stereo site's role, matching Rust StereogenicSiteKind.
+/// A fieldless, immutable and hashable value, distinct from its Stereogenicity reading.
+#[pyclass(eq, ord, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum StereogenicSiteKind {
+    Constitutional,
+    Configurational,
+    Prostereogenic,
+    Nonstereogenic,
+}
+
+impl StereogenicSiteKind {
+    pub(crate) fn from_rust(value: GraphIrStereogenicSiteKind) -> Self {
+        match value {
+            GraphIrStereogenicSiteKind::Constitutional => Self::Constitutional,
+            GraphIrStereogenicSiteKind::Configurational => Self::Configurational,
+            GraphIrStereogenicSiteKind::Prostereogenic => Self::Prostereogenic,
+            GraphIrStereogenicSiteKind::Nonstereogenic => Self::Nonstereogenic,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphIrStereogenicSiteKind {
+        match self {
+            Self::Constitutional => GraphIrStereogenicSiteKind::Constitutional,
+            Self::Configurational => GraphIrStereogenicSiteKind::Configurational,
+            Self::Prostereogenic => GraphIrStereogenicSiteKind::Prostereogenic,
+            Self::Nonstereogenic => GraphIrStereogenicSiteKind::Nonstereogenic,
         }
     }
 }
@@ -1770,6 +1801,31 @@ mod tests {
     #[case(GraphIrStereogenicity::Stereogenic)]
     fn test_stereogenicity_roundtrip(#[case] ir_value: GraphIrStereogenicity) {
         assert_eq!(Stereogenicity::from_rust(ir_value).to_rust(), ir_value);
+    }
+
+    #[rstest]
+    #[case::constitutional(
+        GraphIrStereogenicSiteKind::Constitutional,
+        StereogenicSiteKind::Constitutional
+    )]
+    #[case::configurational(
+        GraphIrStereogenicSiteKind::Configurational,
+        StereogenicSiteKind::Configurational
+    )]
+    #[case::prostereogenic(
+        GraphIrStereogenicSiteKind::Prostereogenic,
+        StereogenicSiteKind::Prostereogenic
+    )]
+    #[case::nonstereogenic(
+        GraphIrStereogenicSiteKind::Nonstereogenic,
+        StereogenicSiteKind::Nonstereogenic
+    )]
+    fn test_stereogenic_site_kind_from_rust(
+        #[case] value: GraphIrStereogenicSiteKind,
+        #[case] expected: StereogenicSiteKind,
+    ) {
+        assert_eq!(StereogenicSiteKind::from_rust(value), expected);
+        assert_eq!(expected.to_rust(), value);
     }
 
     #[rstest]

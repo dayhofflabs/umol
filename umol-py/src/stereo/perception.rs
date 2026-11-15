@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
     StereoBondId as GraphIrStereoBondId,
 };
 
-use super::{StereoKind, Stereogenicity};
+use super::{StereoKind, StereogenicSiteKind};
 use crate::convert::{hash_rust, FrozenSetItems};
 
 /// An atom or bond topology ID, independent of a molecule and of stored stereo.
@@ -58,7 +58,7 @@ impl StereoSite {
     }
 }
 
-/// Intersecting site, kind, and stereogenicity filters.
+/// Intersecting topology-site, geometry, and stereogenic-site-kind filters.
 ///
 /// None is unrestricted; an empty collection selects nothing. IDs are checked
 /// against a molecule by the executing operation, not during construction.
@@ -69,11 +69,11 @@ pub struct StereoSelection(GraphStereoSelection);
 #[pymethods]
 impl StereoSelection {
     #[new]
-    #[pyo3(signature = (*, sites=None, kinds=None, stereogenicities=None))]
+    #[pyo3(signature = (*, sites=None, kinds=None, stereogenic_site_kinds=None))]
     fn new(
         sites: Option<&Bound<'_, PyAny>>,
         kinds: Option<&Bound<'_, PyAny>>,
-        stereogenicities: Option<&Bound<'_, PyAny>>,
+        stereogenic_site_kinds: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         Ok(Self::from_rust(GraphStereoSelection {
             sites: sites
@@ -92,11 +92,11 @@ impl StereoSelection {
                         .collect::<PyResult<_>>()
                 })
                 .transpose()?,
-            stereogenicities: stereogenicities
+            stereogenic_site_kinds: stereogenic_site_kinds
                 .map(|values| {
                     values
                         .try_iter()?
-                        .map(|value| Ok(value?.extract::<Stereogenicity>()?.to_rust()))
+                        .map(|value| Ok(value?.extract::<StereogenicSiteKind>()?.to_rust()))
                         .collect::<PyResult<_>>()
                 })
                 .transpose()?,
@@ -120,34 +120,37 @@ impl StereoSelection {
     }
 
     #[getter]
-    fn stereogenicities(&self) -> Option<FrozenSetItems<BTreeSet<Stereogenicity>>> {
-        self.to_rust().stereogenicities.as_ref().map(|values| {
-            values
-                .iter()
-                .copied()
-                .map(Stereogenicity::from_rust)
-                .collect()
-        })
+    fn stereogenic_site_kinds(&self) -> Option<FrozenSetItems<BTreeSet<StereogenicSiteKind>>> {
+        self.to_rust()
+            .stereogenic_site_kinds
+            .as_ref()
+            .map(|values| {
+                values
+                    .iter()
+                    .copied()
+                    .map(StereogenicSiteKind::from_rust)
+                    .collect()
+            })
     }
 
     /// Test supplied values without looking up a molecule or calculating stereo.
-    #[pyo3(signature = (site, kind=None, stereogenicity=None))]
+    #[pyo3(signature = (site, kind=None, site_kind=None))]
     fn matches(
         &self,
         site: StereoSite,
         kind: Option<StereoKind>,
-        stereogenicity: Option<Stereogenicity>,
+        site_kind: Option<StereogenicSiteKind>,
     ) -> bool {
         self.to_rust().matches(
             site.to_rust(),
             kind.map(StereoKind::to_rust),
-            stereogenicity.map(Stereogenicity::to_rust),
+            site_kind.map(StereogenicSiteKind::to_rust),
         )
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "StereoSelection(sites={}, kinds={}, stereogenicities={})",
+            "StereoSelection(sites={}, kinds={}, stereogenic_site_kinds={})",
             self.sites()
                 .into_pyobject(py)?
                 .repr()?
@@ -156,7 +159,7 @@ impl StereoSelection {
                 .into_pyobject(py)?
                 .repr()?
                 .extract::<String>()?,
-            self.stereogenicities()
+            self.stereogenic_site_kinds()
                 .into_pyobject(py)?
                 .repr()?
                 .extract::<String>()?

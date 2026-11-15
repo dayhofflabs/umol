@@ -1148,7 +1148,6 @@ def test_stereo_model_default():
             scope=ElementScope.Any(), fluxionality=False
         ),
     }
-    assert model.para_stereo is False
     assert model.stereo_bond_min_ring_size == 8
     assert model.stereo_bond_e_min_ring_size == 8
     assert model == StereoModel.default()
@@ -1178,14 +1177,12 @@ def test_stereo_model_new():
     expected = kind_models.copy()
     model = StereoModel(
         kind_models=kind_models,
-        para_stereo=True,
         stereo_bond_min_ring_size=10,
         stereo_bond_e_min_ring_size=12,
     )
     kind_models.clear()
 
     assert model.kind_models == expected
-    assert model.para_stereo is True
     assert model.stereo_bond_min_ring_size == 10
     assert model.stereo_bond_e_min_ring_size == 12
     for kind, kind_model in expected.items():
@@ -1196,7 +1193,6 @@ def test_stereo_model_new():
 def test_stereo_model_new_ring_size(minimum):
     model = StereoModel(
         kind_models={},
-        para_stereo=False,
         stereo_bond_min_ring_size=minimum,
         stereo_bond_e_min_ring_size=minimum,
     )
@@ -1217,7 +1213,7 @@ def test_stereo_model_new_ring_size_error(field, minimum):
     fields[field] = minimum
 
     with pytest.raises(OverflowError):
-        StereoModel(kind_models={}, para_stereo=False, **fields)
+        StereoModel(kind_models={}, **fields)
 
 
 def test_stereo_model_kind_models():
@@ -1226,7 +1222,6 @@ def test_stereo_model_kind_models():
     assert type(kind_models) is MappingProxyType
     assert StereoModel(
         kind_models=kind_models,
-        para_stereo=model.para_stereo,
         stereo_bond_min_ring_size=8,
         stereo_bond_e_min_ring_size=8,
     ) == model
@@ -1248,7 +1243,7 @@ def test_stereo_model_kind_models():
 def test_stereo_model_new_error():
     with pytest.raises(TypeError):
         StereoModel(
-            {}, False, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8
+            {}, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8
         )
 
 
@@ -1264,7 +1259,6 @@ def test_stereo_model_new_field_error(field, value):
     with pytest.raises(TypeError):
         StereoModel(
             kind_models={},
-            para_stereo=False,
             **{field: value},
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=8,
@@ -1276,13 +1270,11 @@ def test_stereo_model_new_field_error(field, value):
     [
         StereoModel(
             kind_models={},
-            para_stereo=False,
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=8,
         ),
         StereoModel(
             kind_models=StereoModel.default().kind_models,
-            para_stereo=False,
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=10,
         ),
@@ -1295,8 +1287,7 @@ def test_stereo_model_new_field_error(field, value):
                     scope=ElementScope.Any(), fluxionality=False
                 ),
             },
-            para_stereo=True,
-            stereo_bond_min_ring_size=8,
+            stereo_bond_min_ring_size=10,
             stereo_bond_e_min_ring_size=8,
         ),
     ],
@@ -1320,7 +1311,6 @@ def test_stereo_model_equality(other):
                         scope=ElementScope.Any(), fluxionality=False
                     ),
                 },
-                para_stereo=True,
                 stereo_bond_min_ring_size=8,
                 stereo_bond_e_min_ring_size=8,
             ),
@@ -1328,7 +1318,7 @@ def test_stereo_model_equality(other):
             "StereoKindModel(scope=ElementScope.Any(), fluxionality=False), "
             "StereoKind.Octahedral: StereoKindModel(scope="
             "ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, "
-            "para_stereo=True, stereo_bond_min_ring_size=8, "
+            "stereo_bond_min_ring_size=8, "
             "stereo_bond_e_min_ring_size=8)",
         ),
     ],
@@ -1341,7 +1331,6 @@ def test_stereo_model_repr(model, expected):
     ("field", "value"),
     [
         ("kind_models", {}),
-        ("para_stereo", True),
         ("stereo_bond_min_ring_size", 10),
         ("stereo_bond_e_min_ring_size", 10),
     ],
@@ -1425,8 +1414,7 @@ def test_chemistry_model_new(valence):
     )
     stereo = StereoModel(
         kind_models=StereoModel.default().kind_models,
-        para_stereo=True,
-        stereo_bond_min_ring_size=8,
+        stereo_bond_min_ring_size=10,
         stereo_bond_e_min_ring_size=8,
     )
     connectivity = ConnectivityModel.default()
@@ -1502,7 +1490,6 @@ def test_chemistry_model_new_error():
             aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel(
                 kind_models={},
-                para_stereo=False,
                 stereo_bond_min_ring_size=8,
                 stereo_bond_e_min_ring_size=8,
             ),
@@ -1533,8 +1520,7 @@ def test_chemistry_model_equality(other):
                 ),
                 stereo=StereoModel(
                     kind_models=StereoModel.default().kind_models,
-                    para_stereo=True,
-                    stereo_bond_min_ring_size=8,
+                    stereo_bond_min_ring_size=10,
                     stereo_bond_e_min_ring_size=8,
                 ),
             ),
@@ -1549,8 +1535,8 @@ def test_chemistry_model_equality(other):
             "stereo=StereoModel(kind_models={"
             "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
             "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="
-            "ElementScope.Any(), fluxionality=False)}, para_stereo=True, "
-            "stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8))",
+            "ElementScope.Any(), fluxionality=False)}, "
+            "stereo_bond_min_ring_size=10, stereo_bond_e_min_ring_size=8))",
         ),
     ],
 )
@@ -1583,7 +1569,6 @@ def test_chemistry_model_repr(model, expected):
             "stereo",
             StereoModel(
                 kind_models={},
-                para_stereo=False,
                 stereo_bond_min_ring_size=8,
                 stereo_bond_e_min_ring_size=8,
             ),

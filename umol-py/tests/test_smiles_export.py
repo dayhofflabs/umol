@@ -73,7 +73,6 @@ def test_molecule_to_smiles_ring(source, expected, minimum):
         aromaticity=default.aromaticity,
         stereo=StereoModel(
             kind_models=default.stereo.kind_models,
-            para_stereo=False,
             stereo_bond_min_ring_size=minimum,
             stereo_bond_e_min_ring_size=64,
         ),

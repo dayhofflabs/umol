@@ -1,5 +1,7 @@
 //! Unit tests for the partitions and the search.
 
+use std::ops::ControlFlow;
+
 use rstest::rstest;
 
 use super::*;
@@ -268,6 +270,90 @@ fn test_canonical_search_stats(#[case] node_count: usize, #[case] expected: Cano
     );
 
     assert_eq!(actual.stats, expected);
+}
+
+#[rstest]
+#[case::empty(vec![], vec![], vec![vec![]])]
+#[case::discrete(vec![0, 1, 2], vec![0, 1, 2], vec![vec![0, 1, 2]])]
+#[case::unpruned(
+    vec![0, 0, 0],
+    vec![0, 0, 0],
+    vec![vec![0, 1, 2], vec![0, 2, 1], vec![1, 0, 2], vec![1, 2, 0], vec![2, 0, 1], vec![2, 1, 0]],
+)]
+#[case::incompatible(vec![0, 0, 0], vec![0, 1, 2], vec![])]
+fn test_visit_remapping_candidates(
+    #[case] source_colors: Vec<u32>,
+    #[case] target_colors: Vec<u32>,
+    #[case] expected: Vec<Vec<u32>>,
+) {
+    let adapter = AutomorphismAdapter {
+        graph: Graph::new(source_colors.len(), &[]),
+        colors: vec![AutomorphismColor::Entity(0); source_colors.len()],
+        node_sources: (0..source_colors.len() as u32)
+            .map(|node| SubdivisionNodeSource::Node(NodeId(node)))
+            .collect(),
+        source_node_count: source_colors.len(),
+    };
+    let mut actual = Vec::new();
+    let flow: ControlFlow<()> = visit_remapping_candidates(
+        &adapter,
+        OrderedPartition::from_descriptors(&source_colors),
+        &adapter,
+        OrderedPartition::from_descriptors(&target_colors),
+        AutomorphismAlgorithm::Nauty,
+        &mut |images: &[NodeId]| {
+            actual.push(images.iter().map(|node| node.0).collect::<Vec<_>>());
+            ControlFlow::Continue(())
+        },
+        true,
+        &|generators| generators.clear(),
+    );
+    actual.sort();
+
+    assert_eq!(flow, ControlFlow::Continue(()));
+    assert_eq!(actual, expected);
+}
+
+#[rstest]
+#[case::first(vec![NodeId(0), NodeId(1), NodeId(2)])]
+#[case::later(vec![NodeId(1), NodeId(0), NodeId(2)])]
+fn test_visit_remapping_candidates_termination(#[case] accepted: Vec<NodeId>) {
+    let adapter = AutomorphismAdapter {
+        graph: Graph::new(3, &[]),
+        colors: vec![AutomorphismColor::Entity(0); 3],
+        node_sources: (0..3)
+            .map(|node| SubdivisionNodeSource::Node(NodeId(node)))
+            .collect(),
+        source_node_count: 3,
+    };
+    let partition = OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2)]],
+    };
+    let mut found = false;
+    let mut calls_after_break = 0;
+    let flow = visit_remapping_candidates(
+        &adapter,
+        partition.clone(),
+        &adapter,
+        partition,
+        AutomorphismAlgorithm::Nauty,
+        &mut |images: &[NodeId]| {
+            if found {
+                calls_after_break += 1;
+            }
+            if images == accepted {
+                found = true;
+                ControlFlow::Break(images.to_vec())
+            } else {
+                ControlFlow::Continue(())
+            }
+        },
+        true,
+        &|generators| generators.clear(),
+    );
+
+    assert_eq!(flow, ControlFlow::Break(accepted));
+    assert_eq!((found, calls_after_break), (true, 0));
 }
 
 #[rstest]

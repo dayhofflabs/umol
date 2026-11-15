@@ -992,7 +992,6 @@ def test_molecule_from_smiles_chemistry_model_stereo():
         aromaticity=default.aromaticity,
         stereo=StereoModel(
             kind_models={},
-            para_stereo=False,
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=8,
         ),

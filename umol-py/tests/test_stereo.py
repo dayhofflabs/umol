@@ -33,6 +33,7 @@ from umol import (
     StereoLigandPair,
     StereoTerm,
     Stereogenicity,
+    StereogenicSiteKind,
     StereogenicityForm,
     TetrahedralConfiguration,
     TetrahedralStereoForm,
@@ -40,6 +41,38 @@ from umol import (
     TopicityForm,
     TopicityRelationForm,
 )
+
+
+@pytest.mark.parametrize(
+    "value,name",
+    [
+        (StereogenicSiteKind.Constitutional, "Constitutional"),
+        (StereogenicSiteKind.Configurational, "Configurational"),
+        (StereogenicSiteKind.Prostereogenic, "Prostereogenic"),
+        (StereogenicSiteKind.Nonstereogenic, "Nonstereogenic"),
+    ],
+)
+def test_stereogenic_site_kind(value, name):
+    assert repr(value) == f"StereogenicSiteKind.{name}"
+    assert eval(repr(value), globals()) == value
+    assert {value: name}[eval(repr(value), globals())] == name
+    assert value != Stereogenicity.Prostereogenic
+    with pytest.raises(AttributeError):
+        value.name = name
+
+
+def test_stereogenic_site_kind_order():
+    expected = [
+        StereogenicSiteKind.Constitutional,
+        StereogenicSiteKind.Configurational,
+        StereogenicSiteKind.Prostereogenic,
+        StereogenicSiteKind.Nonstereogenic,
+    ]
+    assert sorted(reversed(expected)) == expected
+    assert expected[0] < expected[1]
+    assert expected[0] <= expected[0]
+    assert expected[3] > expected[2]
+    assert expected[3] >= expected[3]
 
 
 @pytest.mark.parametrize(

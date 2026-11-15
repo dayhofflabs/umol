@@ -1,6 +1,8 @@
 //! Molecule graph-symmetry data, queries, colors and remapping checks.
 
-use umol_graph_core::{AutomorphismAlgorithm, EdgeId, NodeId};
+use std::ops::ControlFlow;
+
+use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, EdgeId, NodeId};
 use umol_perm::{Orientation, Permutation};
 
 use super::super::electrons::ElectronCountsForm;
@@ -14,8 +16,8 @@ use super::super::stereo::{
     coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, StereogenicSiteKind,
 };
 use super::super::symmetry::{
-    rank_colors, remapping_exists, remapping_preserves_incidences, AutomorphismAdapter,
-    InitialColors, OrderedPartition,
+    rank_colors, remapping_exists, remapping_preserves_incidences, visit_remapping_candidates,
+    AutomorphismAdapter, InitialColors, OrderedPartition,
 };
 use super::super::traits::{AsColor, AsLit, FrameTransport, Normalize};
 use super::super::view::GraphSymmetryView;
@@ -23,7 +25,8 @@ use super::Molecule;
 
 /// Auxiliary search data computed for a molecule's graph-symmetry readings.
 ///
-/// The value holds incidence, colors, a partition and config, without a molecule.
+/// The value holds incidence, colors, a partition, constitutional automorphism data and config,
+/// without a molecule.
 /// Queries read a separately supplied molecule. The data must describe that molecule for
 /// meaningful results; after changing the molecule, compute new data. Pairing mismatched
 /// data and a molecule does not panic but has no specified semantic result.
@@ -38,6 +41,7 @@ pub struct GraphSymmetry {
     adapter: AutomorphismAdapter,
     partition: OrderedPartition,
     cell_indices: Vec<u32>,
+    automorphisms: Option<AutomorphismOutput>,
     config: GraphSymmetryConfig,
 }
 
@@ -111,7 +115,37 @@ impl Molecule {
                 .collect(),
         });
         let adapter = AutomorphismAdapter::new(&incidence, &colors);
-        let partition = OrderedPartition::from_descriptors(&adapter.colors).refine(adapter.graph());
+        let partition = OrderedPartition::from_descriptors(&adapter.colors);
+        let atom_colors_distinct = partition.cells.iter().all(|cell| {
+            cell.len() == 1
+                || cell[0].index() >= adapter.source_node_count
+                || !matches!(incidence.entity(cell[0]), Entity::Atom(_))
+        });
+        let partition = if atom_colors_distinct {
+            partition.refine(adapter.graph())
+        } else {
+            partition
+        };
+        let (partition, automorphisms) = if partition
+            .first_non_singleton_entity_cell(adapter.source_node_count)
+            .is_none()
+        {
+            (partition, None)
+        } else {
+            let automorphisms = adapter
+                .graph()
+                .automorphisms(|node| adapter.color(node), config.automorphism_algorithm);
+            let descriptors = adapter
+                .graph()
+                .node_ids()
+                .map(|node| (adapter.color(node), automorphisms.orbit_of(node)))
+                .collect::<Vec<_>>();
+            let partition = OrderedPartition::from_descriptors(&descriptors);
+            let automorphisms = partition
+                .first_non_singleton_entity_cell(adapter.source_node_count)
+                .map(|_| automorphisms);
+            (partition, automorphisms)
+        };
         let cell_indices = partition.cell_indices(adapter.graph().node_count());
         GraphSymmetryView::new(
             self,
@@ -120,6 +154,7 @@ impl Molecule {
                 adapter,
                 partition,
                 cell_indices,
+                automorphisms,
                 config: *config,
             },
         )
@@ -130,6 +165,9 @@ impl Molecule {
     /// The auxiliary data must describe this molecule. Mismatched context has no specified
     /// semantic result and does not panic. A molecule without stereo records is achiral.
     pub fn is_chiral(&self, symmetry: &GraphSymmetry) -> bool {
+        if self.stereo_atoms().count() == 0 && self.stereo_bonds().count() == 0 {
+            return false;
+        }
         !remapping_exists_at(
             self,
             symmetry,
@@ -370,46 +408,88 @@ impl Molecule {
             let mut kept = vec![true; records.len()];
             let mut trials = vec![0; records.len()];
             loop {
+                if kept
+                    .iter()
+                    .enumerate()
+                    .all(|(index, &is_kept)| !is_kept || constitutional[index])
+                {
+                    break;
+                }
                 let snapshot = kept.clone();
-                for (index, (_, kind, _, _)) in records.iter().enumerate() {
-                    if !snapshot[index] || constitutional[index] {
-                        continue;
-                    }
-                    let removable = (1..kind.class_key().space().count() as u32).all(|target| {
-                        remapping_exists(
-                            &symmetry.adapter,
-                            partition.clone(),
-                            &symmetry.adapter,
-                            partition.clone(),
-                            symmetry.config.automorphism_algorithm,
-                            &|images| {
-                                remapping_preserves_incidences(
-                                    &symmetry.adapter,
-                                    &symmetry.adapter,
+                let mut reachable = records
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (_, kind, _, _))| {
+                        if snapshot[index] && !constitutional[index] {
+                            vec![false; kind.class_key().space().count()]
+                        } else {
+                            Vec::new()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let mut changes_alone = vec![false; records.len()];
+                if reachable.iter().any(|cosets| cosets.len() > 1) {
+                    let _: ControlFlow<()> = visit_remapping_candidates(
+                        &symmetry.adapter,
+                        partition.clone(),
+                        &symmetry.adapter,
+                        partition.clone(),
+                        symmetry.config.automorphism_algorithm,
+                        &mut |images| {
+                            if !remapping_preserves_incidences(
+                                &symmetry.adapter,
+                                &symmetry.adapter,
+                                images,
+                            ) || !preserves_frames(images)
+                            {
+                                return ControlFlow::Continue(());
+                            }
+                            let mut all_fixed = true;
+                            let mut change = None;
+                            for (index, &is_kept) in snapshot.iter().enumerate() {
+                                if !is_kept {
+                                    continue;
+                                }
+                                let (_, kind, ligands, site) = records[index];
+                                if entity_image(&symmetry.incidence, images, site) != Some(site) {
+                                    all_fixed = false;
+                                    continue;
+                                }
+                                let Some(coset) = remapping_frame_action(
+                                    &symmetry.incidence,
                                     images,
-                                ) && preserves_frames(images)
-                                    && snapshot.iter().enumerate().all(|(other, &is_kept)| {
-                                        if !is_kept {
-                                            return true;
-                                        }
-                                        let (_, kind, ligands, site) = records[other];
-                                        entity_image(&symmetry.incidence, images, site)
-                                            == Some(site)
-                                            && remapping_frame_action(
-                                                &symmetry.incidence,
-                                                images,
-                                                ligands,
-                                                ligands,
-                                            )
-                                            .and_then(|frame| kind.act(0, frame))
-                                                == Some(if other == index { target } else { 0 })
-                                    })
-                            },
-                            true,
-                            &filter_generators,
-                        )
-                    });
-                    if removable {
+                                    ligands,
+                                    ligands,
+                                )
+                                .and_then(|frame| kind.act(0, frame)) else {
+                                    return ControlFlow::Continue(());
+                                };
+                                if coset != 0 {
+                                    if change.is_some() {
+                                        return ControlFlow::Continue(());
+                                    }
+                                    change = Some((index, coset));
+                                }
+                            }
+                            if let Some((index, coset)) = change {
+                                if !constitutional[index] {
+                                    changes_alone[index] = true;
+                                    if all_fixed {
+                                        reachable[index][coset as usize] = true;
+                                    }
+                                }
+                            }
+                            ControlFlow::Continue(())
+                        },
+                        true,
+                        &filter_generators,
+                    );
+                }
+                for (index, cosets) in reachable.iter().enumerate() {
+                    if snapshot[index]
+                        && !constitutional[index]
+                        && cosets[1..].iter().all(|&reached| reached)
+                    {
                         kept[index] = false;
                     }
                 }
@@ -417,8 +497,8 @@ impl Molecule {
                     continue;
                 }
                 let mut dropped = false;
-                for (index, (_, kind, ligands, site)) in records.iter().enumerate() {
-                    if !kept[index] || constitutional[index] {
+                for (index, (_, kind, _, site)) in records.iter().enumerate() {
+                    if !kept[index] || constitutional[index] || !changes_alone[index] {
                         continue;
                     }
                     let node = symmetry.incidence.node_of(*site);
@@ -430,48 +510,6 @@ impl Molecule {
                     let focus_partition = partition
                         .individualize(cell, node)
                         .refine(symmetry.adapter.graph());
-                    let changes_alone = remapping_exists(
-                        &symmetry.adapter,
-                        focus_partition.clone(),
-                        &symmetry.adapter,
-                        focus_partition.clone(),
-                        symmetry.config.automorphism_algorithm,
-                        &|images| {
-                            remapping_preserves_incidences(
-                                &symmetry.adapter,
-                                &symmetry.adapter,
-                                images,
-                            ) && preserves_frames(images)
-                                && remapping_frame_action(
-                                    &symmetry.incidence,
-                                    images,
-                                    ligands,
-                                    ligands,
-                                )
-                                .and_then(|frame| kind.act(0, frame))
-                                .is_some_and(|coset| coset != 0)
-                                && kept.iter().enumerate().all(|(other, &is_kept)| {
-                                    let (_, kind, ligands, site) = records[other];
-                                    !is_kept
-                                        || other == index
-                                        || entity_image(&symmetry.incidence, images, site)
-                                            != Some(site)
-                                        || remapping_frame_action(
-                                            &symmetry.incidence,
-                                            images,
-                                            ligands,
-                                            ligands,
-                                        )
-                                        .and_then(|frame| kind.act(0, frame))
-                                            == Some(0)
-                                })
-                        },
-                        true,
-                        &filter_generators,
-                    );
-                    if !changes_alone {
-                        continue;
-                    }
                     let focus_cells =
                         focus_partition.cell_indices(symmetry.adapter.graph().node_count());
                     let moved = records
@@ -693,6 +731,68 @@ fn molecule_remapping_exists(
                 )
             }
     };
+    let reads_stereo = changed.is_some()
+        || (level != DescriptionLevel::Constitution
+            && (molecule.stereo_atoms().count() != 0 || molecule.stereo_bonds().count() != 0));
+    if source == target && !reads_stereo {
+        return true;
+    }
+    if let Some(automorphisms) = &symmetry.automorphisms {
+        for (&a, &b) in source.iter().zip(target) {
+            if !automorphisms.same_orbit(
+                symmetry.incidence.node_of(Entity::Atom(a)),
+                symmetry.incidence.node_of(Entity::Atom(b)),
+            ) {
+                return false;
+            }
+        }
+        if source.len() == 1 && !reads_stereo {
+            return true;
+        }
+        let unique_mapping = automorphisms
+            .group_order()
+            .exact_value()
+            .is_some_and(|order| {
+                order == 1
+                    || source.iter().any(|&atom| {
+                        let node = symmetry.incidence.node_of(Entity::Atom(atom));
+                        let orbit_size = (0..automorphisms.node_count() as u32)
+                            .filter(|&other| automorphisms.same_orbit(node, NodeId(other)))
+                            .count();
+                        order == orbit_size as u128
+                    })
+            });
+        if source == target {
+            let images = (0..symmetry.adapter.source_node_count as u32)
+                .map(NodeId)
+                .collect::<Vec<_>>();
+            let preserved = matches_stereo(&images, orientation, changed);
+            if preserved || unique_mapping {
+                return preserved;
+            }
+        }
+        for generator in automorphisms.generators() {
+            let images = &generator[..symmetry.adapter.source_node_count];
+            if source.iter().zip(target).any(|(&a, &b)| {
+                images[symmetry.incidence.node_of(Entity::Atom(a)).index()]
+                    != symmetry.incidence.node_of(Entity::Atom(b))
+            }) {
+                continue;
+            }
+            let preserved = matches_stereo(images, orientation, changed);
+            if preserved || unique_mapping {
+                return preserved;
+            }
+        }
+    } else {
+        if source != target {
+            return false;
+        }
+        let images = (0..symmetry.adapter.source_node_count as u32)
+            .map(NodeId)
+            .collect::<Vec<_>>();
+        return matches_stereo(&images, orientation, changed);
+    }
     remapping_exists(
         &symmetry.adapter,
         partition(source),

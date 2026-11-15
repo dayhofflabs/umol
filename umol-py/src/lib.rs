@@ -129,7 +129,8 @@ use crate::{
         StereoAtomViews, StereoBondForm, StereoBondUpdate, StereoBondView, StereoBondViews,
         StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoInconsistency,
         StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoSelection, StereoSite,
-        StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
+        StereoTerm, StereogenicSiteKind, Stereogenicity, TetrahedralConfiguration,
+        TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, RollbackMethod},
@@ -472,6 +473,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoLigand>()?;
         module.add_class::<Topicity>()?;
         module.add_class::<Stereogenicity>()?;
+        module.add_class::<StereogenicSiteKind>()?;
         module.add_class::<StereoConfigurationForm>()?;
         module.add_class::<StereoConfigurationUpdate>()?;
         module.add_class::<Orientation>()?;

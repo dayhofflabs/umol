@@ -23,11 +23,11 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g and S5a-S5e are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g and S5a-S5f are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
 generator filter, FieldColor names, the three derived stereo-view readings and the batch
-stereogenic-site classification and its Rust operation consumers. S5f's Python migration is
-next; the workspace-wide S5 gate remains ahead.
+stereogenic-site classification and its Rust/Python operation consumers. The workspace and S5g's
+correctness checks are green; its measured query and setup costs require discussion before S6.
 
 ## Starting state
 
@@ -356,10 +356,18 @@ added to the one definition later, by dividing the inherent part of a color.
 ### `GraphSymmetry`
 
 `GraphSymmetry` is auxiliary data computed once for a molecule. All readings use one
-Constitution incidence graph, its colored search adapter, refined partition and node-to-cell
-index. Its fields are incidence, adapter, partition, cell_indices and config, in that order.
-It holds no molecule, borrowed or copied. A reading runs a search when asked, unless an exit by
-cell decides it. Stereo records are read from the supplied molecule when checking a remapping.
+Constitution incidence graph, its colored search adapter, constitutional orbit partition and
+node-to-cell index. S5g also retains constitutional automorphism data. Its fields are
+incidence, adapter, partition, cell_indices, automorphisms and config, in that order.
+automorphisms is Option<AutomorphismOutput>; no output is retained when the source-entity
+action is trivial. It holds no molecule, borrowed or copied. A reading uses the
+prepared group data or runs the exact search as needed. Stereo records are read from the
+supplied molecule when checking a remapping; query answers are not cached.
+
+When atom colors are already distinct, a cheap Rust refinement can finish preparation without
+running the backend. Otherwise the native automorphism output supplies the orbit partition
+directly, avoiding a separate Rust refinement pass. Remaining source-entity ambiguity after the
+cheap prepass also uses the native output. This gives the same exact partition on both paths.
 
 `GraphSymmetryView` follows `RingViews`. `Molecule::graph_symmetry` borrows the molecule and
 returns a view owning the computed data. `from_graph_symmetry` borrows existing data and the
@@ -3353,7 +3361,7 @@ No new timing estimates were collected, and the approved search layout is unchan
 S5g retains the operation and reading comparisons on the current workloads; it has no task
 to optimize the discarded artificial input family.
 
-#### S5f — Python follows the Rust removals
+#### S5f — Python follows the Rust removals **Done**
 
 - **Module:** `umol-py` model, stereo perception, selection and transformation bindings and tests.
 - **Tests first:** write the Python counterparts of the changed model/config/selector and
@@ -3371,6 +3379,59 @@ to optimize the discarded artificial input family.
   Rust binding tests. Restore the workspace build and tests before S5g.
 - **Kind:** breaking, red-to-green for the workspace. `[dep: S5e, S5d]`
 
+**Implemented 2026-11-15.** StereogenicSiteKind is exported from the native module and umol,
+with the four Rust variants, immutable values, equality, ordering and hashing. Its conversions
+preserve each variant. Stereogenicity remains the separate enum used by asserted and derived
+readings.
+
+StereoSelection's constructor, getter and repr use stereogenic_site_kinds; matches uses
+site_kind. Typed iterable inputs and immutable frozenset observations retain None, empty-set
+and intersection semantics. The three operation configs expose max_classification_trials,
+default 4096, in their constructors, getters and repr. StereoModel removes para_stereo from
+construction, observation, conversion and repr, including nested ChemistryModel values.
+Model-taking molecule removal methods and model snapshots remain.
+
+The binding changes preserve the existing Python adaptations: keyword-only config construction,
+immutable configuration snapshots, frozenset observations of Rust sets, and the established
+copy-producing/in-place molecule operations and owned enumeration iterator. Domain calculations
+remain in Rust. The existing Python surface has no StereoPerceiver class; this subitem adds
+none. GraphSymmetry and attached-data Python interfaces remain S6b.
+
+Tests cover the new enum's exact variants and conversion, ordering, hashing and immutability;
+typed selector inputs, positional/keyword matches calls, defaults, u32 budget boundaries,
+constructor signatures, repr and the complete public-export inventory. The Python
+dichlorocyclobutane cases check both default additions and C1-only output with the full
+prospective context. Its four raw enumerated assignments match explicit molecules, and a
+second addition preserves each. Higher-geometry class-filtered removal now checks successful
+identity instead of the retired unsupported-kind error. Model equality, representation and
+snapshot cases that used para_stereo as their custom value now use a retained ring-size field
+where necessary to keep exercising nondefault data. The removed field's default/getter and
+mutation assertions have no remaining requirement.
+
+The initial enum/config/model/operation test changes preceded the binding migration. Their red
+run failed during Python collection on the missing enum and old constructor signature; it does
+not establish individual behavioral failures. The enum-order test separately failed before
+enabling the corresponding PyO3 ordering support. The public-export inventory and final
+nondefault-model case were reconciled during verification.
+
+**Verification.** Every Python/PyO3 command activated umol-py/.venv, confirmed as CPython
+3.13.18. The extension was rebuilt before Python verification. The direct Rust binding target
+passed 1,792 tests with 2 ignored. The full workspace passed 27,504 Rust tests with 5 ignored,
+plus 7 doctests with 4 ignored; the binding cases are included in those workspace counts.
+Python passed 3,431 tests with 2 skipped. Workspace Clippy passed for all targets with
+-D warnings, as did formatting and diff checks. Cargo used
+CARGO_TARGET_DIR=/Users/dr/.cargo-target.
+
+```text
+source umol-py/.venv/bin/activate && maturin develop --locked --manifest-path umol-py/Cargo.toml
+source umol-py/.venv/bin/activate && cargo test --locked -p umol-py --lib
+source umol-py/.venv/bin/activate && pytest -q umol-py/tests
+source umol-py/.venv/bin/activate && cargo test --locked --workspace
+source umol-py/.venv/bin/activate && cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
 #### S5g — Query and operation gate
 
 - **Module:** the graph-IR, graph and Python consumers and their tests and benchmarks.
@@ -3381,6 +3442,450 @@ to optimize the discarded artificial input family.
   against S4e if any later change reached its shared code. Report changed-workload costs
   separately from unchanged canonicalization costs. Resolve discrepancies before S6.
 - **Kind:** verification (green). `[dep: S5f]`
+
+**Gate evidence, 2026-11-15. Acceptance passes; performance discussion remains open.**
+The initial measurements used revision 332315029. No production or benchmark source was
+changed for those measurements. The correctness gates passed with 27,511 workspace
+tests/doctests and 9 ignored,
+802 explicit graph-IR/graph properties and 1 ignored, 4,219 graph conformance cases,
+and 3,431 Python tests with 2 skipped. The property and conformance targets used the release
+profile with their default case counts. Python was rebuilt and tested in umol-py/.venv
+with CPython 3.13.18. Workspace Clippy passed for all targets with -D warnings.
+Both the transform and constraint_readings benchmark targets linked.
+
+The fixed molecule-reading workload has a material cost increase: 5.730 → 107.434 µs on the
+eight-atom meso input, despite setup decreasing from 5.382 to 2.671 µs. The old auxiliary
+stored proper/star orbit labels and a chirality result. The present auxiliary stores the
+Constitution graph, adapter, refined partition and cell indices. proper_orbit_of and
+star_orbit_of each test every candidate atom through the corresponding pair predicate.
+Requesting both vectors for every atom repeats those searches; differing constitution cells
+still exit cheaply. Setup-only improvements therefore do not establish an improvement in
+complete query workloads.
+
+Nontrivial stereo readings also cost more on three fixed inputs, while five improve. The
+36- and 132-atom chain setup cases increase 1.77× and 3.77×. Global site-kind classification
+costs more on the coupled examples: inositol is 642.897 µs instead of the old local reading's
+38.652 µs. That comparison changes the calculation from Stereogenicity to the complete
+StereogenicSiteKind batch; the implementation cost of the new contract is nevertheless real.
+Inositol's enumeration setup and complete transforms inherit that batch cost. No workload
+frequencies or overall speedup are inferred from this collection. These costs require discussion
+before S6; this record does not mark the S5g performance gate complete.
+
+**Protocol and continuity.** All table values are median microseconds. A cell with two values
+is baseline → current, followed by current/baseline; values below 1× are faster. Old setup can
+include precomputed answers, so it is reported separately from complete workloads. The fixed
+build-and-read query counts remain those in S4a. All eight fixed input definitions are
+token-identical to revision 16f06bae5, including the historically named trichloropentane input.
+The new prepared-stereogenicity group measures one reading per stored record with supplied data;
+it is not compared with the retired local-group construction or cached-getter groups.
+
+Each of the 116 selected keys ran once with 100 samples, 0.5 s warm-up, 1.5 s measurement and
+100,000 resamples. The five timing batches took 276.299 seconds in total. They comprise 24
+fixed-reading/setup keys, 10 core operation keys, 36 remaining operation keys, 23 other setup
+keys, and 23 new-workload keys. The core batch was inspected after the fixed-reading batch;
+no optimization/remeasurement loop followed. The other artificial disconnected-component
+stress cases in the parent transform benchmark were outside the timed filters.
+
+The 408 saved baseline estimate files are unchanged: 268 pre-246 records (215 canonicalization,
+51 active operation records and two retired-name aliases), 24 pre-246-colors records and
+116 pre-246-readings records. The path/hash manifest SHA-256 is
+014941c1bb3111caa1052767504dd9282458a78c984d1fb0df6ee3c1210ee2bb.
+Current estimates use s5g-2026-11-15-332315029. The measured transform executable SHA-256 is
+f1738faf94569d93ff3573ea918c1a9d569938da77f63fd1118a27ad7012e116.
+
+The operation comparison has 46 remaining matching IDs after retiring the five sites_* inputs
+and two historical aliases. Three empty-request rows are not valid speed comparisons: the
+migrated preparation-inclusive benchmark constructs supplied data unconditionally, whereas the
+old empty classify call returned before preparation. Those rows retain their measured values
+below but have no ratio and are excluded from performance conclusions. Production consumers
+already skip the batch/preparation when they have no requested sites.
+
+The following tables preserve all 116 timings. The first table covers 24 baseline comparisons
+and 8 new prepared-query measurements.
+
+| Case | Setup | Build + molecule readings | Build + stereo readings | Prepared stereogenicity, now |
+| --- | --- | --- | --- | --- |
+| readings_meso | 5.382 → 2.671 (0.50×) | 5.730 → 107.434 (18.75×) | 10.060 → 3.070 (0.31×) | 0.029 |
+| readings_chiral | 6.489 → 2.673 (0.41×) | 7.008 → 73.336 (10.46×) | 11.242 → 3.063 (0.27×) | 0.029 |
+| readings_prostereogenic | 7.074 → 3.408 (0.48×) | 6.920 → 32.841 (4.75×) | 12.957 → 47.788 (3.69×) | 32.378 |
+| readings_trichloropentane_meso | 10.417 → 4.585 (0.44×) | 10.031 → 138.851 (13.84×) | 20.299 → 36.278 (1.79×) | 13.458 |
+| readings_trichloropentane_chiral | 7.482 → 4.555 (0.61×) | 7.918 → 139.009 (17.56×) | 15.587 → 45.361 (2.91×) | 18.299 |
+| readings_raw_term | 5.247 → 2.602 (0.50×) | 5.574 → 107.208 (19.23×) | 9.954 → 3.007 (0.30×) | 0.029 |
+| readings_raw_singleton | 4.499 → 3.301 (0.73×) | 4.912 → 6.294 (1.28×) | 9.329 → 3.683 (0.39×) | 0.029 |
+| readings_constraints | 5.444 → 2.655 (0.49×) | 5.732 → 107.607 (18.77×) | 10.120 → 3.049 (0.30×) | 0.029 |
+
+The other 23 setup comparisons use pre-246-readings:
+
+| Case | GraphSymmetry setup |
+| --- | --- |
+| atoms_12 | 5.406 → 5.036 (0.93×) |
+| atoms_132 | 76.063 → 286.813 (3.77×) |
+| atoms_36 | 15.859 → 28.003 (1.77×) |
+| atoms_5 | 2.992 → 1.722 (0.58×) |
+| fixture_cis_trans | 3.239 → 2.064 (0.64×) |
+| fixture_cis_trans_literal | 3.397 → 2.135 (0.63×) |
+| fixture_evidenced_stereo | 3.950 → 2.454 (0.62×) |
+| fixture_hydrogen_and_lone_pair | 2.389 → 1.138 (0.48×) |
+| fixture_imine | 2.630 → 1.496 (0.57×) |
+| fixture_implicit_hydrogen | 2.669 → 1.399 (0.52×) |
+| fixture_lone_pair | 2.660 → 1.415 (0.53×) |
+| fixture_nonstereogenic | 14.482 → 1.471 (0.10×) |
+| fixture_partial_stereo | 4.085 → 3.011 (0.74×) |
+| fixture_prostereogenic | 5.562 → 1.782 (0.32×) |
+| fixture_remote_stereo | 7.042 → 4.412 (0.63×) |
+| fixture_small_ring | 4.947 → 2.299 (0.46×) |
+| fixture_square_planar | 3.161 → 1.826 (0.58×) |
+| fixture_tetrahedral | 2.976 → 1.709 (0.57×) |
+| fixture_tetrahedral_literal | 3.121 → 1.816 (0.58×) |
+| ring_12 | 7.683 → 5.827 (0.76×) |
+| ring_4 | 4.007 → 1.497 (0.37×) |
+| ring_6 | 4.918 → 2.328 (0.47×) |
+| ring_8 | 5.799 → 3.359 (0.58×) |
+
+The five core operation cases use pre-246. classify includes auxiliary preparation, the batch
+calculation and requested-site projection; validate retains its conformance workload.
+
+| Case | classify | validate |
+| --- | --- | --- |
+| chlorofluoropropane | 11.611 → 15.415 (1.33×) | 11.996 → 36.909 (3.08×) |
+| trichloropentane_meso | 18.012 → 48.823 (2.71×) | 17.751 → 5.515 (0.31×) |
+| inositol | 38.652 → 642.897 (16.63×) | 14.626 → 5.308 (0.36×) |
+| bis_fluoroethyl_difluorohexane | 43.000 → 493.798 (11.48×) | 16.792 → 6.454 (0.38×) |
+| tris_hydroxyethyl_methane | 25.998 → 415.934 (16.00×) | 10.621 → 4.359 (0.41×) |
+
+The remaining 20 classify cases use pre-246. The empty-request caveat above applies to the
+three marked rows.
+
+| Case | Preparation + classify |
+| --- | --- |
+| atoms_12 | 7.681 → 5.738 (0.75×) |
+| atoms_132 | 101.624 → 291.168 (2.87×) |
+| atoms_36 | 20.891 → 29.621 (1.42×) |
+| atoms_5 | 4.539 → 2.127 (0.47×) |
+| fixture_cis_trans | 4.922 → 2.565 (0.52×) |
+| fixture_cis_trans_literal | 4.825 → 2.577 (0.53×) |
+| fixture_evidenced_stereo | 7.469 → 3.039 (0.41×) |
+| fixture_imine | 3.953 → 1.860 (0.47×) |
+| fixture_implicit_hydrogen | 4.137 → 1.774 (0.43×) |
+| fixture_lone_pair | 4.247 → 1.781 (0.42×) |
+| fixture_nonstereogenic | 22.682 → 166.891 (7.36×) |
+| fixture_prostereogenic | 7.206 → 9.911 (1.38×) |
+| fixture_remote_stereo | 15.801 → 62.020 (3.93×) |
+| fixture_small_ring | 0.005 → 2.276 (empty request) |
+| fixture_tetrahedral | 4.682 → 2.099 (0.45×) |
+| fixture_tetrahedral_literal | 4.550 → 2.094 (0.46×) |
+| ring_12 | 10.608 → 6.346 (0.60×) |
+| ring_4 | 0.005 → 1.451 (empty request) |
+| ring_6 | 0.005 → 2.274 (empty request) |
+| ring_8 | 8.185 → 3.748 (0.46×) |
+
+The 16 enumeration comparisons use pre-246. transform_* includes preparation; shared/unique
+refers to input storage ownership. iter_setup measures iterator construction, including eager
+preparation. iter_first, iter_prefix_4 and iter_all exclude that construction through their
+batch setup. Inositol's explicit Constitutional-only selector still selects no sites, so its
+iteration rows yield one unchanged result; these are not timings for enumerating 64 assignments.
+
+| Entry point | chlorofluoropropane | inositol |
+| --- | --- | --- |
+| transform_shared | 10.624 → 5.050 (0.48×) | 42.638 → 640.994 (15.03×) |
+| transform_unique | 10.473 → 4.720 (0.45×) | 40.017 → 640.895 (16.02×) |
+| transform_into_shared | 10.758 → 4.890 (0.45×) | 42.140 → 640.674 (15.20×) |
+| transform_into_unique | 10.422 → 4.702 (0.45×) | 40.038 → 640.266 (15.99×) |
+| iter_setup | 0.499 → 0.504 (1.01×) | 39.909 → 642.436 (16.10×) |
+| iter_first | 9.952 → 4.018 (0.40×) | 0.073 → 0.099 (1.36×) |
+| iter_prefix_4 | 39.120 → 15.901 (0.41×) | 0.120 → 0.142 (1.19×) |
+| iter_all | 40.116 → 15.984 (0.40×) | 0.119 → 0.141 (1.19×) |
+
+These 15 replacement-input timings have no baseline ratio. Prepared stereogenicity visits all
+stored records; preparation + classify includes the new site-kind batch.
+
+| Connected input | Setup | Prepared stereogenicity | Preparation + classify |
+| --- | --- | --- | --- |
+| bromochloroethanol | 1.745 | 0.013 | 2.156 |
+| dimethylcyclohexane_1_2 | 2.994 | 0.021 | 3.458 |
+| trimethylcyclohexane_1_2_3 | 3.690 | 15.963 | 54.133 |
+| tetramethylcyclobutane | 2.488 | 212.137 | 217.301 |
+| decalin | 3.882 | 100.512 | 109.374 |
+
+**Shared-code audit before the classification trial below.** Relative to the verified S5b/S4f
+checkpoint afffc23f7, both
+canonicalization modules and ir::symmetry are unchanged. Molecule and reaction-span
+initial_colors and canonical remapping_preserves_stereo are token-identical apart from the
+agreed inherent-to-field color names. S4g changed those names and test independence, not the
+selected fields, layouts or ranking. No new canonicalization timing run was required by this
+subitem's conditional recheck; the existing S4e/S4f evidence remains separate from query costs.
+
+```text
+cargo test --release --locked -p umol-graph-ir -p umol-graph --all-features --test property -- --quiet
+cargo test --release --locked -p umol-graph --all-features --test resolution -- --quiet
+source umol-py/.venv/bin/activate && cargo test --locked --workspace --quiet
+source umol-py/.venv/bin/activate && maturin develop --locked --manifest-path umol-py/Cargo.toml
+source umol-py/.venv/bin/activate && pytest -q umol-py/tests
+source umol-py/.venv/bin/activate && cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo bench --locked -p umol-graph --bench transform --no-run
+cargo bench --locked -p umol-graph-ir --bench constraint_readings --no-run
+```
+
+Cargo used CARGO_TARGET_DIR=/Users/dr/.cargo-target. Timing invoked the saved transform
+executable with --bench, the exact anchored union of table IDs for each batch, and:
+
+```text
+--sample-size 100 --warm-up-time 0.5 --measurement-time 1.5 --nresamples 100000 --noplot \
+  --save-baseline s5g-2026-11-15-332315029
+```
+
+**Shared classification traversal, 2026-11-15.** A trace of one inositol classification showed
+zero assignment trials. Its six elimination checks and six changes-alone checks made 12
+separate existence searches, 48 backend calls and 199 partition refinements. Thus assignment
+enumeration did not explain this input's cost. A separate trace of the meso molecule-reading
+workload counted 172 query calls, including 59 repeated identical queries, with 28 searches,
+62 partition refinements and one backend call.
+
+The accepted trial adds ir::symmetry::visit_remapping_candidates, using the existing
+visit_/ControlFlow convention. remapping_exists terminates that visitor on its first matching
+candidate. The site-kind batch now evaluates elimination and changes-alone conditions for all
+kept records during one traversal per classification round. The existing generator filter
+fixes every stereo record's site and ligand frame, so every accumulated condition is invariant
+under the generators retained for pruning. A change to the kept set starts another round;
+assignment confirmation and its trial budget retain their existing logic. Constitutionally
+distinct ligands still bypass the search. No public interface, GraphSymmetry field, molecule
+ownership or normalization behavior changes, and no group or query-result cache is introduced.
+
+The existing 23 exhaustive classification cases pass, including the published stereoisomer
+counts, classification limit and independence from stored cosets. New visitor cases cover
+empty, discrete and incompatible partitions, complete unpruned candidate delivery, and
+termination both at the first candidate and later. Canonical search is unchanged.
+
+One timing pass used the same protocol and exact workloads as the initial S5g measurements.
+Before refers to that implementation, not the pre-246 local classification. Medians are
+microseconds; the small changes in the simple-center and molecule-reading rows do not resolve
+either workload's performance questions.
+
+| Workload | Before | Shared traversal | Change |
+| --- | ---: | ---: | ---: |
+| Preparation + classify, inositol | 642.897 | 92.090 | -85.7% |
+| Preparation + classify, bromochloroethanol | 2.156 | 2.112 | -2.1% |
+| Build + molecule readings, meso | 107.434 | 106.806 | -0.6% |
+
+The coupled classification improves by about sevenfold on inositol. Its 92.090 microseconds
+are still about 2.38 times the pre-246 local classification's 38.652 microseconds; those
+operations have different semantics. The molecule-orbit cost and the larger chain setup costs
+remain unresolved, and S5g remains open. The timing label is s5g-shared-traversal-2026-11-15;
+no optimization or remeasurement loop followed this pass.
+
+**Stored constitutional automorphism data, 2026-11-15.** The approved follow-up trial adds
+automorphisms: Option<AutomorphismOutput> before config in GraphSymmetry. Construction computes
+the colored adapter's automorphism output once when its refined source-entity partition is
+not discrete. The data contain constitutional generators, orbits and group order, without a
+molecule or stored stereo-query answers. Public interfaces and raw-form semantics are unchanged.
+
+Queries without stereo checks use the constitutional orbits. For stereo queries, successful
+generator witnesses establish existence. A failed witness establishes nonexistence only when
+the exact group order equals the pinned atom's orbit size: its point stabilizer is then
+trivial, so there is only one matching remapping. Other cases retain the exact search. Identity
+witnesses also avoid rebuilding a search when the source-entity action is trivial. The stored
+generators already preserve the adapter, so only stereo transport needs checking for them.
+Coset-change searches retain their existing path.
+
+The two additional correctness cases check all atom pairs against explicit orbit classes for
+a square-planar center with identical ligands and for disconnected rings of different sizes.
+They cover a nontrivial point stabilizer and distinct orbits within one refinement cell.
+All 664 focused symmetry cases and all 23 exhaustive site-kind cases pass.
+
+One before/after pass measured five existing workloads with the preceding S5g protocol. The
+before binary already includes the shared classification traversal above. Medians are
+microseconds.
+
+| Workload | Before | Stored automorphism data | Change |
+| --- | ---: | ---: | ---: |
+| Build + molecule readings, meso | 106.290 | 14.559 | -86.3% |
+| Build + molecule readings, chiral | 72.074 | 18.485 | -74.4% |
+| Preparation + classify, inositol | 92.803 | 95.406 | +2.8% |
+| Preparation + classify, bromochloroethanol | 2.110 | 2.152 | +2.0% |
+| Preparation, atoms_132 | 286.220 | 294.284 | +2.8% |
+
+The query improvements support retaining this intermediate data: meso improves about 7.3-fold
+and chiral about 3.9-fold, with measured preparation/classification increases of about 2–3%.
+This is an assessment of the selected workloads, not an inferred workload-frequency average.
+The larger-chain setup regression remains: atoms_132 is still about 3.87 times the pre-246
+76.063-microsecond setup. S5g remains open. The timing labels are
+s5g-automorphism-data-before-2026-11-15 and s5g-automorphism-data-after-2026-11-15.
+
+**Accepted preparation and witness rules, 2026-11-15.** The user accepted retaining the shared
+classification traversal, stored constitutional group data, native orbit preparation with
+the cheap prepass, and guarded witness checks. The algorithm is frozen for the final S5g gate;
+the measurements below record the construction choices and the completed witness rule.
+
+An optimized single-call phase diagnostic of atoms_132 measured incidence construction at
+3.500 microseconds, colors at 10.333, adapter construction at 23.958, initial partition creation
+at 2.417, Rust refinement at 270.542, and cell-index/automorphism work at 0.333. These are phase
+attribution values from one call, not benchmark medians. The temporary timers were removed.
+
+Preparation now uses the native automorphism orbits directly. It also corrects the distinction
+between a refinement cell and a constitutional orbit: the new different_ligand_cycles case has
+two ligand roots with identical refinement signatures, but their induced neighbor graphs are
+two triangles and one six-cycle, respectively. They cannot be exchanged by an automorphism.
+The production result was Configurational before the change and is now Constitutional, as the
+existing variant definition requires. Both constraints settings failed before the correction.
+All 666 focused symmetry cases and all 23 exhaustive site-kind cases pass afterward.
+
+The direct native-preparation variant improved atoms_132 substantially but increased the
+simple-center cost by 42%. The selected structural prepass avoids that tradeoff: when atom
+colors already distinguish every atom, Rust refinement either completes preparation cheaply
+or leaves ambiguity for the native calculation. Ambiguous atom colors go directly to the
+native calculation. There is no size threshold, new config or additional stored state.
+The following medians are microseconds; Before includes the stored-group-data change above.
+
+| Workload | Before | Direct native preparation | With cheap prepass |
+| --- | ---: | ---: | ---: |
+| Build + molecule readings, meso | 14.559 | 14.908 | 15.045 |
+| Build + molecule readings, chiral | 18.485 | 18.540 | 18.940 |
+| Preparation + classify, inositol | 95.406 | 95.260 | 98.035 |
+| Preparation + classify, bromochloroethanol | 2.152 | 3.061 | 2.129 |
+| Preparation, atoms_132 | 294.284 | 70.652 | 71.857 |
+
+The same witness rule now handles all self-remapping requests, including multiple pinned
+atoms and coset changes. A pinned atom with a trivial stabilizer makes the whole matching
+remapping unique; other pinned atoms only add restrictions. Without that certificate a failed
+witness cannot give false, and the exact search remains the fallback. The existing predicate
+still reads the supplied stereo records and requested coset. No generator-filter condition,
+normalization behavior, public interface or stored-data field changes in this extension.
+
+One before/after pass used six existing workloads with the same timing protocol. Before already
+includes the accepted preparation strategy. Medians are microseconds.
+
+| Workload | Before | Uniform witness rule |
+| --- | ---: | ---: |
+| Build + stereo readings, prostereogenic | 47.295 | 7.770 |
+| Build + stereo readings, trichloropentane chiral | 46.433 | 9.182 |
+| Build + stereo readings, trichloropentane meso | 37.280 | 22.206 |
+| Build + stereo readings, meso | 4.825 | 4.857 |
+| Build + molecule readings, meso | 14.113 | 14.292 |
+| Validation, chlorofluoropropane | 36.684 | 7.207 |
+
+The retained tradeoff is explicit: small symmetric inputs pay roughly 1–2 microseconds more
+to prepare reusable group data than at the start of S5g, while complete orbit and nontrivial
+stereo workloads avoid repeated graph searches. The inexpensive fixed stereo-reading cases
+remain faster than their pre-246 workloads. No workload-frequency average is inferred.
+
+**Final measurements, 2026-11-15.** The frozen implementation has all 116 selected
+workload medians. Six measurements from the final witness-rule pass were retained after
+verifying that their executable hash matches; the other 110 workloads ran once in eight
+bounded batches, taking 261.350 seconds in total. The protocol remains 100 samples,
+0.5-second warm-up, 1.5-second target and 100,000 resamples. The final label is
+s5g-final-2026-11-15 and the transform executable SHA-256 is
+c9ecbdcd3e7b9c41a447294ef6255d798a6247f39e9841685acc5a183a981e02.
+The four changed Rust source/test hashes were unchanged throughout the measurements, and
+all 408 saved baseline estimate hashes remain unchanged.
+
+The following tables preserve every final median in microseconds. Their workloads, query
+counts, preparation boundaries and baseline caveats are the same as in the initial tables
+above. The three empty classify requests remain unsuitable for an old/new speed ratio.
+Prepared stereogenicity and the five replacement connected inputs still have no old baseline.
+
+| Case | Setup | Build + molecule readings | Build + stereo readings | Prepared stereogenicity |
+| --- | ---: | ---: | ---: | ---: |
+| readings_meso | 4.486 | 14.292 | 4.857 | 0.028 |
+| readings_chiral | 4.431 | 18.242 | 4.828 | 0.028 |
+| readings_prostereogenic | 4.559 | 17.321 | 7.770 | 1.805 |
+| readings_trichloropentane_meso | 5.917 | 17.135 | 22.206 | 13.703 |
+| readings_trichloropentane_chiral | 5.949 | 30.747 | 9.182 | 1.066 |
+| readings_raw_term | 4.369 | 23.665 | 4.788 | 0.028 |
+| readings_raw_singleton | 4.301 | 5.830 | 4.710 | 0.028 |
+| readings_constraints | 4.426 | 13.745 | 4.829 | 0.028 |
+
+| Case | GraphSymmetry setup |
+| --- | ---: |
+| atoms_12 | 5.525 |
+| atoms_132 | 70.648 |
+| atoms_36 | 15.838 |
+| atoms_5 | 1.803 |
+| fixture_cis_trans | 3.096 |
+| fixture_cis_trans_literal | 3.197 |
+| fixture_evidenced_stereo | 3.656 |
+| fixture_hydrogen_and_lone_pair | 1.241 |
+| fixture_imine | 1.576 |
+| fixture_implicit_hydrogen | 1.491 |
+| fixture_lone_pair | 1.496 |
+| fixture_nonstereogenic | 4.370 |
+| fixture_partial_stereo | 4.297 |
+| fixture_prostereogenic | 3.256 |
+| fixture_remote_stereo | 5.852 |
+| fixture_small_ring | 3.744 |
+| fixture_square_planar | 1.892 |
+| fixture_tetrahedral | 1.802 |
+| fixture_tetrahedral_literal | 1.921 |
+| ring_12 | 6.074 |
+| ring_4 | 2.814 |
+| ring_6 | 3.649 |
+| ring_8 | 4.309 |
+
+| Case | Preparation + classify | Validate |
+| --- | ---: | ---: |
+| chlorofluoropropane | 16.055 | 7.207 |
+| trichloropentane_meso | 34.974 | 6.880 |
+| inositol | 95.910 | 8.561 |
+| bis_fluoroethyl_difluorohexane | 317.029 | 9.829 |
+| tris_hydroxyethyl_methane | 278.266 | 6.663 |
+
+| Case | Preparation + classify |
+| --- | ---: |
+| atoms_12 | 6.105 |
+| atoms_132 | 74.918 |
+| atoms_36 | 17.317 |
+| atoms_5 | 2.092 |
+| fixture_cis_trans | 3.610 |
+| fixture_cis_trans_literal | 3.632 |
+| fixture_evidenced_stereo | 4.208 |
+| fixture_imine | 1.943 |
+| fixture_implicit_hydrogen | 1.864 |
+| fixture_lone_pair | 1.860 |
+| fixture_nonstereogenic | 167.178 |
+| fixture_prostereogenic | 11.062 |
+| fixture_remote_stereo | 48.302 |
+| fixture_small_ring (empty request) | 3.715 |
+| fixture_tetrahedral | 2.205 |
+| fixture_tetrahedral_literal | 2.198 |
+| ring_12 | 6.662 |
+| ring_4 (empty request) | 2.849 |
+| ring_6 (empty request) | 3.715 |
+| ring_8 | 4.794 |
+
+| Entry point | Chlorofluoropropane | Inositol |
+| --- | ---: | ---: |
+| transform_shared | 6.010 | 96.879 |
+| transform_unique | 5.837 | 96.849 |
+| transform_into_shared | 6.018 | 96.218 |
+| transform_into_unique | 5.841 | 96.552 |
+| iter_setup | 0.496 | 96.395 |
+| iter_first | 5.123 | 0.072 |
+| iter_prefix_4 | 20.398 | 0.106 |
+| iter_all | 20.331 | 0.105 |
+
+| Connected input | Setup | Prepared stereogenicity | Preparation + classify |
+| --- | ---: | ---: | ---: |
+| bromochloroethanol | 1.786 | 0.012 | 2.139 |
+| dimethylcyclohexane_1_2 | 4.348 | 0.020 | 4.844 |
+| trimethylcyclohexane_1_2_3 | 4.893 | 0.846 | 41.669 |
+| tetramethylcyclobutane | 4.950 | 130.825 | 47.339 |
+| decalin | 5.901 | 88.579 | 41.126 |
+
+The complete meso molecule workload is 14.292 microseconds, down from the initial S5g
+107.434, but above the pre-246 cached-answer workload's 5.730. The corresponding chiral
+workload is 18.242, down from 73.336 and above 7.008. Preparation at atoms_132 is 70.648,
+versus initial S5g 286.813 and pre-246 76.063. Inositol's new complete site-kind batch costs
+95.910, versus initial S5g 642.897 and the old local reading's 38.652. The coupled
+bis_fluoroethyl_difluorohexane and tris_hydroxyethyl_methane batches still cost 317.029 and
+278.266, versus the old local readings' 43.000 and 25.998. These remaining costs are retained
+under the accepted algorithm; the old reading and new batch have different contracts.
+The tables do not establish a workload-frequency-weighted overall speedup.
+
+The shared remapping visitor also serves equality. A bounded recheck measured the molecule
+and reaction-span canonical_eq_equal/stereo_frame_constraints workloads with the same
+protocol, using label s5g-equality-2026-11-15. Molecule equality is 12.676 microseconds versus
+12.997 in pre-246-colors; reaction-span equality is 13.791 versus 13.993. This covers those
+two shared-path workloads, not a rerun of all 215 canonicalization keys. The canonical
+minimum-search functions, direct full-color reads and upfront normalization are unchanged.
 
 ### S6 — Keyed readings and the Python symmetry surface
 
@@ -3478,8 +3983,8 @@ stage boundary.
 
 ### Stage gates
 
-S4f, S4g and S5b-S5e are complete. S5f restores the workspace; S5g is its acceptance
-and performance gate. S6 ends green with keyed and Python parity complete. No later stage is
+S4f, S4g and S5b-S5f are complete. The workspace and S5g acceptance checks pass; its
+performance gate remains open for the measured query and setup costs. S6 ends green with keyed and Python parity complete. No later stage is
 used to repair an earlier stage's compilation.
 
 During implementation, run the tests of the affected crate/subitem, then the stage gate; do not

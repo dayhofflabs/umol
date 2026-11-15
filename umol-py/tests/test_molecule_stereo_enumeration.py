@@ -7,7 +7,7 @@ from umol import (
     StereoAtomForm,
     StereoConfigurationForm,
     StereoCoset,
-    Stereogenicity,
+    StereogenicSiteKind,
     StereoKind,
     StereoModel,
     StereoSelection,
@@ -77,7 +77,7 @@ def test_molecule_enumerate_stereo(stereo_source, kwargs, order, values):
         (StereoSelection(sites=[StereoSite.Atom(0)]), [(0, "*"), (1, "*")]),
         (StereoSelection(kinds=[StereoKind.CisTrans]), [("*", 0), ("*", 1)]),
         (
-            StereoSelection(stereogenicities=[Stereogenicity.Stereogenic]),
+            StereoSelection(stereogenic_site_kinds=[StereogenicSiteKind.Constitutional]),
             [(0, 0), (0, 1), (1, 0), (1, 1)],
         ),
     ],
@@ -186,7 +186,6 @@ def test_molecule_enumerate_stereo_ring(minimum):
     original = source.copy()
     model = StereoModel(
         kind_models=StereoModel.default().kind_models,
-        para_stereo=False,
         stereo_bond_min_ring_size=minimum,
         stereo_bond_e_min_ring_size=64,
     )
