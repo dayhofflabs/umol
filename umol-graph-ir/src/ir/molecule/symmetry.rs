@@ -8,10 +8,10 @@ use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, AtomPosition};
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
-use super::super::ligand::StereoLigand;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::{
-    coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind,
+    coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, StereogenicSiteKind,
 };
 use super::super::symmetry::{
     rank_colors, remapping_exists, remapping_preserves_incidences, AutomorphismAdapter,
@@ -200,6 +200,403 @@ impl Molecule {
             .filter(|&b| self.same_star_orbit(symmetry, a, b))
             .collect()
     }
+
+    /// Classify all kinded stereo records together, independently of their stored cosets.
+    ///
+    /// Entries use stereo-record IDs, with stereo atoms first and stereo bonds second, each
+    /// in ascending ID order. Kindless records are omitted; no kinded records gives an empty
+    /// vector. The caller owns the results. Recognition of candidate records is separate.
+    ///
+    /// The calculation reads the supplied molecule without normalization. The auxiliary
+    /// data must describe it; mismatched context has no specified result and does not panic.
+    /// At the classification-trial limit an unconfirmed candidate is retained.
+    ///
+    /// # Semantic properties
+    ///
+    /// Compatible molecule and view calls agree and preserve the molecule exactly. Changing
+    /// valid stored coset assignments alone preserves these kinds. The candidate records,
+    /// constitution, selected constraints and calculation settings determine the result.
+    pub fn stereogenic_site_kinds(
+        &self,
+        symmetry: &GraphSymmetry,
+    ) -> Vec<(Entity, StereogenicSiteKind)> {
+        let records = self
+            .stereo_atoms()
+            .iter()
+            .filter_map(|stereo| {
+                Some((
+                    Entity::StereoAtom(stereo.id()),
+                    stereo.attributes().configuration.kind()?,
+                    stereo.ligand_ids(),
+                    Entity::Atom(stereo.site_id()),
+                ))
+            })
+            .chain(self.stereo_bonds().iter().filter_map(|stereo| {
+                Some((
+                    Entity::StereoBond(stereo.id()),
+                    stereo.attributes().configuration.kind()?,
+                    stereo.ligand_ids(),
+                    Entity::Bond(stereo.site_id()),
+                ))
+            }))
+            .collect::<Vec<_>>();
+        if records.is_empty() {
+            return Vec::new();
+        }
+        if records.iter().any(|(_, _, ligands, site)| {
+            symmetry.cell(*site).is_none()
+                || ligands
+                    .iter()
+                    .any(|ligand| symmetry.cell(Entity::Atom(ligand.atom_id)).is_none())
+        }) {
+            return records
+                .iter()
+                .map(|(entity, ..)| (*entity, StereogenicSiteKind::Constitutional))
+                .collect();
+        }
+        let preserves_frames = |images: &[NodeId]| {
+            records.iter().all(|(entity, kind, ligands, site)| {
+                let Some(target_site) = entity_image(&symmetry.incidence, images, *site) else {
+                    return false;
+                };
+                let Some((target, target_kind, target_ligands, _)) =
+                    records.iter().find(|record| record.3 == target_site)
+                else {
+                    return false;
+                };
+                if kind != target_kind {
+                    return false;
+                }
+                let Some(frame) =
+                    remapping_frame_action(&symmetry.incidence, images, ligands, target_ligands)
+                else {
+                    return false;
+                };
+                if frame.degree() != kind.degree() || !kind.class_key().space().allows(frame) {
+                    return false;
+                }
+                if !symmetry.config.include_constraints {
+                    return true;
+                }
+                match (*entity, *target) {
+                    (Entity::StereoAtom(source), Entity::StereoAtom(target)) => self
+                        .stereo_atom(source)
+                        .attributes()
+                        .constraints
+                        .clone()
+                        .reframe_by(&frame)
+                        .is_some_and(|constraints| {
+                            constraints == self.stereo_atom(target).attributes().constraints
+                        }),
+                    (Entity::StereoBond(source), Entity::StereoBond(target)) => self
+                        .stereo_bond(source)
+                        .attributes()
+                        .constraints
+                        .clone()
+                        .reframe_by(&frame)
+                        .is_some_and(|constraints| {
+                            constraints == self.stereo_bond(target).attributes().constraints
+                        }),
+                    _ => false,
+                }
+            })
+        };
+        let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+            generators.retain(|images| {
+                records.iter().all(|(_, _, ligands, site)| {
+                    entity_image(&symmetry.incidence, images, *site) == Some(*site)
+                        && remapping_frame_action(&symmetry.incidence, images, ligands, ligands)
+                            .is_some_and(|frame| frame == Permutation::identity(frame.degree()))
+                })
+            });
+        };
+        let mut result = records
+            .iter()
+            .map(|(entity, ..)| (*entity, StereogenicSiteKind::Nonstereogenic))
+            .collect::<Vec<_>>();
+        let mut pending_ligands = vec![None];
+        while let Some(fixed) = pending_ligands.pop() {
+            if let Some(atom) = fixed {
+                if !records
+                    .iter()
+                    .enumerate()
+                    .any(|(index, (_, _, ligands, _))| {
+                        result[index].1 == StereogenicSiteKind::Nonstereogenic
+                            && ligands.iter().any(|ligand| {
+                                ligand.kind == StereoLigandKind::Atom && ligand.atom_id == atom
+                            })
+                    })
+                {
+                    continue;
+                }
+            }
+            let mut partition = symmetry.partition.clone();
+            if let Some(atom) = fixed {
+                let node = symmetry.incidence.node_of(Entity::Atom(atom));
+                let cell = partition
+                    .cells
+                    .iter()
+                    .position(|cell| cell.contains(&node))
+                    .unwrap();
+                partition = partition
+                    .individualize(cell, node)
+                    .refine(symmetry.adapter.graph());
+            }
+            let cells = partition.cell_indices(symmetry.adapter.graph().node_count());
+            let constitutional = records
+                .iter()
+                .map(|(entity, _, ligands, _)| {
+                    ligands.iter().enumerate().all(|(position, ligand)| {
+                        let start = if matches!(entity, Entity::StereoBond(_)) {
+                            2 * (position / 2)
+                        } else {
+                            0
+                        };
+                        ligand.kind != StereoLigandKind::Atom
+                            || ligands[start..position].iter().all(|other| {
+                                other.kind != StereoLigandKind::Atom
+                                    || cells[symmetry
+                                        .incidence
+                                        .node_of(Entity::Atom(ligand.atom_id))
+                                        .index()]
+                                        != cells[symmetry
+                                            .incidence
+                                            .node_of(Entity::Atom(other.atom_id))
+                                            .index()]
+                            })
+                    })
+                })
+                .collect::<Vec<_>>();
+            let mut kept = vec![true; records.len()];
+            let mut trials = vec![0; records.len()];
+            loop {
+                let snapshot = kept.clone();
+                for (index, (_, kind, _, _)) in records.iter().enumerate() {
+                    if !snapshot[index] || constitutional[index] {
+                        continue;
+                    }
+                    let removable = (1..kind.class_key().space().count() as u32).all(|target| {
+                        remapping_exists(
+                            &symmetry.adapter,
+                            partition.clone(),
+                            &symmetry.adapter,
+                            partition.clone(),
+                            symmetry.config.automorphism_algorithm,
+                            &|images| {
+                                remapping_preserves_incidences(
+                                    &symmetry.adapter,
+                                    &symmetry.adapter,
+                                    images,
+                                ) && preserves_frames(images)
+                                    && snapshot.iter().enumerate().all(|(other, &is_kept)| {
+                                        if !is_kept {
+                                            return true;
+                                        }
+                                        let (_, kind, ligands, site) = records[other];
+                                        entity_image(&symmetry.incidence, images, site)
+                                            == Some(site)
+                                            && remapping_frame_action(
+                                                &symmetry.incidence,
+                                                images,
+                                                ligands,
+                                                ligands,
+                                            )
+                                            .and_then(|frame| kind.act(0, frame))
+                                                == Some(if other == index { target } else { 0 })
+                                    })
+                            },
+                            true,
+                            &filter_generators,
+                        )
+                    });
+                    if removable {
+                        kept[index] = false;
+                    }
+                }
+                if kept != snapshot {
+                    continue;
+                }
+                let mut dropped = false;
+                for (index, (_, kind, ligands, site)) in records.iter().enumerate() {
+                    if !kept[index] || constitutional[index] {
+                        continue;
+                    }
+                    let node = symmetry.incidence.node_of(*site);
+                    let cell = partition
+                        .cells
+                        .iter()
+                        .position(|cell| cell.contains(&node))
+                        .unwrap();
+                    let focus_partition = partition
+                        .individualize(cell, node)
+                        .refine(symmetry.adapter.graph());
+                    let changes_alone = remapping_exists(
+                        &symmetry.adapter,
+                        focus_partition.clone(),
+                        &symmetry.adapter,
+                        focus_partition.clone(),
+                        symmetry.config.automorphism_algorithm,
+                        &|images| {
+                            remapping_preserves_incidences(
+                                &symmetry.adapter,
+                                &symmetry.adapter,
+                                images,
+                            ) && preserves_frames(images)
+                                && remapping_frame_action(
+                                    &symmetry.incidence,
+                                    images,
+                                    ligands,
+                                    ligands,
+                                )
+                                .and_then(|frame| kind.act(0, frame))
+                                .is_some_and(|coset| coset != 0)
+                                && kept.iter().enumerate().all(|(other, &is_kept)| {
+                                    let (_, kind, ligands, site) = records[other];
+                                    !is_kept
+                                        || other == index
+                                        || entity_image(&symmetry.incidence, images, site)
+                                            != Some(site)
+                                        || remapping_frame_action(
+                                            &symmetry.incidence,
+                                            images,
+                                            ligands,
+                                            ligands,
+                                        )
+                                        .and_then(|frame| kind.act(0, frame))
+                                            == Some(0)
+                                })
+                        },
+                        true,
+                        &filter_generators,
+                    );
+                    if !changes_alone {
+                        continue;
+                    }
+                    let focus_cells =
+                        focus_partition.cell_indices(symmetry.adapter.graph().node_count());
+                    let moved = records
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(other, (_, _, _, site))| {
+                            let node = symmetry.incidence.node_of(*site);
+                            (kept[other]
+                                && other != index
+                                && focus_partition.cells[focus_cells[node.index()] as usize].len()
+                                    > 1)
+                            .then_some(other)
+                        })
+                        .collect::<Vec<_>>();
+                    let mut assignment = vec![0; records.len()];
+                    let confirmed = loop {
+                        if trials[index] == symmetry.config.max_classification_trials {
+                            break true;
+                        }
+                        trials[index] += 1;
+                        let stereogenic =
+                            (1..kind.class_key().space().count() as u32).any(|target| {
+                                !remapping_exists(
+                                    &symmetry.adapter,
+                                    focus_partition.clone(),
+                                    &symmetry.adapter,
+                                    focus_partition.clone(),
+                                    symmetry.config.automorphism_algorithm,
+                                    &|images| {
+                                        remapping_preserves_incidences(
+                                            &symmetry.adapter,
+                                            &symmetry.adapter,
+                                            images,
+                                        ) && preserves_frames(images)
+                                            && records.iter().enumerate().all(
+                                                |(source, (_, kind, ligands, site))| {
+                                                    let Some(target_site) = entity_image(
+                                                        &symmetry.incidence,
+                                                        images,
+                                                        *site,
+                                                    ) else {
+                                                        return false;
+                                                    };
+                                                    let Some(image) = records
+                                                        .iter()
+                                                        .position(|record| record.3 == target_site)
+                                                    else {
+                                                        return false;
+                                                    };
+                                                    remapping_frame_action(
+                                                        &symmetry.incidence,
+                                                        images,
+                                                        ligands,
+                                                        records[image].2,
+                                                    )
+                                                    .and_then(|frame| {
+                                                        kind.act(assignment[source], frame)
+                                                    }) == Some(if image == index {
+                                                        target
+                                                    } else {
+                                                        assignment[image]
+                                                    })
+                                                },
+                                            )
+                                    },
+                                    true,
+                                    &filter_generators,
+                                )
+                            });
+                        if stereogenic {
+                            break true;
+                        }
+                        let mut position = 0;
+                        while let Some(&other) = moved.get(position) {
+                            assignment[other] += 1;
+                            if assignment[other]
+                                < records[other].1.class_key().space().count() as u32
+                            {
+                                break;
+                            }
+                            assignment[other] = 0;
+                            position += 1;
+                        }
+                        if position == moved.len() {
+                            break false;
+                        }
+                    };
+                    if !confirmed {
+                        kept[index] = false;
+                        dropped = true;
+                        break;
+                    }
+                }
+                if !dropped {
+                    break;
+                }
+            }
+            for (index, (_, _, ligands, _)) in records.iter().enumerate() {
+                if let Some(atom) = fixed {
+                    if kept[index]
+                        && result[index].1 == StereogenicSiteKind::Nonstereogenic
+                        && ligands.iter().any(|ligand| {
+                            ligand.kind == StereoLigandKind::Atom && ligand.atom_id == atom
+                        })
+                    {
+                        result[index].1 = StereogenicSiteKind::Prostereogenic;
+                    }
+                } else if constitutional[index] {
+                    result[index].1 = StereogenicSiteKind::Constitutional;
+                } else if kept[index] {
+                    result[index].1 = StereogenicSiteKind::Configurational;
+                } else {
+                    for ligand in ligands
+                        .iter()
+                        .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+                    {
+                        if !pending_ligands.contains(&Some(ligand.atom_id)) {
+                            pending_ligands.push(Some(ligand.atom_id));
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
 }
 
 pub(crate) fn remapping_exists_at(
@@ -336,24 +733,9 @@ fn molecule_remapping_exists(
                     {
                         return false;
                     }
-                    let mapped = ligands
-                        .iter()
-                        .map(|ligand| {
-                            let Entity::Atom(atom) = entity_image(
-                                &symmetry.incidence,
-                                images,
-                                Entity::Atom(ligand.atom_id),
-                            )?
-                            else {
-                                return None;
-                            };
-                            Some(StereoLigand::new(atom, ligand.kind))
-                        })
-                        .collect::<Option<Vec<_>>>();
-                    let Some(mapped) = mapped else {
-                        return false;
-                    };
-                    let Some(frame) = Permutation::between(&mapped, ligands) else {
+                    let Some(frame) =
+                        remapping_frame_action(&symmetry.incidence, images, ligands, ligands)
+                    else {
                         return false;
                     };
                     coset_apply_permutation(&StereoCoset::Lit(coset), frame, kind)
@@ -364,6 +746,25 @@ fn molecule_remapping_exists(
             }
         },
     )
+}
+
+fn remapping_frame_action(
+    incidence: &IncidenceGraph,
+    images: &[NodeId],
+    ligands: &[StereoLigand],
+    target_ligands: &[StereoLigand],
+) -> Option<Permutation> {
+    let mapped = ligands
+        .iter()
+        .map(|ligand| {
+            let Entity::Atom(atom) = entity_image(incidence, images, Entity::Atom(ligand.atom_id))?
+            else {
+                return None;
+            };
+            Some(StereoLigand::new(atom, ligand.kind))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Permutation::between(&mapped, target_ligands)
 }
 
 fn entity_image(incidence: &IncidenceGraph, images: &[NodeId], entity: Entity) -> Option<Entity> {
@@ -457,19 +858,7 @@ fn remapping_matches_stereo(
         if image(site) != Some(target_site) {
             return false;
         }
-        let mapped = ligands
-            .iter()
-            .map(|ligand| {
-                let Entity::Atom(atom) = image(Entity::Atom(ligand.atom_id))? else {
-                    return None;
-                };
-                Some(StereoLigand::new(atom, ligand.kind))
-            })
-            .collect::<Option<Vec<_>>>();
-        let Some(mapped) = mapped else {
-            return false;
-        };
-        let Some(frame) = Permutation::between(&mapped, target_ligands) else {
+        let Some(frame) = remapping_frame_action(incidence, images, ligands, target_ligands) else {
             return false;
         };
         let mut configuration = configuration.clone();
@@ -971,7 +1360,7 @@ pub(crate) fn initial_colors(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GraphSymmetryConfig {
     pub automorphism_algorithm: AutomorphismAlgorithm,
-    pub max_assignments: u32,
+    pub max_classification_trials: u32,
     pub include_constraints: bool,
 }
 
@@ -979,7 +1368,7 @@ impl Default for GraphSymmetryConfig {
     fn default() -> Self {
         Self {
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            max_assignments: 4096,
+            max_classification_trials: 4096,
             include_constraints: false,
         }
     }

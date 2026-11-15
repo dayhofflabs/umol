@@ -23,10 +23,11 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g and S5a-S5c are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g and S5a-S5d are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
-generator filter, FieldColor names and the three derived stereo-view readings. S5d's batch
-stereogenic-site classification is next; the workspace-wide S5 gate remains ahead.
+generator filter, FieldColor names, the three derived stereo-view readings and the batch
+stereogenic-site classification. S5e's Rust operation consumers are next; the workspace-wide
+S5 gate remains ahead.
 
 ## Starting state
 
@@ -614,7 +615,8 @@ do not compare these result representations.
 
 The procedure decides the two conditions of Perdih and Razinger with the search.
 
-1. A record whose ligands lie in pairwise different refined cells is `Constitutional`.
+1. A record whose ligands lie in pairwise different refined cells within each frame factor is
+   `Constitutional`. Stereo atoms have one factor; cis/trans bonds have one per endpoint.
 2. A record is dropped when every other coset of its kind is reached by remappings that change
    its coset in place and leave every other kept record in place with its coset unchanged. For a
    kind with two cosets one such remapping suffices. This is repeated until no record is dropped.
@@ -3061,7 +3063,7 @@ Source hashes were captured before compilation and checked unchanged afterward. 
 | umol-graph-ir/benches/constraint_readings.rs | `fa8ff2c8b0adb335a737bc1dba2e82dc5f8b33e1510c7098fd3647f54d21e27a` |
 | Timed constraint_readings binary | `d7c8bcd261a074acb55c9cdd98b3b2ce75328a3fc4af8ae47c78286434772011` |
 
-#### S5d — Batch stereogenic-site kinds
+#### S5d — Batch stereogenic-site kinds **Done**
 
 - **Module:** `ir::stereo`, its `ir` exports, `ir::molecule::symmetry`,
   `ir::view::symmetry`, their tests and `benches/constraint_readings.rs`.
@@ -3097,6 +3099,106 @@ Source hashes were captured before compilation and checked unchanged afterward. 
   against the settled symbols, return contract and unchanged GraphSymmetry representation.
 - **Kind:** breaking enum/config-field renames plus additive batch operations; graph IR green,
   workspace still red within the existing S5 migration. `[dep: S5c, S3c]`
+
+**Completion, 2026-11-15.** StereogenicSiteKind replaces StereogenicUnit with the same four
+variants and exports. GraphSymmetryConfig::max_classification_trials replaces max_assignments
+with the same 4,096 default. Molecule::stereogenic_site_kinds and the forwarding
+GraphSymmetryView method return the specified sorted, caller-owned vector of stereo-record
+IDs and kinds. Kindless records are omitted, including gaps in either ID namespace, and the
+empty cases return an empty vector. GraphSymmetry still has exactly incidence, adapter,
+partition, cell_indices and config, in that order. Its factory and storage are unchanged.
+
+The four-step calculation uses local record, partition, assignment and result vectors; it
+copies or normalizes no molecule and retains no result. The shared remapping_frame_action
+supplies ligand-frame permutations to the batch and the existing graph checks. Canonicalization
+code is unchanged. Constitutional ligand comparisons for cis/trans records respect the two
+endpoint frames. Repeated calculations with one explicit ligand distinguished decide
+Prostereogenic versus Nonstereogenic. Reaching the trial limit retains the candidate.
+
+Before production changes, 25 batch/view cases, the literature comparisons, two limit cases
+and the initial batch workloads were written. Their red compile checks failed on the absent
+batch operations and renamed enum/config field. The 21 published structures now compare the
+complete production vector with the published constitutional/configurational sites and
+bounded exhaustive assignment calculations; distinguishing an explicit ligand establishes the
+remaining two kinds independently. Literal, undetermined and mixed stored cosets give the same
+batch. Structure k retains its central site as Configurational with one trial and classifies it
+as Prostereogenic with the complete search. Square-planar and trigonal-bipyramidal cases cover
+more than two cosets. Final coverage review added eight unit/view cases for kindless bonds,
+bond-ID gaps, selected constraints and nonempty molecules paired with unrelated auxiliary data,
+and added the existing compound I input to the batch benchmark.
+
+The full graph-IR all-features gate passed: 12,988 unit tests with three ignored, 578 property
+tests with one ignored, 52 integration/compile-fail tests, and one doctest with three ignored.
+After the coverage additions, all 33 batch/view cases passed with all features. Clippy passes
+with all features and all targets under -D warnings. Formatting and git diff --check pass.
+The final symbol/storage review found only the two batch methods, enum/export rename, config
+field rename and the private frame-action calculation described above. The higher Rust/Python
+consumer migration remains S5e/S5f; this is not a workspace-wide completion claim.
+
+**Batch timing.** One bounded Criterion pass on arm64 macOS 15.7.3 with rustc 1.99.1,
+the bench profile and default graph-symmetry config measured these medians in microseconds:
+
+| Fixture | Complete batch |
+| --- | ---: |
+| Inositol | 638.912 |
+| Structure k, tris(hydroxyethyl)methane | 412.659 |
+| Structure n, bis(methylcyclohexyl)methanol | 973.979 |
+| Compound I, bis(fluoroethyl)difluorohexane | 495.520 |
+
+Each iteration computes and consumes one complete owned result vector. Molecule construction
+and GraphSymmetry preparation are outside the timed region; searches, temporary allocations,
+assignment trials and result destruction are inside. Allocation counting remains disabled.
+These are costs of the new batch on prepared data, not comparisons with the former per-record
+classification or the complete operation pipeline. The S5e/S5g comparisons retain their
+separate preparation-inclusive scope. No timing variants or optimization iterations were run.
+
+The command used 40 samples, 0.1-second warmup, a 0.4-second measurement target and 1,000
+bootstrap resamples. Criterion extended the compound I collection to about 0.407 seconds.
+The entire command, including the release build, took 41.69 seconds:
+
+```text
+CARGO_TARGET_DIR=/Users/dr/.cargo-target cargo bench --locked -p umol-graph-ir --bench constraint_readings -- '^stereogenic_site_kinds/' --warm-up-time 0.1 --measurement-time 0.4 --sample-size 40 --nresamples 1000 --noplot --save-baseline s5d-batch-2026-11-15
+```
+
+The source was the S5d working-tree overlay on ddd0b2c4b34cda2f14e4346619de09ff6c5f3a9b.
+SHA-256 values were captured before compilation and checked unchanged after measurement:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| umol-graph-ir/src/ir/molecule/symmetry.rs | `41fe17265f71741e0165a903d7525fdfef598b77872fcc946de75728a7d75b8c` |
+| umol-graph-ir/src/ir/view/symmetry.rs | `57d12fc9003288ca63e522abca34926a9ab8ca270e00cc6e65dc53cba36b3c19` |
+| umol-graph-ir/src/ir/stereo.rs | `04ac1b77a89bb89c6b6c1f467f8589a265ef421708f4e2bb954aaea4ef32f2bd` |
+| umol-graph-ir/benches/constraint_readings.rs | `3d68f38274585d11aa4bc70e8a4b56c7431e5dce966e4e8d43ca90092028ca69` |
+| Timed constraint_readings binary | `5f3dc541a4df8bc99bc17e9452f7d3ef118cd1ffe53102a19a1146e412279ab3` |
+
+**Simple-center timing, 2026-11-15.** A separate bounded pass measured CHFClBr with one
+assigned tetrahedral record and an explicit hydrogen, using the same environment and default
+config as above. Medians in microseconds:
+
+| Operation | Median |
+| --- | ---: |
+| stereogenicity on an attached stereo view | 0.0127014 |
+| complete stereogenic-site-kind batch on prepared data | 0.342575 |
+| auxiliary preparation | 1.81860 |
+| auxiliary preparation plus complete batch | 2.19173 |
+
+The four constitutionally different ligands let the single-record and batch queries finish
+without a remapping search. The batch includes its local vectors and partition copy. The
+larger batch timings above involve repeated searches over several related sites; confirmation
+and ligand-distinguishing calculations add work where needed. Those timings describe these
+specific workloads, not the cost of a simple isolated center. No optimization was made for
+this measurement.
+
+The four groups used the same 40-sample, 0.1-second warmup, 0.4-second measurement and 1,000-resample
+settings as the earlier pass. The command, including the benchmark rebuild, took 5.14 seconds:
+
+```text
+CARGO_TARGET_DIR=/Users/dr/.cargo-target cargo bench --locked -p umol-graph-ir --bench constraint_readings -- '^chfclbr/' --warm-up-time 0.1 --measurement-time 0.4 --sample-size 40 --nresamples 1000 --noplot --save-baseline chfclbr-2026-11-15
+```
+
+The three production source hashes above are unchanged. The benchmark source SHA-256 is
+`e87b1600af192942c44858330dcb0a58f85e3b56ee3397635117408ea4c040c0`; the timed binary SHA-256 is
+`576e4798b51785c1e18dad3d37cb17349baacf09fb35d693629360961214dcf0`.
 
 #### S5e — Rust operation consumers
 
@@ -3269,7 +3371,7 @@ stage boundary.
 
 ### Stage gates
 
-S4f, S4g, S5b and S5c are complete. The sustained breaking migration continues with S5d, and S5f
+S4f, S4g and S5b-S5d are complete. The sustained breaking migration continues with S5e, and S5f
 restores the workspace; S5g is its acceptance
 and performance gate. S6 ends green with keyed and Python parity complete. No later stage is
 used to repair an earlier stage's compilation.

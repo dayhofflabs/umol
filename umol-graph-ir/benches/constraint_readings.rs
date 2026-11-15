@@ -335,6 +335,124 @@ fn derived_stereo_readings(criterion: &mut Criterion, allocations: bool) {
     );
 }
 
+fn stereogenic_site_kinds(criterion: &mut Criterion, allocations: bool) {
+    for (name, molecule) in [
+        (
+            "inositol",
+            mol_dsl_concrete!(
+                r#"{
+        :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "O#h" "O#h" "O#h" "O#h" "O#h" "O#h"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [1 7 "1"] [2 8 "1"] [3 9 "1"] [4 10 "1"] [5 11 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 7 [:h 1]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 8 [:h 2]] :attrs "Th*"}
+                       {:site 3 :ligands [2 4 9 [:h 3]] :attrs "Th*"}
+                       {:site 4 :ligands [3 5 10 [:h 4]] :attrs "Th*"}
+                       {:site 5 :ligands [0 4 11 [:h 5]] :attrs "Th*"}]
+    }"#
+            ),
+        ),
+        (
+            "tris_hydroxyethyl_methane",
+            mol_dsl_concrete!(
+                r#"{
+        :atoms ["C#h" "C#h" "C#h" "C#h" "C#h3" "C#h3" "C#h3" "O#h" "O#h" "O#h"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [2 5 "1"] [3 6 "1"]
+                [1 7 "1"] [2 8 "1"] [3 9 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 4 7 [:h 1]] :attrs "Th*"}
+                       {:site 2 :ligands [0 5 8 [:h 2]] :attrs "Th*"}
+                       {:site 3 :ligands [0 6 9 [:h 3]] :attrs "Th*"}]
+    }"#
+            ),
+        ),
+        (
+            "bis_methylcyclohexyl_methanol",
+            mol_dsl_concrete!(
+                r#"{
+        :atoms ["C#h" "C#h2" "C#h2" "C#h" "C#h2" "C#h2" "C#h" "C#h2" "C#h2" "C#h" "C#h2" "C#h2"
+                "C#h" "C#h3" "C#h3" "O#h"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]
+                [0 12 "1"] [6 12 "1"] [3 13 "1"] [9 14 "1"] [12 15 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 12 [:h 0]] :attrs "Th*"}
+                       {:site 3 :ligands [2 4 13 [:h 3]] :attrs "Th*"}
+                       {:site 6 :ligands [7 11 12 [:h 6]] :attrs "Th*"}
+                       {:site 9 :ligands [8 10 14 [:h 9]] :attrs "Th*"}
+                       {:site 12 :ligands [0 6 15 [:h 12]] :attrs "Th*"}]
+    }"#
+            ),
+        ),
+        (
+            "bis_fluoroethyl_difluorohexane",
+            mol_dsl_concrete!(
+                r#"{
+        :atoms ["C#h3" "C#h3" "C#h3" "C#h3" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"
+                "F" "F" "F" "F"]
+        :bonds [[8 9 "1"] [8 4 "1"] [8 5 "1"] [9 6 "1"] [9 7 "1"] [4 0 "1"] [5 1 "1"]
+                [6 2 "1"] [7 3 "1"] [4 10 "1"] [5 11 "1"] [6 12 "1"] [7 13 "1"]]
+        :stereo-atoms [{:site 4 :ligands [0 8 10 [:h 4]] :attrs "Th*"}
+                       {:site 5 :ligands [1 8 11 [:h 5]] :attrs "Th*"}
+                       {:site 6 :ligands [2 9 12 [:h 6]] :attrs "Th*"}
+                       {:site 7 :ligands [3 9 13 [:h 7]] :attrs "Th*"}
+                       {:site 8 :ligands [4 5 9 [:h 8]] :attrs "Th*"}
+                       {:site 9 :ligands [6 7 8 [:h 9]] :attrs "Th*"}]
+    }"#
+            ),
+        ),
+    ] {
+        let symmetry = molecule
+            .graph_symmetry(&GraphSymmetryConfig::default())
+            .into_graph_symmetry();
+        measure(
+            criterion,
+            allocations,
+            &format!("stereogenic_site_kinds/{name}"),
+            || molecule.stereogenic_site_kinds(black_box(&symmetry)),
+        );
+    }
+}
+
+fn chfclbr_readings(criterion: &mut Criterion, allocations: bool) {
+    let molecule = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "H" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]
+    }"#
+    );
+    let config = GraphSymmetryConfig::default();
+    let symmetry = molecule.graph_symmetry(&config).into_graph_symmetry();
+    let stereo = molecule
+        .stereo_atom(StereoAtomId(0))
+        .with_symmetry(&symmetry);
+    measure(criterion, allocations, "chfclbr/stereogenicity", || {
+        black_box(stereo).stereogenicity()
+    });
+    measure(
+        criterion,
+        allocations,
+        "chfclbr/stereogenic_site_kinds",
+        || molecule.stereogenic_site_kinds(black_box(&symmetry)),
+    );
+    measure(criterion, allocations, "chfclbr/prepare", || {
+        black_box(&molecule)
+            .graph_symmetry(black_box(&config))
+            .into_graph_symmetry()
+    });
+    measure(
+        criterion,
+        allocations,
+        "chfclbr/prepare_and_stereogenic_site_kinds",
+        || {
+            black_box(&molecule)
+                .graph_symmetry(black_box(&config))
+                .stereogenic_site_kinds()
+        },
+    );
+}
+
 fn main() {
     let allocations = env::args().any(|arg| arg == "--allocations");
     let mut criterion = if allocations {
@@ -471,6 +589,8 @@ fn main() {
         [2, 3, 4, 5]
     );
     derived_stereo_readings(&mut criterion, allocations);
+    stereogenic_site_kinds(&mut criterion, allocations);
+    chfclbr_readings(&mut criterion, allocations);
     if !allocations {
         criterion.final_summary();
     }

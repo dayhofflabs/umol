@@ -25,8 +25,8 @@ use crate::ir::{
     LigandSymmetryForm, MoleculeConstraint, MulticenterBondConstraintForm, MulticenterBondForm,
     MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondForm, NoncovalentBondId,
     NoncovalentBondKind, NumForm, OrientedLigandPermutation, StereoAtomConstraintForm,
-    StereoBondConstraintForm, StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity,
-    StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
+    StereoBondConstraintForm, StereoLigandKind, StereoLigandPair, StereoTerm, StereogenicSiteKind,
+    Stereogenicity, StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 use crate::{mol_dsl, mol_dsl_concrete};
 
@@ -1094,6 +1094,107 @@ fn test_molecule_graph_symmetry_encoding(
     });
     assert_eq!(symmetry.is_chiral(), true);
     assert_eq!(symmetry.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::empty(r#"{:atoms []}"#, vec![])]
+#[case::no_records(r#"{:atoms ["C#h4"]}"#, vec![])]
+#[case::kindless(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "*"}]}"#, vec![])]
+#[case::constitutional(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Constitutional)])]
+#[case::prostereogenic(r#"{:atoms ["C" "H" "H" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Prostereogenic)])]
+#[case::nonstereogenic(r#"{:atoms ["C" "H" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Nonstereogenic)])]
+#[case::square_planar(r#"{:atoms ["Pt#c-2" "N#c+#h3" "N#c+#h3" "Cl" "Cl"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp*"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Configurational)])]
+#[case::trigonal_bipyramidal(r#"{:atoms ["P" "Cl" "F" "F" "F" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4 5] :attrs "Tb*"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Configurational)])]
+#[case::single_ring_center(r#"{:atoms ["C#h" "C#h2" "C#h" "C#h2" "Cl" "Cl"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"]] :stereo-atoms [{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th*"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Prostereogenic)])]
+#[case::mixed_order_and_gaps(r#"{:atoms ["C" "F" "Cl" "Br" "I" "C" "F" "Cl" "Br" "I" "C" "F" "Cl" "Br" "I" "C#h" "C#h" "F" "Cl"]
+:bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [5 9 "1"] [10 11 "1"] [10 12 "1"] [10 13 "1"] [10 14 "1"] [15 16 "2"] [15 17 "1"] [16 18 "1"]]
+:stereo-atoms [{:site 10 :ligands [11 12 13 14] :attrs "Th*"} {:site 5 :ligands [6 7 8 9] :attrs "*"} {:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+:stereo-bonds [{:site 12 :ligands [17 [:h 15] 18 [:h 16]] :attrs "Ct*"}]}"#, vec![(Entity::StereoAtom(StereoAtomId(0)), StereogenicSiteKind::Constitutional), (Entity::StereoAtom(StereoAtomId(2)), StereogenicSiteKind::Constitutional), (Entity::StereoBond(StereoBondId(0)), StereogenicSiteKind::Constitutional)])]
+#[case::kindless_bond(r#"{:atoms ["C#h" "C#h" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+    :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "*"}]}"#, vec![])]
+#[case::bond_order_and_gaps(r#"{
+    :atoms ["C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl" "C#h" "C#h" "F" "Cl"]
+    :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"] [4 5 "2"] [4 6 "1"] [5 7 "1"] [8 9 "2"] [8 10 "1"] [9 11 "1"]]
+    :stereo-bonds [{:site 6 :ligands [10 [:h 8] 11 [:h 9]] :attrs "Ct*"}
+                   {:site 3 :ligands [6 [:h 4] 7 [:h 5]] :attrs "*"}
+                   {:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#,
+    vec![(Entity::StereoBond(StereoBondId(0)), StereogenicSiteKind::Constitutional),
+         (Entity::StereoBond(StereoBondId(2)), StereogenicSiteKind::Constitutional)])]
+fn test_molecule_stereogenic_site_kinds(
+    #[case] dsl: &str,
+    #[case] expected: Vec<(Entity, StereogenicSiteKind)>,
+    #[values(false, true)] include_constraints: bool,
+) {
+    let molecule = mol_dsl_concrete!(dsl);
+    let original = molecule.clone();
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig {
+            include_constraints,
+            ..Default::default()
+        })
+        .into_graph_symmetry();
+    assert_eq!(molecule.stereogenic_site_kinds(&symmetry), expected);
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::invalid_coset(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9))]
+#[case::degree_mismatch(StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0))]
+fn test_molecule_stereogenic_site_kinds_encoding(
+    #[case] configuration: StereoConfigurationForm,
+    #[values(false, true)] include_constraints: bool,
+) {
+    let mut molecule = mol_dsl_concrete!(
+        r#"{:atoms ["C" "H" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+    );
+    molecule
+        .stereo_atom_mut(StereoAtomId(0))
+        .attributes_mut()
+        .configuration = configuration;
+    let original = molecule.clone();
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig {
+            include_constraints,
+            ..Default::default()
+        })
+        .into_graph_symmetry();
+    assert_eq!(
+        molecule.stereogenic_site_kinds(&symmetry),
+        vec![(
+            Entity::StereoAtom(StereoAtomId(0)),
+            StereogenicSiteKind::Constitutional
+        )]
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::excluded(false, StereogenicSiteKind::Prostereogenic)]
+#[case::included(true, StereogenicSiteKind::Constitutional)]
+fn test_molecule_stereogenic_site_kinds_constraints(
+    #[case] include_constraints: bool,
+    #[case] expected: StereogenicSiteKind,
+) {
+    let mut molecule = mol_dsl_concrete!(
+        r#"{:atoms ["C" "H" "H" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+    );
+    molecule
+        .atom_mut(AtomId(1))
+        .attributes_mut()
+        .constraints
+        .set(AtomConstraintForm::valence(1));
+    let original = molecule.clone();
+    let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
+        include_constraints,
+        ..Default::default()
+    });
+    assert_eq!(
+        symmetry.stereogenic_site_kinds(),
+        vec![(Entity::StereoAtom(StereoAtomId(0)), expected)]
+    );
     assert_eq!(molecule, original);
 }
 
@@ -2630,6 +2731,6 @@ fn test_exhaustive_topicity(
 fn test_graph_symmetry_config_default() {
     let config = GraphSymmetryConfig::default();
     assert_eq!(config.automorphism_algorithm, AutomorphismAlgorithm::Nauty);
-    assert_eq!(config.max_assignments, 4096);
+    assert_eq!(config.max_classification_trials, 4096);
     assert_eq!(config.include_constraints, false);
 }

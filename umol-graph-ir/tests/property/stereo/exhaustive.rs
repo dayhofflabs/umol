@@ -11,10 +11,10 @@ use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, GraphSymmetryConfig,
-    Molecule, MoleculeEntries, Reframe, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
-    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    Stereogenicity,
+    AtomForm, AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, ElementForm, Entity,
+    GraphSymmetryConfig, Molecule, MoleculeEntries, Reframe, StereoAtomForm, StereoAtomId,
+    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereogenicSiteKind, Stereogenicity,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_perm::PermutationGroup;
@@ -764,7 +764,7 @@ fn chlorotetrafluorophosphorane_equatorial() -> Molecule {
 #[case::tris_hydroxybutyl_methane(tris_hydroxybutyl_methane(), None, vec![A(1), A(2), A(3), A(7), A(8), A(9)], vec![A(0)])]
 #[case::tris_hydroxyethyl_methane(tris_hydroxyethyl_methane(), None, vec![A(1), A(2), A(3)], vec![])]
 #[case::bis_methylcyclohexyl_methanol(bis_methylcyclohexyl_methanol(), None, vec![], vec![A(0), A(3), A(6), A(9), A(12)])]
-fn test_exhaustive_stereoisomers(
+fn test_molecule_stereogenic_site_kinds_literature(
     #[case] molecule: Molecule,
     #[case] expected_counts: Option<[usize; 3]>,
     #[case] constitutional: Vec<StereoSite>,
@@ -778,9 +778,106 @@ fn test_exhaustive_stereoisomers(
     }
     assert_eq!(
         units,
-        constitutional.into_iter().chain(configurational).collect()
+        constitutional
+            .iter()
+            .chain(&configurational)
+            .copied()
+            .collect()
     );
+    let records = molecule
+        .stereo_atoms()
+        .iter()
+        .map(|stereo| {
+            (
+                Entity::StereoAtom(stereo.id()),
+                A(stereo.site_id().0),
+                stereo.ligand_ids().to_vec(),
+            )
+        })
+        .chain(molecule.stereo_bonds().iter().map(|stereo| {
+            let mut ends = molecule.bond(stereo.site_id()).atom_ids().map(|id| id.0);
+            ends.sort();
+            (
+                Entity::StereoBond(stereo.id()),
+                B(ends[0], ends[1]),
+                stereo.ligand_ids().to_vec(),
+            )
+        }))
+        .collect::<Vec<_>>();
+    let expected = records
+        .iter()
+        .map(|(entity, site, ligands)| {
+            let kind = if constitutional.contains(site) {
+                StereogenicSiteKind::Constitutional
+            } else if configurational.contains(site) {
+                StereogenicSiteKind::Configurational
+            } else if ligands
+                .iter()
+                .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+                .any(|ligand| {
+                    let mut distinguished = molecule.clone();
+                    distinguished
+                        .atom_mut(ligand.atom_id)
+                        .attributes_mut()
+                        .element = ElementForm::Lit(Element::Xe);
+                    exhaustive_stereoisomers(&distinguished).1.contains(site)
+                })
+            {
+                StereogenicSiteKind::Prostereogenic
+            } else {
+                StereogenicSiteKind::Nonstereogenic
+            };
+            (*entity, kind)
+        })
+        .collect::<Vec<_>>();
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig::default())
+        .into_graph_symmetry();
+    assert_eq!(molecule.stereogenic_site_kinds(&symmetry), expected);
+    for bits in [0, (1 << records.len()) - 1] {
+        let mut assigned = binary_assignment(&molecule, bits);
+        assert_eq!(assigned.stereogenic_site_kinds(&symmetry), expected);
+        let first = assigned.stereo_atoms().ids().next();
+        if let Some(id) = first {
+            assigned.stereo_atom_mut(id).attributes_mut().configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined);
+        }
+        assert_eq!(assigned.stereogenic_site_kinds(&symmetry), expected);
+    }
     assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::limited(1, StereogenicSiteKind::Configurational)]
+#[case::complete(4096, StereogenicSiteKind::Prostereogenic)]
+fn test_molecule_stereogenic_site_kinds_limit(
+    tris_hydroxyethyl_methane: Molecule,
+    #[case] limit: u32,
+    #[case] central: StereogenicSiteKind,
+) {
+    let molecule = tris_hydroxyethyl_methane;
+    let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
+        max_classification_trials: limit,
+        ..Default::default()
+    });
+    assert_eq!(
+        symmetry.stereogenic_site_kinds(),
+        vec![
+            (Entity::StereoAtom(StereoAtomId(0)), central),
+            (
+                Entity::StereoAtom(StereoAtomId(1)),
+                StereogenicSiteKind::Constitutional
+            ),
+            (
+                Entity::StereoAtom(StereoAtomId(2)),
+                StereogenicSiteKind::Constitutional
+            ),
+            (
+                Entity::StereoAtom(StereoAtomId(3)),
+                StereogenicSiteKind::Constitutional
+            ),
+        ]
+    );
 }
 
 #[rstest]

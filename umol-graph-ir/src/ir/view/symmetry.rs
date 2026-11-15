@@ -2,8 +2,10 @@
 
 use std::borrow::Cow;
 
+use super::super::entity::Entity;
 use super::super::id::AtomId;
 use super::super::molecule::{GraphSymmetry, Molecule};
+use super::super::stereo::StereogenicSiteKind;
 
 /// Graph-symmetry readings over owned or borrowed auxiliary data and a borrowed molecule.
 ///
@@ -68,6 +70,13 @@ impl<'a> GraphSymmetryView<'a> {
     pub fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId> {
         self.molecule.star_orbit_of(&self.symmetry, a)
     }
+
+    /// Classify all kinded stereo records, returning their kinds in stereo-record ID order.
+    ///
+    /// Kindless records are omitted. The caller owns the batch; stored cosets do not decide it.
+    pub fn stereogenic_site_kinds(&self) -> Vec<(Entity, StereogenicSiteKind)> {
+        self.molecule.stereogenic_site_kinds(&self.symmetry)
+    }
 }
 
 #[cfg(test)]
@@ -75,7 +84,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ir::GraphSymmetryConfig;
+    use crate::ir::{Entity, GraphSymmetryConfig, StereoAtomId, StereogenicSiteKind};
     use crate::{mol_dsl, mol_dsl_concrete};
 
     #[fixture]
@@ -103,6 +112,7 @@ mod tests {
             .into_graph_symmetry();
         let view = GraphSymmetryView::from_graph_symmetry(&symmetry, &supplied);
         let _ = view.is_chiral();
+        let _ = view.stereogenic_site_kinds();
         for atom in supplied.atoms().ids().chain([AtomId(9)]) {
             let _ = view.proper_orbit_of(atom);
             let _ = view.star_orbit_of(atom);
@@ -146,5 +156,41 @@ mod tests {
         assert!(!input
             .graph_symmetry(&GraphSymmetryConfig::default())
             .is_chiral());
+    }
+    #[rstest]
+    fn test_graph_symmetry_view_stereogenic_site_kinds(molecule: Molecule) {
+        let original = molecule.clone();
+        let owned = molecule.graph_symmetry(&GraphSymmetryConfig::default());
+        let expected = vec![
+            (
+                Entity::StereoAtom(StereoAtomId(0)),
+                StereogenicSiteKind::Constitutional,
+            ),
+            (
+                Entity::StereoAtom(StereoAtomId(1)),
+                StereogenicSiteKind::Constitutional,
+            ),
+        ];
+        assert_eq!(owned.stereogenic_site_kinds(), expected);
+        let symmetry = owned.into_graph_symmetry();
+        assert_eq!(
+            GraphSymmetryView::from_graph_symmetry(&symmetry, &molecule).stereogenic_site_kinds(),
+            expected
+        );
+        assert_eq!(molecule.stereogenic_site_kinds(&symmetry), expected);
+        assert_eq!(molecule, original);
+    }
+    #[rstest]
+    #[case::empty(Molecule::default())]
+    #[case::unrelated(mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#))]
+    fn test_graph_symmetry_view_stereogenic_site_kinds_context(
+        molecule: Molecule,
+        #[case] source: Molecule,
+    ) {
+        let symmetry = source
+            .graph_symmetry(&GraphSymmetryConfig::default())
+            .into_graph_symmetry();
+        let _ =
+            GraphSymmetryView::from_graph_symmetry(&symmetry, &molecule).stereogenic_site_kinds();
     }
 }

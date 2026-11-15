@@ -1933,10 +1933,12 @@ pub enum Stereogenicity {
     Stereogenic,
 }
 
-/// Class of one stereo atom or stereo bond as a stereogenic unit (derived ground value).
+/// Kind of stereogenic site for one stereo atom or stereo bond.
 ///
 /// The class is a property of the constitution, decided among the stereo atoms and stereo bonds
 /// the molecule has. It does not depend on the configurations stored in them.
+/// The kinds are computed together by
+/// [Molecule::stereogenic_site_kinds](crate::ir::Molecule::stereogenic_site_kinds).
 ///
 /// "Stereogenic unit" is the term of the IUPAC recommendations of
 /// [1996](https://doi.org/10.1351/pac199668122193) for a focus of stereoisomerism. The two kinds
@@ -1946,7 +1948,7 @@ pub enum Stereogenicity {
 /// [`Self::Prostereogenic`] is the term of
 /// [Mislow and Siegel (1984)](https://doi.org/10.1021/ja00323a043), footnote 74.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum StereogenicUnit {
+pub enum StereogenicSiteKind {
     /// A stereogenic unit whose ligands are constitutionally different: the "true-stereocenter"
     /// of Razinger et al. and the "constitutional stereogenic centre" of Perdih and Razinger.
     Constitutional,
