@@ -7,7 +7,7 @@ use umol_graph_ir::ir::{
     Constraint, DativeBondConstraintForm, DativeBondId, Molecule, MoleculeEntries, NumForm,
     RingScope, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondId,
     StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoTerm,
-    Stereogenicity, StereogenicityForm, TetrahedralStereoForm,
+    StereogenicSiteKind, Stereogenicity, StereogenicityForm, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 
@@ -92,24 +92,24 @@ fn test_stereo_enumerator_new(
 #[case::tetrahedral(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), ..Default::default() }, vec![(Some(0), None), (Some(1), None)])]
 #[case::cis_trans(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![(None, Some(0)), (None, Some(1))])]
 #[case::other_kind(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::SquarePlanar])), ..Default::default() }, vec![(None, None)])]
-#[case::stereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])), ..Default::default() }, vec![(Some(0), Some(0)), (Some(0), Some(1)), (Some(1), Some(0)), (Some(1), Some(1))])]
-#[case::nonstereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() }, vec![(None, None)])]
+#[case::stereogenic(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])), ..Default::default() }, vec![(Some(0), Some(0)), (Some(0), Some(1)), (Some(1), Some(0)), (Some(1), Some(1))])]
+#[case::nonstereogenic(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Nonstereogenic])), ..Default::default() }, vec![(None, None)])]
 #[case::intersection(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])), kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![(None, None)])]
 #[case::empty_sites(StereoSelection { sites: Some(BTreeSet::new()), ..Default::default() }, vec![(None, None)])]
 #[case::empty_kinds(StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() }, vec![(None, None)])]
-#[case::empty_classes(StereoSelection { stereogenicities: Some(BTreeSet::new()), ..Default::default() }, vec![(None, None)])]
+#[case::empty_classes(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::new()), ..Default::default() }, vec![(None, None)])]
 #[case::no_entity(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(1))])), ..Default::default() }, vec![(None, None)])]
 fn test_stereo_enumerator_with_config(
     mixed_stereo: Molecule,
     #[case] selection: StereoSelection,
     #[case] values: Vec<(Option<u32>, Option<u32>)>,
-    #[values(1, 7, 16)] para_stereo_max_iterations: u32,
+    #[values(1, 7, 16)] max_classification_trials: u32,
 ) {
     let transformer = StereoEnumerator::with_config(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection,
-            para_stereo_max_iterations,
+            max_classification_trials,
             ..Default::default()
         },
         vec![
@@ -124,8 +124,8 @@ fn test_stereo_enumerator_with_config(
             .prepare(&mixed_stereo)
             .unwrap()
             .symmetry_config
-            .max_iterations,
-        para_stereo_max_iterations,
+            .max_classification_trials,
+        max_classification_trials,
     );
     let expected: Vec<_> = values
         .into_iter()
@@ -174,7 +174,7 @@ fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
         EnumerateStereoConfig {
             selection: StereoSelection {
                 kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -274,7 +274,8 @@ fn test_stereo_enumerator_transform_domains(
         EnumerateStereoConfig {
             selection: StereoSelection {
                 kinds: None,
-                stereogenicities: classified.then(|| BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: classified
+                    .then(|| BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -321,7 +322,8 @@ fn test_stereo_enumerator_transform_expression(
         EnumerateStereoConfig {
             selection: StereoSelection {
                 sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
-                stereogenicities: classified.then(|| BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: classified
+                    .then(|| BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -478,7 +480,8 @@ fn test_stereo_enumerator_transform_scope(
         EnumerateStereoConfig {
             selection: StereoSelection {
                 kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
-                stereogenicities: classified.then(|| BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: classified
+                    .then(|| BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -524,7 +527,7 @@ fn test_stereo_enumerator_transform_scope(
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Prostereogenic)]
 #[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Nonstereogenic)]
-fn test_stereo_enumerator_transform_stereogenicity(
+fn test_stereo_enumerator_transform_site_kinds(
     #[case] mut molecule: Molecule,
     #[case] class: Stereogenicity,
     #[values(
@@ -561,7 +564,13 @@ fn test_stereo_enumerator_transform_stereogenicity(
         &StereoModel::default(),
         EnumerateStereoConfig {
             selection: StereoSelection {
-                stereogenicities: selected_class.map(|class| BTreeSet::from([class])),
+                stereogenic_site_kinds: selected_class.map(|class| {
+                    BTreeSet::from([match class {
+                        Stereogenicity::Stereogenic => StereogenicSiteKind::Constitutional,
+                        Stereogenicity::Prostereogenic => StereogenicSiteKind::Prostereogenic,
+                        Stereogenicity::Nonstereogenic => StereogenicSiteKind::Nonstereogenic,
+                    }])
+                }),
                 ..Default::default()
             },
             ..Default::default()
@@ -799,7 +808,8 @@ fn test_stereo_enumerator_transform_configuration(
         EnumerateStereoConfig {
             selection: StereoSelection {
                 sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
-                stereogenicities: classified.then(|| BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: classified
+                    .then(|| BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -826,7 +836,7 @@ fn test_stereo_enumerator_transform_configuration(
 #[rstest]
 #[case::invalid_atom(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(9))])), ..Default::default() }, StereoSite::Atom(AtomId(9)))]
 #[case::invalid_bond(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Bond(BondId(7))])), ..Default::default() }, StereoSite::Bond(BondId(7)))]
-#[case::invalid_empty(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(9))])), kinds: Some(BTreeSet::new()), stereogenicities: Some(BTreeSet::new()) }, StereoSite::Atom(AtomId(9)))]
+#[case::invalid_empty(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(9))])), kinds: Some(BTreeSet::new()), stereogenic_site_kinds: Some(BTreeSet::new()) }, StereoSite::Atom(AtomId(9)))]
 fn test_stereo_enumerator_transform_selection(
     mixed_stereo: Molecule,
     #[case] selection: StereoSelection,

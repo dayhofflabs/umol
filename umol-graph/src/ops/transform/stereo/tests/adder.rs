@@ -2,11 +2,13 @@ use std::collections::BTreeSet;
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
+use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomFieldKind, AtomForm, AtomId, BondConstraintForm, BondForm, BondId,
-    CisTransStereoForm, ElementForm, Molecule, MoleculeEntries, NumForm, StereoAtomForm,
-    StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind, StereoTerm, Stereogenicity, TetrahedralStereoForm,
+    Canonicalize, CanonicalizeContext, CisTransStereoForm, ElementForm, GraphSymmetryConfig,
+    Molecule, MoleculeEntries, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoTerm,
+    StereogenicSiteKind, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
@@ -79,10 +81,10 @@ fn test_stereo_adder_new(
 #[case::cis_trans(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..AddStereoConfig::default().selection }, vec![StereoSite::Bond(BondId(4))])]
 #[case::intersection(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])), kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..AddStereoConfig::default().selection }, vec![])]
 #[case::unrestricted(StereoSelection::default(), vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(4))])]
-#[case::prostereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])), ..AddStereoConfig::default().selection }, vec![])]
+#[case::prostereogenic(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Prostereogenic])), ..AddStereoConfig::default().selection }, vec![])]
 #[case::empty_sites(StereoSelection { sites: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
 #[case::empty_kinds(StereoSelection { kinds: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
-#[case::empty_classes(StereoSelection { stereogenicities: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
+#[case::empty_classes(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::new()), ..AddStereoConfig::default().selection }, vec![])]
 fn test_stereo_adder_with_config(
     mixed_sites: Molecule,
     #[case] selection: StereoSelection,
@@ -451,7 +453,7 @@ fn test_stereo_adder_transform_resolution(
             &config.selection,
             config.automorphism_algorithm,
             config.ring_config,
-            config.para_stereo_max_iterations
+            config.max_classification_trials
         ),
         Ok(recognized)
     );
@@ -512,7 +514,7 @@ fn test_stereo_adder_transform_resolution(
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
 #[case::negative_bond(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"]
     :bonds [[0 1 "2#C!"] [0 2 "1"] [1 3 "1"]]}"#))]
-#[case::nonstereogenic_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
+#[case::prostereogenic_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
     :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#))]
 #[case::existing_atom(mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
@@ -557,22 +559,22 @@ fn test_stereo_adder_transform_identity(#[case] molecule: Molecule) {
 
 #[rstest]
 #[case::prostereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), Stereogenicity::Prostereogenic)]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Prostereogenic)]
 #[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), Stereogenicity::Nonstereogenic)]
-#[case::nonstereogenic_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
-    :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#), StereoSite::Bond(BondId(0)), Stereogenicity::Nonstereogenic)]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#), StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Nonstereogenic)]
+#[case::prostereogenic_bond(mol_dsl_concrete!(r#"{:atoms ["C" "C" "F" "F" "Br" "I"]
+    :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]}"#), StereoSite::Bond(BondId(0)), StereogenicSiteKind::Prostereogenic)]
 fn test_stereo_adder_transform_selection(
     #[case] molecule: Molecule,
     #[case] site: StereoSite,
-    #[case] class: Stereogenicity,
+    #[case] class: StereogenicSiteKind,
     #[values(false, true)] unrestricted: bool,
 ) {
     let transformer = StereoAdder::with_config(
         &StereoModel::default(),
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: (!unrestricted).then_some(BTreeSet::from([class])),
+                stereogenic_site_kinds: (!unrestricted).then_some(BTreeSet::from([class])),
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
@@ -632,7 +634,7 @@ fn test_stereo_adder_transform_configuration_identity(#[case] coset: StereoCoset
         &StereoModel::default(),
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
@@ -777,12 +779,24 @@ fn test_stereo_adder_transform_scope(#[case] field: AtomFieldKind) {
         unrestricted.transform_iter(&molecule).collect::<Vec<_>>(),
         Vec::<Molecule>::new()
     );
-    assert_eq!(unrestricted.transform(molecule.clone()), Err(error));
+    assert_eq!(unrestricted.transform(molecule.clone()), Err(error.clone()));
+    let classified = StereoAdder::with_config(
+        &StereoModel::default(),
+        AddStereoConfig {
+            selection: StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+                ..AddStereoConfig::default().selection
+            },
+            ..Default::default()
+        },
+    );
+    assert_eq!(classified.transform(molecule.clone()), Err(error));
     let restricted = StereoAdder::with_config(
         &StereoModel::default(),
         AddStereoConfig {
             selection: StereoSelection {
                 sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+                stereogenic_site_kinds: None,
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
@@ -880,4 +894,170 @@ fn test_stereo_adder_transform_iter(mixed_sites: Molecule) {
     assert_eq!(first, changed);
     assert_eq!(second, vec![expected]);
     assert_eq!(mixed_sites, original);
+}
+
+#[rstest]
+#[case::bromochloroethanol(r#"{
+        :atoms ["C" "C#h3" "Br" "Cl" "O#h"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
+    }"#, [2, 2, 0])]
+#[case::bis_fluoroethyl_difluorohexane(r#"{
+        :atoms ["C#h3" "C#h3" "C#h3" "C#h3" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"
+                "F" "F" "F" "F"]
+        :bonds [[8 9 "1"] [8 4 "1"] [8 5 "1"] [9 6 "1"] [9 7 "1"] [4 0 "1"] [5 1 "1"]
+                [6 2 "1"] [7 3 "1"] [4 10 "1"] [5 11 "1"] [6 12 "1"] [7 13 "1"]]
+        :stereo-atoms [{:site 4 :ligands [0 8 10 [:h 4]] :attrs "Th*"}
+                       {:site 5 :ligands [1 8 11 [:h 5]] :attrs "Th*"}
+                       {:site 6 :ligands [2 9 12 [:h 6]] :attrs "Th*"}
+                       {:site 7 :ligands [3 9 13 [:h 7]] :attrs "Th*"}
+                       {:site 8 :ligands [4 5 9 [:h 8]] :attrs "Th*"}
+                       {:site 9 :ligands [6 7 8 [:h 9]] :attrs "Th*"}]
+    }"#, [10, 6, 4])]
+#[case::dimethylcyclopentane(r#"{
+        :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h3" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"] [0 5 "1"] [1 6 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 4 5 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 6 [:h 1]] :attrs "Th*"}]
+    }"#, [3, 2, 1])]
+#[case::dimethylcyclohexane_1_2(r#"{
+        :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2" "C#h3" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 7 [:h 1]] :attrs "Th*"}]
+    }"#, [3, 2, 1])]
+#[case::dimethylcyclohexane_1_3(r#"{
+        :atoms ["C#h" "C#h2" "C#h" "C#h2" "C#h2" "C#h2" "C#h3" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [2 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 7 [:h 2]] :attrs "Th*"}]
+    }"#, [3, 2, 1])]
+#[case::dimethylcyclohexane_1_4(r#"{
+        :atoms ["C#h" "C#h2" "C#h2" "C#h" "C#h2" "C#h2" "C#h3" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [3 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 3 :ligands [2 4 7 [:h 3]] :attrs "Th*"}]
+    }"#, [2, 0, 2])]
+#[case::trimethylcyclohexane_1_2_3(r#"{
+        :atoms ["C#h" "C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h3" "C#h3" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [1 7 "1"] [2 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 7 [:h 1]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 8 [:h 2]] :attrs "Th*"}]
+    }"#, [4, 2, 2])]
+#[case::tetramethylcyclobutane(r#"{
+        :atoms ["C#h" "C#h" "C#h" "C#h" "C#h3" "C#h3" "C#h3" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]
+                [0 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 5 [:h 1]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 6 [:h 2]] :attrs "Th*"}
+                       {:site 3 :ligands [0 2 7 [:h 3]] :attrs "Th*"}]
+    }"#, [4, 0, 4])]
+#[case::cyclohexanetriol(r#"{
+        :atoms ["C#h" "C#h2" "C#h" "C#h2" "C#h" "C#h2" "O#h" "O#h" "O#h"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [2 7 "1"] [4 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 7 [:h 2]] :attrs "Th*"}
+                       {:site 4 :ligands [3 5 8 [:h 4]] :attrs "Th*"}]
+    }"#, [2, 0, 2])]
+#[case::butene(r#"{
+        :atoms ["C#h3" "C#h" "C#h" "C#h3"]
+        :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+        :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct*"}]
+    }"#, [2, 0, 2])]
+#[case::bis_fluoroethyl_difluorohexene(r#"{
+        :atoms ["C#h3" "C#h3" "C#h3" "C#h3" "C#h" "C#h" "C#h" "C#h" "C" "C"
+                "F" "F" "F" "F"]
+        :bonds [[8 9 "2"] [8 4 "1"] [8 5 "1"] [9 6 "1"] [9 7 "1"] [4 0 "1"] [5 1 "1"]
+                [6 2 "1"] [7 3 "1"] [4 10 "1"] [5 11 "1"] [6 12 "1"] [7 13 "1"]]
+        :stereo-atoms [{:site 4 :ligands [0 8 10 [:h 4]] :attrs "Th*"}
+                       {:site 5 :ligands [1 8 11 [:h 5]] :attrs "Th*"}
+                       {:site 6 :ligands [2 9 12 [:h 6]] :attrs "Th*"}
+                       {:site 7 :ligands [3 9 13 [:h 7]] :attrs "Th*"}]
+        :stereo-bonds [{:site 0 :ligands [4 5 6 7] :attrs "Ct*"}]
+    }"#, [7, 4, 3])]
+#[case::decalin(r#"{
+        :atoms ["C#h" "C#h2" "C#h2" "C#h2" "C#h2" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 0 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 9 [:h 0]] :attrs "Th*"}
+                       {:site 5 :ligands [0 4 6 [:h 5]] :attrs "Th*"}]
+    }"#, [2, 0, 2])]
+#[case::inositol(r#"{
+        :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "O#h" "O#h" "O#h" "O#h" "O#h" "O#h"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [1 7 "1"] [2 8 "1"] [3 9 "1"] [4 10 "1"] [5 11 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 [:h 0]] :attrs "Th*"}
+                       {:site 1 :ligands [0 2 7 [:h 1]] :attrs "Th*"}
+                       {:site 2 :ligands [1 3 8 [:h 2]] :attrs "Th*"}
+                       {:site 3 :ligands [2 4 9 [:h 3]] :attrs "Th*"}
+                       {:site 4 :ligands [3 5 10 [:h 4]] :attrs "Th*"}
+                       {:site 5 :ligands [0 4 11 [:h 5]] :attrs "Th*"}]
+    }"#, [9, 2, 7])]
+fn test_stereo_adder_transform_stereoisomers(#[case] dsl: &str, #[case] expected: [usize; 3]) {
+    let template = mol_dsl_concrete!(dsl);
+    let source = Molecule::from_entries(MoleculeEntries {
+        atoms: template
+            .atoms()
+            .iter()
+            .map(|atom| atom.attributes().clone())
+            .collect(),
+        bonds: template
+            .bonds()
+            .iter()
+            .map(|bond| {
+                let [a, b] = bond.atom_ids();
+                (a, b, bond.attributes().clone())
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let model = StereoModel::default();
+    let added = StereoAdder::new(&model).transform(source).unwrap();
+    let sites = added
+        .stereo_atoms()
+        .iter()
+        .map(|stereo| StereoSite::Atom(stereo.site_id()))
+        .chain(
+            added
+                .stereo_bonds()
+                .iter()
+                .map(|stereo| StereoSite::Bond(stereo.site_id())),
+        )
+        .collect();
+    let context = CanonicalizeContext {
+        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    };
+    let mut distinct = Vec::new();
+    for molecule in StereoEnumerator::new(&model, sites).transform_iter(&added) {
+        assert_eq!(
+            StereoAdder::new(&model)
+                .transform(molecule.clone())
+                .unwrap(),
+            molecule
+        );
+        let canonical = molecule.canonicalize(&context).unwrap();
+        if !distinct.contains(&canonical) {
+            distinct.push(canonical);
+        }
+    }
+    let chiral = distinct
+        .iter()
+        .filter(|molecule| {
+            molecule
+                .graph_symmetry(&GraphSymmetryConfig::default())
+                .is_chiral()
+        })
+        .count();
+    assert_eq!([distinct.len(), chiral, distinct.len() - chiral], expected);
+    assert_eq!(
+        StereoAdder::new(&model).transform(added.clone()).unwrap(),
+        added
+    );
 }

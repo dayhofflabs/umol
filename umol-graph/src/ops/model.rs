@@ -256,12 +256,9 @@ impl Default for RingLimits {
 
 /// Stereo perception model. `kind_models` is a per-`StereoKind` array (indexed
 /// by the kind's discriminant); a `None` entry means that kind is not perceived.
-/// `para_stereo` enables the graph-symmetry fixpoint iteration that resolves
-/// para-stereocenters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StereoModel {
     pub kind_models: [Option<StereoKindModel>; StereoKind::COUNT],
-    pub para_stereo: bool,
     /// Minimum ring size admitting double-bond stereo; zero imposes no restriction.
     pub stereo_bond_min_ring_size: u32,
     /// Minimum ring size admitting E relative to the ring's continuation ligands; zero is unrestricted.
@@ -301,7 +298,6 @@ impl Default for StereoModel {
         });
         Self {
             kind_models,
-            para_stereo: false,
             stereo_bond_min_ring_size: 8,
             stereo_bond_e_min_ring_size: 8,
         }
@@ -423,7 +419,7 @@ mod tests {
     })]
     #[case::stereo(ChemistryModel {
         stereo: StereoModel {
-            para_stereo: true,
+            stereo_bond_min_ring_size: 0,
             ..StereoModel::default()
         },
         ..ChemistryModel::default()
@@ -613,10 +609,6 @@ mod tests {
         kind_models: array::from_fn(|_| None),
         ..StereoModel::default()
     })]
-    #[case::para_stereo(StereoModel {
-        para_stereo: true,
-        ..StereoModel::default()
-    })]
     #[case::stereo_bond_min_ring_size(StereoModel {
         stereo_bond_min_ring_size: 0,
         ..StereoModel::default()
@@ -645,7 +637,6 @@ mod tests {
             StereoModel::default(),
             StereoModel {
                 kind_models,
-                para_stereo: false,
                 stereo_bond_min_ring_size: 8,
                 stereo_bond_e_min_ring_size: 8,
             },

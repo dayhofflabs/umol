@@ -156,6 +156,8 @@ pub(super) fn stereo_cases(
                 }
             } else if labels[0] != labels[1] && labels[2] != labels[3] {
                 Stereogenicity::Stereogenic
+            } else if labels[0] != labels[1] || labels[2] != labels[3] {
+                Stereogenicity::Prostereogenic
             } else {
                 Stereogenicity::Nonstereogenic
             };

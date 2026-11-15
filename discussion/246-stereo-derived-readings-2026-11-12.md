@@ -23,11 +23,11 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g and S5a-S5d are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g and S5a-S5e are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
 generator filter, FieldColor names, the three derived stereo-view readings and the batch
-stereogenic-site classification. S5e's Rust operation consumers are next; the workspace-wide
-S5 gate remains ahead.
+stereogenic-site classification and its Rust operation consumers. S5f's Python migration is
+next; the workspace-wide S5 gate remains ahead.
 
 ## Starting state
 
@@ -3200,7 +3200,7 @@ The three production source hashes above are unchanged. The benchmark source SHA
 `e87b1600af192942c44858330dcb0a58f85e3b56ee3397635117408ea4c040c0`; the timed binary SHA-256 is
 `576e4798b51785c1e18dad3d37cb17349baacf09fb35d693629360961214dcf0`.
 
-#### S5e — Rust operation consumers
+#### S5e — Rust operation consumers **Done**
 
 - **Module:** `umol-graph` stereo perception, validation, transformation and enumeration,
   their configs/models, tests, properties and `benches/transform/stereo.rs`.
@@ -3245,6 +3245,113 @@ The three production source hashes above are unchanged. The benchmark source SHA
   solely because its coset is symbolic. Retain the other operation contracts outside these
   explicit changes.
 - **Kind:** breaking; graph IR and graph green, workspace red until S5f. `[dep: S5d]`
+
+**Implemented 2026-11-15.** StereoSelection now uses stereogenic_site_kinds, and the default
+adder admits Constitutional and Configurational. StereoPerceiver::classify keeps &self,
+accepts a site slice and supplied GraphSymmetry, coalesces duplicate requests, validates their
+site/kind/frame prerequisites, computes one complete batch, and returns a vector sorted by
+topology-site ID. Classification accepts all six existing geometries and symbolic cosets
+independently of recognition scopes and fluxionality. Model snapshots, StereoRemover
+constructors and model-taking removal convenience methods remain.
+
+Recognition constructs the full eligible prospective context before applying output selectors
+when site-kind classification is requested. The C1-only dichlorocyclobutane case includes both
+missing centers in that context and returns only C1. Removal and enumeration classify once on
+their unchanged input and retain the returned vector within the operation. Enumeration's
+per-site StereoSymmetry cache is removed; its existing lazy candidate-specific GraphSymmetry
+still serves assertion checks. The normalization used to interpret actual enumeration domains
+remains; the copy-and-normalize path used only for classification is removed.
+
+AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig and recognize use
+max_classification_trials, default 4096. StereoModel::para_stereo is removed.
+StereoValidateConfig has only automorphism_algorithm and ring_config. The validator reads
+stereogenicity, topicity and ligand symmetry through attached stereo views, retaining its
+assertion comparisons and diagnostics. An undetermined own coset no longer suppresses a
+reading that can already be established; unresolved required inputs still yield Underdetermined.
+
+The new acceptance cases cover the published counts for 13 molecule families by canonical
+equality, through addition, enumeration and a second addition. All second additions preserve
+their enumerated input. The trimethylcyclohexane removal case preserves all three records when
+selecting Prostereogenic and Nonstereogenic. Other cases cover sorted/coalesced requests,
+all supported geometries, symbolic cosets, model independence, intersecting and empty filters,
+the four config defaults, and classification budgets independent of enumeration result counts.
+
+The acceptance/count, prospective-context and initial classification cases were authored before
+the production migration. Their initial red run was a compilation failure against the removed
+graph-IR APIs, not a demonstrated behavioral failure. Expectation reconciliation, the additional
+Axial/Octahedral cases and the explicit trimethylcyclohexane removal case followed implementation.
+The property assertions retain exact outcomes, preservation, transport and enumeration laws;
+their old blanket rejection of symbolic and higher-geometry classification was replaced by
+separate classification and enumeration expectations.
+
+| Case | Old expectation | Current expectation |
+| --- | --- | --- |
+| Ct bond with one repeated endpoint pair and one distinct pair | Nonstereogenic | Prostereogenic; the filters and validation assertion follow that reading |
+| Constitutionally different ligand pair | Diastereotopic | Distinct, including enumeration and validator assertions |
+| Symbolic coset or supported higher geometry in classify | Unsupported configuration/kind | Derived StereogenicSiteKind; actual enumeration-domain restrictions remain |
+| Established stereogenicity with undetermined own coset | Validation Underdetermined | Determined when the remaining prerequisites are available |
+| Selected output site beside unresolved eligible recognition context | Selected-site success | Required context fields can cause UnderdeterminedAtomField; without site-kind filtering the selected-site success is retained |
+| Pseudoasymmetric center selected for removal | Stereogenic selector | Configurational selector, preserving the same removal outcome |
+
+The retired test_stereo_validate_config_graph_symmetry_config checked the removed private
+fixpoint-config bridge; its two flag cases have no remaining requirement. The three
+test_stereo_conformance_validator_validate_symmetry_* groups now exercise
+validate_stereo_atom directly with the same undetermined, topicity-position and permutation-degree
+requirements. Selector tests use site_kinds in their names. The atom/bond stereogenicity fixture
+tests now name StereoAtomView and StereoBondView rather than the removed StereoSymmetry.
+The ChemistryModel equality difference case uses the retained minimum-ring-size field instead
+of the deleted para_stereo flag.
+
+**Verification.** All commands used CARGO_TARGET_DIR=/Users/dr/.cargo-target. The final debug
+library run passed 4,331 tests; the other bin/integration targets passed 154; the explicit
+resolution conformance target passed 4,219. The property target passed all 224 properties in
+the release profile in 11.34 seconds after a 67-second build, with the default case counts and
+shrinking configuration. Debug runs were interrupted while the larger generated stereo cases
+were still computing; a one-second sample showed batch remapping search rather than shrinking.
+Doctests passed 3 with 1 ignored. All-target, all-feature Clippy passed with -D warnings.
+
+```text
+cargo test --locked -p umol-graph --all-features --lib -- --quiet
+cargo test --locked -p umol-graph --all-features --test resolution -- --quiet
+cargo test --release --locked -p umol-graph --all-features --test property -- --quiet
+cargo test --locked -p umol-graph --all-features --doc -- --quiet
+cargo clippy --locked -p umol-graph --all-features --all-targets -- -D warnings
+```
+
+**Benchmark migration and preflight.** The preparation-inclusive classify workload still
+builds GraphSymmetry inside the timed call; S5d's batch-only timing remains separate. The fixed
+molecule-reading and stereo-reading workloads retain their query counts and inputs. The removed
+local_symmetry construction and cached classification getter groups are replaced by the
+stereogenicity query group; these are changed workloads, not direct baseline comparisons.
+
+```text
+cargo bench --locked -p umol-graph --bench transform -- stereo --test
+```
+
+The initial preflight was interrupted after 210 cases in the artificial sites_* family.
+Those inputs contained sixteen identical disconnected components and mixed stereo-record count
+with extensive component-exchange symmetry. They are removed from the benchmark, including
+their name-dependent site selection. The replacement inputs are connected compounds already
+covered by the published stereoisomer-count acceptance cases:
+
+| Input | Stored atoms | Bonds | Stereo atoms |
+| --- | --- | --- | --- |
+| bromochloroethanol | 5 | 4 | 1 |
+| 1,2-dimethylcyclohexane | 8 | 8 | 2 |
+| 1,2,3-trimethylcyclohexane | 9 | 9 | 3 |
+| tetramethylcyclobutane | 8 | 8 | 4 |
+| decalin | 10 | 11 | 2 |
+
+The compounds exercise ordinary single-center, substituted-ring and fused-ring cases. They do
+not hold graph size constant or claim to isolate scaling by site count. Their compound names
+give distinct benchmark IDs; the S0b/S4a sites_* timings remain historical measurements of
+retired inputs and are not comparison baselines for these replacements.
+
+The complete preflight now passes all 401 cases: 20 adder, 28 remover, 74 enumerator,
+144 stereo-reading and 135 stereo-recognition cases. All-target, all-feature Clippy passes.
+No new timing estimates were collected, and the approved search layout is unchanged.
+S5g retains the operation and reading comparisons on the current workloads; it has no task
+to optimize the discarded artificial input family.
 
 #### S5f — Python follows the Rust removals
 
@@ -3371,8 +3478,7 @@ stage boundary.
 
 ### Stage gates
 
-S4f, S4g and S5b-S5d are complete. The sustained breaking migration continues with S5e, and S5f
-restores the workspace; S5g is its acceptance
+S4f, S4g and S5b-S5e are complete. S5f restores the workspace; S5g is its acceptance
 and performance gate. S6 ends green with keyed and Python parity complete. No later stage is
 used to repair an earlier stage's compilation.
 

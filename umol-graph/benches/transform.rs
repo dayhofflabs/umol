@@ -23,7 +23,7 @@ use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomForm, AtomId, BondForm, BondId, IntoIr, Molecule, MoleculeEntries,
     StereoAtomForm, StereoAtomId, StereoBondId, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, Stereogenicity, TetrahedralStereoForm,
+    StereoLigandKind, StereogenicSiteKind, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
@@ -563,7 +563,7 @@ fn bench_stereo_adder(c: &mut Criterion) {
             Ok(expected.clone()),
             "{name}"
         );
-        eprintln!("stereo_adder_input\t{name}\tatoms={}\tbonds={}\tretained_atoms={}\tretained_bonds={}\tadded_atoms={}\tadded_bonds={}\talgorithm=Nauty\tpara_stereo=false\tminimum_ring_size=8",
+        eprintln!("stereo_adder_input\t{name}\tatoms={}\tbonds={}\tretained_atoms={}\tretained_bonds={}\tadded_atoms={}\tadded_bonds={}\talgorithm=Nauty\tmax_classification_trials=4096\tminimum_ring_size=8",
             input.atoms().count(), input.bonds().count(), input.stereo_atoms().count(), input.stereo_bonds().count(),
             expected.stereo_atoms().count() - input.stereo_atoms().count(), expected.stereo_bonds().count() - input.stereo_bonds().count());
 
@@ -723,7 +723,7 @@ fn bench_stereo_remover(c: &mut Criterion) {
         input,
         RemoveStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -794,10 +794,10 @@ fn bench_stereo_remover(c: &mut Criterion) {
             Ok(expected.clone()),
             "{name}"
         );
-        eprintln!("stereo_remover_input\t{name}\tatoms={}\tbonds={}\tstereo_atoms={}\tstereo_bonds={}\tremoved_stereo_atoms={}\tremoved_stereo_bonds={}\tmode={:?}\tselected_sites={:?}\tclasses={:?}\talgorithm=Nauty\tpara_stereo=false",
+        eprintln!("stereo_remover_input\t{name}\tatoms={}\tbonds={}\tstereo_atoms={}\tstereo_bonds={}\tremoved_stereo_atoms={}\tremoved_stereo_bonds={}\tmode={:?}\tselected_sites={:?}\tclasses={:?}\talgorithm=Nauty\tmax_classification_trials=4096",
             input.atoms().count(), input.bonds().count(), input.stereo_atoms().count(), input.stereo_bonds().count(),
             input.stereo_atoms().count() - expected.stereo_atoms().count(), input.stereo_bonds().count() - expected.stereo_bonds().count(),
-            config.mode, config.selection.sites.as_ref().map(BTreeSet::len), config.selection.stereogenicities);
+            config.mode, config.selection.sites.as_ref().map(BTreeSet::len), config.selection.stereogenic_site_kinds);
         group.bench_function(BenchmarkId::new("transform_shared", name), |b| {
             b.iter_batched(
                 || input.clone(),
@@ -970,7 +970,9 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
                 input,
                 EnumerateStereoConfig {
                     selection: StereoSelection {
-                        stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                        stereogenic_site_kinds: Some(BTreeSet::from([
+                            StereogenicSiteKind::Constitutional,
+                        ])),
                         ..Default::default()
                     },
                     ..Default::default()
@@ -1060,7 +1062,7 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
         inositol.clone(),
         EnumerateStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])),
                 ..Default::default()
             },
             ..Default::default()
@@ -1150,9 +1152,9 @@ fn bench_stereo_enumerator(c: &mut Criterion) {
             input.stereo_atoms().count() + input.stereo_bonds().count(),
             BTreeSet::len,
         );
-        eprintln!("stereo_enumerator_input\t{name}\tatoms={}\tbonds={}\tstereo_atoms={}\tstereo_bonds={}\tselected_sites={}\tdomain_product=2^{}\tfull_results={:?}\tprefix_results={}\tclasses={:?}\talgorithm=Nauty\tpara_stereo=false",
+        eprintln!("stereo_enumerator_input\t{name}\tatoms={}\tbonds={}\tstereo_atoms={}\tstereo_bonds={}\tselected_sites={}\tdomain_product=2^{}\tfull_results={:?}\tprefix_results={}\tclasses={:?}\talgorithm=Nauty\tmax_classification_trials=4096",
             input.atoms().count(), input.bonds().count(), input.stereo_atoms().count(), input.stereo_bonds().count(), selected,
-            selected, full.then_some(expected.len()), expected.len().min(4), config.selection.stereogenicities);
+            selected, full.then_some(expected.len()), expected.len().min(4), config.selection.stereogenic_site_kinds);
         group.bench_function(BenchmarkId::new("transform_shared", name), |b| {
             b.iter_batched(
                 || input.clone(),

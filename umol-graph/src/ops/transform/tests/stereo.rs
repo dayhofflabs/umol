@@ -13,9 +13,9 @@ use rstest::rstest;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::StereoLigandKind::{Atom, ImplicitHydrogen, LonePair};
 use umol_graph_ir::ir::{
-    AtomId, BondId, CisTransStereoForm, ConstitutionColoring, ElementForm, Entity,
-    GraphSymmetryConfig, Molecule, StereoAtomId, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigandKind, StereoTerm, Stereogenicity, TetrahedralStereoForm,
+    AtomId, BondId, CisTransStereoForm, ElementForm, Entity, GraphSymmetryConfig, Molecule,
+    StereoAtomId, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigandKind,
+    StereoTerm, Stereogenicity, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 
@@ -118,7 +118,7 @@ fn test_molecule_edit_stereo_fixture(
 #[case::stereogenic(tetrahedral(), Stereogenicity::Stereogenic)]
 #[case::prostereogenic(prostereogenic(), Stereogenicity::Prostereogenic)]
 #[case::nonstereogenic(nonstereogenic(), Stereogenicity::Nonstereogenic)]
-fn test_stereo_symmetry_stereogenicity_atom(
+fn test_stereo_atom_view_stereogenicity(
     #[case] mut molecule: Molecule,
     #[case] expected: Stereogenicity,
     #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
@@ -128,15 +128,17 @@ fn test_stereo_symmetry_stereogenicity_atom(
         .stereo_atom_mut(StereoAtomId(0))
         .attributes_mut()
         .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset);
-    let graph = molecule.graph_symmetry(&GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: true,
-        max_iterations: 16,
-        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-    });
+    let graph = molecule
+        .graph_symmetry(&GraphSymmetryConfig {
+            max_classification_trials: 16,
+            include_constraints: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        })
+        .into_graph_symmetry();
     assert_eq!(
         molecule
-            .stereo_atom_symmetry(&graph, StereoAtomId(0))
+            .stereo_atom(StereoAtomId(0))
+            .with_symmetry(&graph)
             .stereogenicity(),
         expected,
     );
@@ -144,15 +146,15 @@ fn test_stereo_symmetry_stereogenicity_atom(
 
 #[rstest]
 #[case::stereogenic(cis_trans(), Stereogenicity::Stereogenic)]
-#[case::nonstereogenic(
+#[case::prostereogenic(
     mol_dsl_concrete!(r#"{
         :atoms ["C" "C" "F" "F" "Br" "I"]
         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
         :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct*"}]
     }"#),
-    Stereogenicity::Nonstereogenic,
+    Stereogenicity::Prostereogenic,
 )]
-fn test_stereo_symmetry_stereogenicity_bond(
+fn test_stereo_bond_view_stereogenicity(
     #[case] mut molecule: Molecule,
     #[case] expected: Stereogenicity,
     #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
@@ -162,15 +164,17 @@ fn test_stereo_symmetry_stereogenicity_bond(
         .stereo_bond_mut(StereoBondId(0))
         .attributes_mut()
         .configuration = StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
-    let graph = molecule.graph_symmetry(&GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: true,
-        max_iterations: 16,
-        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-    });
+    let graph = molecule
+        .graph_symmetry(&GraphSymmetryConfig {
+            max_classification_trials: 16,
+            include_constraints: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        })
+        .into_graph_symmetry();
     assert_eq!(
         molecule
-            .stereo_bond_symmetry(&graph, StereoBondId(0))
+            .stereo_bond(StereoBondId(0))
+            .with_symmetry(&graph)
             .stereogenicity(),
         expected
     );

@@ -1,14 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomFieldKind, AtomForm, AtomId, BondConstraintForm, BondForm, BondId,
-    CisTransStereoForm, ElementForm, Molecule, MoleculeEntries, NumForm, RingConfig,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoTerm, Stereogenicity,
-    TetrahedralStereoForm,
+    CisTransStereoForm, ElementForm, GraphSymmetryConfig, Molecule, MoleculeEntries, NumForm,
+    RingConfig, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoTerm,
+    StereogenicSiteKind, TetrahedralStereoForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 
@@ -244,13 +244,13 @@ fn test_stereo_perceiver_recognize(
 #[case::site(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Bond(BondId(4))])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))])]
 #[case::tetrahedral(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0))])]
 #[case::cis_trans(StereoSelection { kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))])]
-#[case::stereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))])]
-#[case::prostereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Prostereogenic])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0))])]
-#[case::nonstereogenic(StereoSelection { stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])), ..Default::default() }, vec![])]
+#[case::stereogenic(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])), ..Default::default() }, vec![StereoSite::Bond(BondId(4))])]
+#[case::prostereogenic(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Prostereogenic])), ..Default::default() }, vec![StereoSite::Atom(AtomId(0))])]
+#[case::nonstereogenic(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Nonstereogenic])), ..Default::default() }, vec![])]
 #[case::intersection(StereoSelection { sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])), kinds: Some(BTreeSet::from([StereoKind::CisTrans])), ..Default::default() }, vec![])]
 #[case::empty_sites(StereoSelection { sites: Some(BTreeSet::new()), ..Default::default() }, vec![])]
 #[case::empty_kinds(StereoSelection { kinds: Some(BTreeSet::new()), ..Default::default() }, vec![])]
-#[case::empty_classes(StereoSelection { stereogenicities: Some(BTreeSet::new()), ..Default::default() }, vec![])]
+#[case::empty_classes(StereoSelection { stereogenic_site_kinds: Some(BTreeSet::new()), ..Default::default() }, vec![])]
 fn test_stereo_perceiver_recognize_selection(
     mixed_sites: Molecule,
     #[case] selection: StereoSelection,
@@ -830,11 +830,52 @@ fn test_stereo_perceiver_recognize_conjugation(
 }
 
 #[rstest]
-#[case::atom(StereoSite::Atom(AtomId(0)), Stereogenicity::Stereogenic)]
-#[case::bond(StereoSite::Bond(BondId(4)), Stereogenicity::Stereogenic)]
+fn test_stereo_perceiver_recognize_context() {
+    let molecule = mol_dsl_concrete!(
+        r#"{:atoms ["C#h" "C#h2" "C#h" "C#h2" "Cl" "Cl"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"]]}"#
+    );
+    let original = molecule.clone();
+    let result = StereoPerceiver::new(&StereoModel::default())
+        .recognize(
+            &molecule,
+            &StereoSelection {
+                sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
+                stereogenic_site_kinds: Some(BTreeSet::from([
+                    StereogenicSiteKind::Configurational,
+                ])),
+                ..Default::default()
+            },
+            AutomorphismAlgorithm::Nauty,
+            RingConfig::default(),
+            4096,
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        StereoDerivation {
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined)
+            )],
+            ..Default::default()
+        }
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::atom(StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Constitutional)]
+#[case::bond(StereoSite::Bond(BondId(4)), StereogenicSiteKind::Constitutional)]
 fn test_stereo_perceiver_classify(
     #[case] site: StereoSite,
-    #[case] expected: Stereogenicity,
+    #[case] expected: StereogenicSiteKind,
     #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
     coset: StereoCoset,
 ) {
@@ -864,11 +905,16 @@ fn test_stereo_perceiver_classify(
     assert_eq!(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &molecule,
-            &BTreeSet::from([site]),
-            AutomorphismAlgorithm::Nauty,
-            16
+            &[site],
+            &molecule
+                .graph_symmetry(&GraphSymmetryConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_classification_trials: 16,
+                    ..Default::default()
+                })
+                .into_graph_symmetry()
         ),
-        Ok(BTreeMap::from([(site, expected)]))
+        Ok(vec![(site, expected)])
     );
     assert_eq!(molecule, original);
 }
@@ -895,9 +941,14 @@ fn test_stereo_perceiver_classify_error(
     assert_eq!(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &molecule,
-            &BTreeSet::from([site]),
-            AutomorphismAlgorithm::Nauty,
-            16
+            &[site],
+            &molecule
+                .graph_symmetry(&GraphSymmetryConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_classification_trials: 16,
+                    ..Default::default()
+                })
+                .into_graph_symmetry()
         ),
         Err(expected)
     );
@@ -920,9 +971,14 @@ fn test_stereo_perceiver_classify_frame(
     assert_eq!(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &molecule,
-            &BTreeSet::from([site]),
-            AutomorphismAlgorithm::Nauty,
-            16
+            &[site],
+            &molecule
+                .graph_symmetry(&GraphSymmetryConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_classification_trials: 16,
+                    ..Default::default()
+                })
+                .into_graph_symmetry()
         ),
         Err(StereoPerceptionError::Inconsistency(inconsistency))
     );
@@ -931,16 +987,16 @@ fn test_stereo_perceiver_classify_frame(
 #[rstest]
 #[case::distinct(mol_dsl_concrete!(r#"{:atoms ["N#n" "F" "Cl" "Br"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th0"}]}"#), Stereogenicity::Stereogenic)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th0"}]}"#), StereogenicSiteKind::Constitutional)]
 #[case::equivalent_hydrogens(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Prostereogenic)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), StereogenicSiteKind::Prostereogenic)]
 #[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), Stereogenicity::Nonstereogenic)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#), StereogenicSiteKind::Nonstereogenic)]
 fn test_stereo_perceiver_classify_model(
     #[case] mut molecule: Molecule,
-    #[case] expected: Stereogenicity,
+    #[case] expected: StereogenicSiteKind,
     #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
     coset: StereoCoset,
 ) {
@@ -956,32 +1012,31 @@ fn test_stereo_perceiver_classify_model(
     assert_eq!(
         StereoPerceiver::new(&model).classify(
             &molecule,
-            &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty,
-            16
+            &[StereoSite::Atom(AtomId(0))],
+            &molecule
+                .graph_symmetry(&GraphSymmetryConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_classification_trials: 16,
+                    ..Default::default()
+                })
+                .into_graph_symmetry()
         ),
-        Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), expected)]))
+        Ok(vec![(StereoSite::Atom(AtomId(0)), expected)])
     );
     assert_eq!(molecule, original);
 }
 
 #[rstest]
-#[case::unknown_kind(StereoConfigurationForm::Undetermined,
-    StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
-#[case::symbolic(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("a"))),
-    StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
-#[case::empty(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
-    StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
-#[case::invalid_coset(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(2)),
-    StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
-#[case::invalid_set(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 2])),
-    StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) })]
-#[case::geometry(StereoConfigurationForm::Kinded(StereoKind::SquarePlanar, StereoCoset::Undetermined),
-    StereoPerceptionError::UnsupportedKind { kind: StereoKind::SquarePlanar })]
+#[case::unknown_kind(StereoConfigurationForm::Undetermined, Err(StereoPerceptionError::UnsupportedConfiguration { site: StereoSite::Atom(AtomId(0)) }))]
+#[case::symbolic(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("a"))), Ok(vec![(StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Prostereogenic)]))]
+#[case::empty(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([])), Ok(vec![(StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Prostereogenic)]))]
+#[case::invalid_coset(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 2_u32), Ok(vec![(StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Constitutional)]))]
+#[case::invalid_set(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 2])), Ok(vec![(StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Constitutional)]))]
+#[case::geometry(StereoConfigurationForm::kinded(StereoKind::SquarePlanar, StereoCoset::Undetermined), Ok(vec![(StereoSite::Atom(AtomId(0)), StereogenicSiteKind::Configurational)]))]
 fn test_stereo_perceiver_classify_configuration(
     mut mixed_sites: Molecule,
     #[case] configuration: StereoConfigurationForm,
-    #[case] expected: StereoPerceptionError,
+    #[case] expected: Result<Vec<(StereoSite, StereogenicSiteKind)>, StereoPerceptionError>,
 ) {
     let mut editor = mixed_sites.edit();
     editor.add_stereo_atom(
@@ -998,11 +1053,16 @@ fn test_stereo_perceiver_classify_configuration(
     assert_eq!(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &mixed_sites,
-            &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty,
-            16
+            &[StereoSite::Atom(AtomId(0))],
+            &mixed_sites
+                .graph_symmetry(&GraphSymmetryConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_classification_trials: 16,
+                    ..Default::default()
+                })
+                .into_graph_symmetry()
         ),
-        Err(expected)
+        expected
     );
     assert_eq!(mixed_sites, original);
 }
@@ -1012,10 +1072,118 @@ fn test_stereo_perceiver_classify_empty(mixed_sites: Molecule) {
     assert_eq!(
         StereoPerceiver::new(&StereoModel::default()).classify(
             &mixed_sites,
-            &BTreeSet::new(),
-            AutomorphismAlgorithm::Nauty,
-            16
+            &[],
+            &mixed_sites
+                .graph_symmetry(&GraphSymmetryConfig {
+                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    max_classification_trials: 16,
+                    ..Default::default()
+                })
+                .into_graph_symmetry()
         ),
-        Ok(BTreeMap::new())
+        Ok(Vec::new())
+    );
+}
+
+#[rstest]
+#[case::tetrahedral(
+    r#"{:atoms ["C" "H" "F" "Cl" "Br"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#,
+    StereogenicSiteKind::Constitutional
+)]
+#[case::square_planar(
+    r#"{:atoms ["Pt#c-2" "N#c+#h3" "N#c+#h3" "Cl" "Cl"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}"#,
+    StereogenicSiteKind::Configurational
+)]
+#[case::axial(
+    r#"{:atoms ["C" "H" "F" "Cl" "Br"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Ax0"}]}"#,
+    StereogenicSiteKind::Constitutional
+)]
+#[case::trigonal_bipyramidal(
+    r#"{:atoms ["P" "Cl" "F" "F" "F" "F"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4 5] :attrs "Tb0"}]}"#,
+    StereogenicSiteKind::Configurational
+)]
+#[case::octahedral(
+    r#"{:atoms ["Co" "H" "F" "Cl" "Br" "I" "N#h3"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [0 6 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4 5 6] :attrs "Oh0"}]}"#,
+    StereogenicSiteKind::Constitutional
+)]
+fn test_stereo_perceiver_classify_readings(
+    #[case] dsl: &str,
+    #[case] expected: StereogenicSiteKind,
+    #[values(false, true)] symbolic: bool,
+) {
+    let mut molecule = mol_dsl_concrete!(dsl);
+    let kind = molecule.stereo_atom(StereoAtomId(0)).kind();
+    if symbolic {
+        molecule
+            .stereo_atom_mut(StereoAtomId(0))
+            .attributes_mut()
+            .configuration =
+            StereoConfigurationForm::kinded(kind, StereoCoset::term(StereoTerm::var("a")));
+    }
+    let original = molecule.clone();
+    let mut model = StereoModel {
+        kind_models: [None, None, None, None, None, None],
+        ..Default::default()
+    };
+    model.kind_models[kind as usize] = Some(StereoKindModel {
+        scope: ElementScope::Any,
+        fluxionality: true,
+    });
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig::default())
+        .into_graph_symmetry();
+    assert_eq!(
+        StereoPerceiver::new(&model).classify(
+            &molecule,
+            &[StereoSite::Atom(AtomId(0)), StereoSite::Atom(AtomId(0))],
+            &symmetry
+        ),
+        Ok(vec![(StereoSite::Atom(AtomId(0)), expected)])
+    );
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+fn test_stereo_perceiver_classify_sites() {
+    let molecule = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "H" "F" "Cl" "Br" "C#h" "C#h" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [5 6 "2"] [5 7 "1"] [6 8 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]
+        :stereo-bonds [{:site 4 :ligands [7 [:h 5] 8 [:h 6]] :attrs "Ct*"}]}"#
+    );
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig::default())
+        .into_graph_symmetry();
+    assert_eq!(
+        StereoPerceiver::new(&StereoModel::default()).classify(
+            &molecule,
+            &[
+                StereoSite::Bond(BondId(4)),
+                StereoSite::Atom(AtomId(0)),
+                StereoSite::Bond(BondId(4))
+            ],
+            &symmetry
+        ),
+        Ok(vec![
+            (
+                StereoSite::Atom(AtomId(0)),
+                StereogenicSiteKind::Constitutional
+            ),
+            (
+                StereoSite::Bond(BondId(4)),
+                StereogenicSiteKind::Constitutional
+            )
+        ])
     );
 }

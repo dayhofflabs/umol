@@ -1,15 +1,15 @@
 //! Recognition and classification of stereo sites.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondConstraintForm,
-    BondConstraintKey, BondId, CisTransStereoForm, ConstitutionColoring, GraphSymmetryConfig,
-    Molecule, Normalize, RingConfig, RingModel, RingSet, StereoConfigurationForm, StereoCoset,
-    StereoKind, Stereogenicity, TetrahedralStereoForm,
+    BondConstraintKey, BondId, CisTransStereoForm, Entity, GraphSymmetry, GraphSymmetryConfig,
+    Molecule, Normalize, RingConfig, RingModel, RingSet, StereoCoset, StereoKind,
+    StereogenicSiteKind, TetrahedralStereoForm,
 };
 
 use super::{StereoDerivation, StereoInconsistency, StereoPerceiver, StereoSelection, StereoSite};
@@ -49,9 +49,12 @@ impl StereoPerceiver {
     /// Missing stereo bonds on double bonds follow the model's minimum ring size.
     /// Existing entities and source assertions are preserved.
     ///
-    /// Stereogenicity filtering uses molecular symmetry with prospective entities
-    /// present in a temporary molecule. It is omitted when that filter is None.
-    /// Empty sets select nothing. Supplied site ids are checked before processing.
+    /// Stereogenic-site-kind filtering classifies all eligible prospective entities
+    /// together with existing records in a temporary molecule, then applies the output
+    /// selectors. Required recognition fields outside the selected output sites must
+    /// therefore also be literal. With no site-kind filter, recognition processes only
+    /// the selected sites and geometries. Empty sets select nothing. Supplied site ids
+    /// are checked before processing.
     ///
     /// # Errors
     ///
@@ -64,7 +67,7 @@ impl StereoPerceiver {
     ///
     /// The input is unchanged. Returned additions refer to its topology ids and
     /// have undetermined cosets in the recognized ligand order. Existing stereo
-    /// entities are never returned as additions. Site/kind/stereogenicity filters
+    /// entities are never returned as additions. Site, geometry and site-kind filters
     /// intersect, while classification retains the rest of the molecular context.
     pub fn recognize(
         &self,
@@ -72,7 +75,7 @@ impl StereoPerceiver {
         selection: &StereoSelection,
         automorphism_algorithm: AutomorphismAlgorithm,
         ring_config: RingConfig,
-        para_stereo_max_iterations: u32,
+        max_classification_trials: u32,
     ) -> Result<StereoDerivation, StereoPerceptionError> {
         if let Some(sites) = &selection.sites {
             for &site in sites {
@@ -82,7 +85,7 @@ impl StereoPerceiver {
         if selection.sites.as_ref().is_some_and(BTreeSet::is_empty)
             || selection.kinds.as_ref().is_some_and(BTreeSet::is_empty)
             || selection
-                .stereogenicities
+                .stereogenic_site_kinds
                 .as_ref()
                 .is_some_and(BTreeSet::is_empty)
         {
@@ -109,17 +112,19 @@ impl StereoPerceiver {
         let mut atom_rings = None;
         let mut bond_rings = None;
         if self.model.kind_model(StereoKind::Tetrahedral).is_some()
-            && selection
-                .kinds
-                .as_ref()
-                .is_none_or(|kinds| kinds.contains(&StereoKind::Tetrahedral))
+            && (selection.stereogenic_site_kinds.is_some()
+                || selection
+                    .kinds
+                    .as_ref()
+                    .is_none_or(|kinds| kinds.contains(&StereoKind::Tetrahedral)))
         {
             for atom in molecule.atoms().iter() {
                 let site = StereoSite::Atom(atom.id());
-                if selection
-                    .sites
-                    .as_ref()
-                    .is_some_and(|sites| !sites.contains(&site))
+                if selection.stereogenic_site_kinds.is_none()
+                    && selection
+                        .sites
+                        .as_ref()
+                        .is_some_and(|sites| !sites.contains(&site))
                 {
                     continue;
                 }
@@ -175,17 +180,19 @@ impl StereoPerceiver {
             }
         }
         if self.model.kind_model(StereoKind::CisTrans).is_some()
-            && selection
-                .kinds
-                .as_ref()
-                .is_none_or(|kinds| kinds.contains(&StereoKind::CisTrans))
+            && (selection.stereogenic_site_kinds.is_some()
+                || selection
+                    .kinds
+                    .as_ref()
+                    .is_none_or(|kinds| kinds.contains(&StereoKind::CisTrans)))
         {
             for bond in molecule.bonds().iter() {
                 let site = StereoSite::Bond(bond.id());
-                if selection
-                    .sites
-                    .as_ref()
-                    .is_some_and(|sites| !sites.contains(&site))
+                if selection.stereogenic_site_kinds.is_none()
+                    && selection
+                        .sites
+                        .as_ref()
+                        .is_some_and(|sites| !sites.contains(&site))
                 {
                     continue;
                 }
@@ -272,8 +279,8 @@ impl StereoPerceiver {
                 }
             }
         }
-        if let Some(classes) = &selection.stereogenicities {
-            let sites: BTreeSet<_> = result
+        if let Some(classes) = &selection.stereogenic_site_kinds {
+            let sites: Vec<_> = result
                 .stereo_atoms
                 .iter()
                 .map(|(site, _, _)| StereoSite::Atom(*site))
@@ -295,144 +302,139 @@ impl StereoPerceiver {
                 let prospective = editor
                     .finish()
                     .expect("recognized stereo additions preserve molecule integrity");
-                let classifications = self.classify(
-                    &prospective,
-                    &sites,
-                    automorphism_algorithm,
-                    para_stereo_max_iterations,
-                )?;
+                let symmetry = prospective
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm,
+                        max_classification_trials,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry();
+                let classifications = self.classify(&prospective, &sites, &symmetry)?;
                 result.stereo_atoms.retain(|(site, _, _)| {
-                    classes.contains(&classifications[&StereoSite::Atom(*site)])
+                    let index = classifications
+                        .binary_search_by_key(&StereoSite::Atom(*site), |&(site, _)| site)
+                        .expect("recognized site was classified");
+                    classes.contains(&classifications[index].1)
                 });
                 result.stereo_bonds.retain(|(site, _, _)| {
-                    classes.contains(&classifications[&StereoSite::Bond(*site)])
+                    let index = classifications
+                        .binary_search_by_key(&StereoSite::Bond(*site), |&(site, _)| site)
+                        .expect("recognized site was classified");
+                    classes.contains(&classifications[index].1)
                 });
             }
         }
+        result.stereo_atoms.retain(|(site, _, form)| {
+            selection
+                .sites
+                .as_ref()
+                .is_none_or(|sites| sites.contains(&StereoSite::Atom(*site)))
+                && selection.kinds.as_ref().is_none_or(|kinds| {
+                    form.configuration
+                        .kind()
+                        .is_some_and(|kind| kinds.contains(&kind))
+                })
+        });
+        result.stereo_bonds.retain(|(site, _, form)| {
+            selection
+                .sites
+                .as_ref()
+                .is_none_or(|sites| sites.contains(&StereoSite::Bond(*site)))
+                && selection.kinds.as_ref().is_none_or(|kinds| {
+                    form.configuration
+                        .kind()
+                        .is_some_and(|kind| kinds.contains(&kind))
+                })
+        });
         Ok(result)
     }
 
-    /// Classify existing stereo entities at the supplied topology sites.
+    /// Classify requested topology sites using the supplied graph-symmetry data.
     ///
-    /// Uses the whole molecule's symmetry and the model's para-stereo setting.
-    /// Automatic recognition rules and element scopes do not reject existing
-    /// arrangements. Empty input returns an empty map without a symmetry query.
-    /// Graph-derived ligand actions fix virtual ligands; distinguishable hydrogen
-    /// positions require explicit atoms.
+    /// Input order is unrestricted and duplicate requests are coalesced. The result is sorted
+    /// by atom site IDs followed by bond site IDs. Classification uses one complete kind batch,
+    /// independently of the model's recognition scopes, fluxionality and stored coset values.
+    /// An empty request returns an empty vector. The supplied data must describe this molecule.
     ///
     /// # Errors
     ///
-    /// Reports unavailable topology ids, missing stereo entities, unsupported
-    /// kinds/configurations or fluxionality, and incompatible ligand arity.
-    /// Classification supports Th atoms and Ct bonds with literal, undetermined,
-    /// or nonempty finite absolute coset domains. Symbolic cosets are unsupported.
+    /// Reports unavailable topology sites, missing stereo records, unknown or misplaced kinds,
+    /// and ligand frames whose degree differs from their kind. Stored cosets are not interpreted.
     ///
     /// # Semantic properties
     ///
-    /// The returned keys equal the supplied sites. Classification does not
-    /// change configurations or any other input data. It uses the projected
-    /// ligand symmetry without choosing a coset.
-    /// Relabeling sites and assertion frames transports the returned keys without
-    /// changing their classes. Compatible stored ligand-frame actions preserve
-    /// the classes at the same sites.
+    /// There is one entry per distinct requested site. The molecule and its exact representation
+    /// are preserved. Valid stored coset assignments do not change the result.
+    /// Relabeling topology sites transports the result keys without changing their kinds.
+    /// Compatible ligand-frame actions preserve the kinds at the same sites.
     pub fn classify(
         &self,
         molecule: &Molecule,
-        sites: &BTreeSet<StereoSite>,
-        automorphism_algorithm: AutomorphismAlgorithm,
-        para_stereo_max_iterations: u32,
-    ) -> Result<BTreeMap<StereoSite, Stereogenicity>, StereoPerceptionError> {
-        for &site in sites {
+        sites: &[StereoSite],
+        symmetry: &GraphSymmetry,
+    ) -> Result<Vec<(StereoSite, StereogenicSiteKind)>, StereoPerceptionError> {
+        let mut sites = sites.to_vec();
+        sites.sort_unstable();
+        sites.dedup();
+        let mut records = Vec::with_capacity(sites.len());
+        for &site in &sites {
             check_site(molecule, site)?;
-            let (configuration, degree, failure) = match site {
+            let (entity, configuration, degree, failure) = match site {
                 StereoSite::Atom(atom) => {
-                    let record = molecule
+                    let stereo = molecule
                         .stereo_atoms()
                         .at(atom)
                         .ok_or(StereoPerceptionError::MissingStereoEntity { site })?;
                     (
-                        &record.attributes().configuration,
-                        record.ligand_ids().len(),
+                        Entity::StereoAtom(stereo.id()),
+                        &stereo.attributes().configuration,
+                        stereo.ligand_count(),
                         StereoInconsistency::StereoAtomFailure {
-                            stereo_atom: record.id(),
+                            stereo_atom: stereo.id(),
                         },
                     )
                 }
                 StereoSite::Bond(bond) => {
-                    let record = molecule
+                    let stereo = molecule
                         .stereo_bonds()
                         .at(bond)
                         .ok_or(StereoPerceptionError::MissingStereoEntity { site })?;
                     (
-                        &record.attributes().configuration,
-                        record.ligand_ids().len(),
+                        Entity::StereoBond(stereo.id()),
+                        &stereo.attributes().configuration,
+                        stereo.ligand_count(),
                         StereoInconsistency::StereoBondFailure {
-                            stereo_bond: record.id(),
+                            stereo_bond: stereo.id(),
                         },
                     )
                 }
             };
-            let StereoConfigurationForm::Kinded(kind, coset) = configuration else {
+            let Some(kind) = configuration.kind() else {
                 return Err(StereoPerceptionError::UnsupportedConfiguration { site });
             };
-            check_kind(self, *kind)?;
-            if !matches!(
-                (site, kind),
-                (StereoSite::Atom(_), StereoKind::Tetrahedral)
-                    | (StereoSite::Bond(_), StereoKind::CisTrans)
-            ) {
+            if match site {
+                StereoSite::Atom(_) => kind == StereoKind::CisTrans,
+                StereoSite::Bond(_) => kind != StereoKind::CisTrans,
+            } {
                 return Err(StereoPerceptionError::UnsupportedConfiguration { site });
             }
             if degree != kind.degree() {
                 return Err(failure.into());
             }
-            let supported = match coset {
-                StereoCoset::Undetermined => true,
-                StereoCoset::Lit(value) => *value < 2,
-                StereoCoset::LitSet(values) => {
-                    !values.is_empty() && values.iter().all(|&value| value < 2)
-                }
-                StereoCoset::Term(_) => false,
-            };
-            if !supported {
-                return Err(StereoPerceptionError::UnsupportedConfiguration { site });
-            }
+            records.push(entity);
         }
         if sites.is_empty() {
-            return Ok(BTreeMap::new());
+            return Ok(Vec::new());
         }
-        let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: self.model.para_stereo,
-            max_iterations: para_stereo_max_iterations,
-            automorphism_algorithm,
-        });
+        let kinds = molecule.stereogenic_site_kinds(symmetry);
         Ok(sites
-            .iter()
-            .map(|&site| {
-                let class = match site {
-                    StereoSite::Atom(atom) => molecule
-                        .stereo_atom_symmetry(
-                            &symmetry,
-                            molecule
-                                .stereo_atoms()
-                                .at(atom)
-                                .expect("validated stereo atom")
-                                .id(),
-                        )
-                        .stereogenicity(),
-                    StereoSite::Bond(bond) => molecule
-                        .stereo_bond_symmetry(
-                            &symmetry,
-                            molecule
-                                .stereo_bonds()
-                                .at(bond)
-                                .expect("validated stereo bond")
-                                .id(),
-                        )
-                        .stereogenicity(),
-                };
-                (site, class)
+            .into_iter()
+            .zip(records)
+            .map(|(site, entity)| {
+                let index = kinds
+                    .binary_search_by_key(&entity, |&(entity, _)| entity)
+                    .expect("the kinded requested record is included in the batch");
+                (site, kinds[index].1)
             })
             .collect())
     }

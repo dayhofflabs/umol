@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomId, BondId, Molecule, StereoAtomId, StereoKind, Stereogenicity,
+    AromaticSystemId, AtomId, BondId, Molecule, StereoAtomId, StereoKind, StereogenicSiteKind,
 };
 use umol_graph_ir::mol_dsl_concrete;
 
@@ -451,19 +451,7 @@ fn test_molecule_remove_stereo(
 }, RemoveStereoError::Perception(StereoPerceptionError::InvalidSite {
     site: StereoSite::Bond(BondId(7)),
 }))]
-#[case::classification(mol_dsl_concrete!(r#"{
-    :atoms ["Pt#c+2" "F" "Cl" "Br" "I"]
-    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
-}"#), RemoveStereoConfig {
-    selection: StereoSelection {
-        stereogenicities: Some(BTreeSet::from([Stereogenicity::Nonstereogenic])),
-        ..Default::default()
-    },
-    ..Default::default()
-}, RemoveStereoError::Perception(StereoPerceptionError::UnsupportedKind {
-    kind: StereoKind::SquarePlanar,
-}))]
+
 fn test_molecule_remove_stereo_error(
     #[case] input: Molecule,
     #[case] config: RemoveStereoConfig,
@@ -481,4 +469,30 @@ fn test_molecule_remove_stereo_error(
     let mut molecule = input.clone();
     assert_eq!(molecule.remove_stereo_into(&model, config), Err(expected));
     assert_eq!(molecule, input);
+}
+
+#[rstest]
+#[case::filtered_square_planar(mol_dsl_concrete!(r#"{
+    :atoms ["Pt#c+2" "F" "Cl" "Br" "I"]
+    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
+}"#), RemoveStereoConfig {
+    selection: StereoSelection {
+        stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Nonstereogenic])),
+        ..Default::default()
+    },
+    ..Default::default()
+})]
+fn test_molecule_remove_stereo_classification_identity(
+    #[case] input: Molecule,
+    #[case] config: RemoveStereoConfig,
+) {
+    let model = StereoModel::default();
+    assert_eq!(
+        input.clone().remove_stereo(&model, config.clone()),
+        Ok(input.clone())
+    );
+    let mut in_place = input.clone();
+    assert_eq!(in_place.remove_stereo_into(&model, config), Ok(()));
+    assert_eq!(in_place, input);
 }

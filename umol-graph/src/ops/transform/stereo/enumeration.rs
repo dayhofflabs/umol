@@ -1,15 +1,14 @@
 //! Ordered absolute domains and stereo assignment checks.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, BondConstraintForm, BondConstraintKey, BooleanForm,
-    ConstitutionColoring, Constraint, GraphSymmetry, GraphSymmetryConfig, Lattice, Molecule,
-    Normalize, StereoAtomConstraintForm, StereoBondConstraintForm, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoSymmetry, StereoTerm, StereogenicityForm, TopicityRelationForm,
+    Constraint, GraphSymmetry, GraphSymmetryConfig, Lattice, Molecule, Normalize,
+    StereoAtomConstraintForm, StereoBondConstraintForm, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoTerm, StereogenicityForm, TopicityRelationForm,
 };
-use umol_perm::OrientedPermutation;
 use umol_utils::solution::Solution;
 
 use crate::ops::stereo::{StereoInconsistency, StereoPerceptionError, StereoSite};
@@ -214,13 +213,12 @@ impl StereoAssignmentChecks {
     pub(super) fn is_consistent(
         &self,
         molecule: &Molecule,
-        symmetry_config: &GraphSymmetryConfig<ConstitutionColoring>,
+        symmetry_config: &GraphSymmetryConfig,
     ) -> Result<bool, ConstraintInvariantsError> {
         let mut evaluation = StereoAssignmentEvaluation {
             molecule,
             symmetry_config,
             symmetry: None,
-            local_symmetries: BTreeMap::new(),
             invariants: ConstraintInvariantsValidator::new(ConstraintValidateConfig {
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
@@ -326,9 +324,8 @@ fn affected_constraint(constraint: &Constraint, sites: &BTreeSet<StereoSite>) ->
 
 struct StereoAssignmentEvaluation<'a> {
     molecule: &'a Molecule,
-    symmetry_config: &'a GraphSymmetryConfig<ConstitutionColoring>,
+    symmetry_config: &'a GraphSymmetryConfig,
     symmetry: Option<GraphSymmetry>,
-    local_symmetries: BTreeMap<StereoSite, StereoSymmetry>,
     invariants: ConstraintInvariantsValidator,
 }
 
@@ -364,33 +361,37 @@ impl StereoAssignmentEvaluation<'_> {
                 if stereo.attributes().configuration.kind() != Some(*kind) {
                     return Ok(Some(false));
                 }
-                let symmetry = self.local_symmetry(StereoSite::Atom(stereo.site_id()));
+                if !matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans)
+                    || stereo.ligand_count() != kind.degree()
+                {
+                    return Ok(None);
+                }
+                let symmetry = self.symmetry.get_or_insert_with(|| {
+                    self.molecule
+                        .graph_symmetry(self.symmetry_config)
+                        .into_graph_symmetry()
+                });
+                let stereo = stereo.with_symmetry(symmetry);
                 match constraint {
                     StereoAtomConstraintForm::Stereogenicity(asserted) => {
-                        symmetry.map(|symmetry| {
-                            asserted.matches(&StereogenicityForm::Lit(symmetry.stereogenicity()))
-                        })
+                        Some(asserted.matches(&StereogenicityForm::Lit(stereo.stereogenicity())))
                     }
-                    StereoAtomConstraintForm::Topicity(asserted) => symmetry.map(|symmetry| {
+                    StereoAtomConstraintForm::Topicity(asserted) => {
                         let pair = asserted.pair;
-                        pair.first().index() < symmetry.group().degree()
-                            && pair.second().index() < symmetry.group().degree()
-                            && asserted.relation.matches(&TopicityRelationForm::Lit(
-                                symmetry.topicity(pair.first(), pair.second()),
-                            ))
-                    }),
-                    StereoAtomConstraintForm::LigandSymmetry(asserted) => {
-                        symmetry.map(|symmetry| {
-                            let op = OrientedPermutation::new(
-                                asserted.permutation.permutation.0,
-                                asserted.permutation.orientation,
-                            );
-                            op.degree() == symmetry.group().degree()
-                                && asserted
-                                    .invariant
-                                    .matches(&BooleanForm::Lit(symmetry.group().contains(op)))
-                        })
+                        Some(
+                            pair.first().index() < stereo.ligand_count()
+                                && pair.second().index() < stereo.ligand_count()
+                                && asserted.relation.matches(&TopicityRelationForm::Lit(
+                                    stereo.topicity(pair.first(), pair.second()),
+                                )),
+                        )
                     }
+                    StereoAtomConstraintForm::LigandSymmetry(asserted) => Some(
+                        asserted.permutation.permutation.0.degree() == stereo.ligand_count()
+                            && asserted.invariant.matches(&BooleanForm::Lit(
+                                stereo.ligand_symmetry(asserted.permutation),
+                            )),
+                    ),
                     StereoAtomConstraintForm::Fluxionality(_) => None,
                 }
             }
@@ -399,33 +400,37 @@ impl StereoAssignmentEvaluation<'_> {
                 if stereo.attributes().configuration.kind() != Some(*kind) {
                     return Ok(Some(false));
                 }
-                let symmetry = self.local_symmetry(StereoSite::Bond(stereo.site_id()));
+                if !matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans)
+                    || stereo.ligand_count() != kind.degree()
+                {
+                    return Ok(None);
+                }
+                let symmetry = self.symmetry.get_or_insert_with(|| {
+                    self.molecule
+                        .graph_symmetry(self.symmetry_config)
+                        .into_graph_symmetry()
+                });
+                let stereo = stereo.with_symmetry(symmetry);
                 match constraint {
                     StereoBondConstraintForm::Stereogenicity(asserted) => {
-                        symmetry.map(|symmetry| {
-                            asserted.matches(&StereogenicityForm::Lit(symmetry.stereogenicity()))
-                        })
+                        Some(asserted.matches(&StereogenicityForm::Lit(stereo.stereogenicity())))
                     }
-                    StereoBondConstraintForm::Topicity(asserted) => symmetry.map(|symmetry| {
+                    StereoBondConstraintForm::Topicity(asserted) => {
                         let pair = asserted.pair;
-                        pair.first().index() < symmetry.group().degree()
-                            && pair.second().index() < symmetry.group().degree()
-                            && asserted.relation.matches(&TopicityRelationForm::Lit(
-                                symmetry.topicity(pair.first(), pair.second()),
-                            ))
-                    }),
-                    StereoBondConstraintForm::LigandSymmetry(asserted) => {
-                        symmetry.map(|symmetry| {
-                            let op = OrientedPermutation::new(
-                                asserted.permutation.permutation.0,
-                                asserted.permutation.orientation,
-                            );
-                            op.degree() == symmetry.group().degree()
-                                && asserted
-                                    .invariant
-                                    .matches(&BooleanForm::Lit(symmetry.group().contains(op)))
-                        })
+                        Some(
+                            pair.first().index() < stereo.ligand_count()
+                                && pair.second().index() < stereo.ligand_count()
+                                && asserted.relation.matches(&TopicityRelationForm::Lit(
+                                    stereo.topicity(pair.first(), pair.second()),
+                                )),
+                        )
                     }
+                    StereoBondConstraintForm::LigandSymmetry(asserted) => Some(
+                        asserted.permutation.permutation.0.degree() == stereo.ligand_count()
+                            && asserted.invariant.matches(&BooleanForm::Lit(
+                                stereo.ligand_symmetry(asserted.permutation),
+                            )),
+                    ),
                     StereoBondConstraintForm::Fluxionality(_) => None,
                 }
             }
@@ -453,45 +458,6 @@ impl StereoAssignmentEvaluation<'_> {
                 Solution::Contradictory(_) => Some(false),
             },
         })
-    }
-
-    fn local_symmetry(&mut self, site: StereoSite) -> Option<&StereoSymmetry> {
-        if !self.local_symmetries.contains_key(&site) {
-            let (kind, degree) = match site {
-                StereoSite::Atom(atom) => {
-                    let stereo = self.molecule.stereo_atoms().at(atom)?;
-                    (
-                        stereo.attributes().configuration.kind()?,
-                        stereo.ligand_ids().len(),
-                    )
-                }
-                StereoSite::Bond(bond) => {
-                    let stereo = self.molecule.stereo_bonds().at(bond)?;
-                    (
-                        stereo.attributes().configuration.kind()?,
-                        stereo.ligand_ids().len(),
-                    )
-                }
-            };
-            if !matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans)
-                || degree != kind.degree()
-            {
-                return None;
-            }
-            let symmetry = self
-                .symmetry
-                .get_or_insert_with(|| self.molecule.graph_symmetry(self.symmetry_config));
-            let local = match site {
-                StereoSite::Atom(atom) => self
-                    .molecule
-                    .stereo_atom_symmetry(symmetry, self.molecule.stereo_atoms().at(atom)?.id()),
-                StereoSite::Bond(bond) => self
-                    .molecule
-                    .stereo_bond_symmetry(symmetry, self.molecule.stereo_bonds().at(bond)?.id()),
-            };
-            self.local_symmetries.insert(site, local);
-        }
-        self.local_symmetries.get(&site)
     }
 }
 
