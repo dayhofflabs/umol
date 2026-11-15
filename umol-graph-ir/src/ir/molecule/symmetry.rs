@@ -20,8 +20,6 @@ use super::super::symmetry::{
 use super::super::traits::{AsColor, AsLit, FrameTransport, Normalize};
 use super::super::view::GraphSymmetryView;
 use super::Molecule;
-#[cfg(test)]
-use super::MoleculeEntries;
 
 /// Auxiliary search data computed for a molecule's graph-symmetry readings.
 ///
@@ -988,4 +986,4 @@ impl Default for GraphSymmetryConfig {
 }
 
 #[cfg(test)]
-pub(crate) mod tests;
+mod tests;

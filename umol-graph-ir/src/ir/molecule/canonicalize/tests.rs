@@ -6,16 +6,15 @@ use umol_edn::FromEdn;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_perm::Permutation;
 
-use super::super::symmetry::tests::initial_color_molecule;
 use super::*;
 use crate::ir::canonicalize::tests::{
     canonicalize_context, explicitly_dense_equivalent, permutations,
 };
 use crate::ir::symmetry::{same_cells, AutomorphismAdapterOutput, CanonicalSearchStats};
 use crate::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Constraint, Contradiction, DativeBondForm, DativeBondId, ElementForm, Entity, Incidence,
-    IncidenceLevel, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
+    ArithExpr, AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId,
+    BondForm, BondId, Constraint, Contradiction, DativeBondForm, DativeBondId, ElementForm, Entity,
+    Incidence, IncidenceLevel, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
     MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindForm, NumForm, StereoAtomConstraintForm,
     StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
@@ -23,6 +22,138 @@ use crate::ir::{
     TopicityForm, TopicityRelationForm,
 };
 use crate::mol_dsl;
+
+#[fixture]
+fn initial_color_molecule() -> Molecule {
+    let normalized_three = NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+        ArithExpr::Lit(1),
+        ArithExpr::Lit(2),
+    ])));
+    let normalized_one = NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+        ArithExpr::Lit(0),
+        ArithExpr::Lit(1),
+    ])));
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_charge(3_i64),
+            AtomForm::from_element(Element::C)
+                .with_charge(normalized_three)
+                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+            AtomForm::from_element(Element::O).with_charge(3_i64),
+            AtomForm::from_element(Element::C).with_charge(4_i64),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::H),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::new(normalized_one.clone())),
+            (AtomId(2), AtomId(3), BondForm::from_order(2)),
+            (AtomId(0), AtomId(5), BondForm::from_order(1)),
+        ],
+        dative: vec![
+            (vec![AtomId(0)], AtomId(4), DativeBondForm::from_order(1)),
+            (
+                vec![AtomId(1)],
+                AtomId(4),
+                DativeBondForm::new(normalized_one),
+            ),
+            (vec![AtomId(2)], AtomId(4), DativeBondForm::from_order(2)),
+        ],
+        aromatic: vec![
+            (
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemForm::from_electrons(vec![1, 2]),
+            ),
+            (
+                vec![AtomId(2), AtomId(3)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            ),
+            (
+                vec![AtomId(4), AtomId(5)],
+                AromaticSystemForm::from_electrons(vec![1, 2]).with_charge(1_i64),
+            ),
+        ],
+        multicenter: vec![
+            (
+                vec![AtomId(0), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![1, 2]),
+            ),
+            (
+                vec![AtomId(1), AtomId(3)],
+                MulticenterBondForm::from_electrons(vec![2, 1]),
+            ),
+        ],
+        noncovalent: vec![
+            (
+                [AtomId(0), AtomId(5)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            (
+                [AtomId(1), AtomId(5)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            ),
+            (
+                [AtomId(2), AtomId(5)],
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+            ),
+        ],
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            (
+                AtomId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+            ),
+            (
+                AtomId(2),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                ],
+                StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(0)),
+            ),
+        ],
+        stereo_bonds: vec![
+            (
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+            ),
+            (
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            ),
+        ],
+        ..Default::default()
+    })
+}
 
 #[rstest]
 #[case::element_order(

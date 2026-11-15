@@ -25,8 +25,8 @@ This document records
 
 S4f, S4g and S5a-S5c are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
-generator filter, FieldColor names and the three derived stereo-view readings. S5d's stereogenic
-units are next; the workspace-wide S5 gate remains ahead.
+generator filter, FieldColor names and the three derived stereo-view readings. S5d's batch
+stereogenic-site classification is next; the workspace-wide S5 gate remains ahead.
 
 ## Starting state
 
@@ -356,9 +356,9 @@ added to the one definition later, by dividing the inherent part of a color.
 
 `GraphSymmetry` is auxiliary data computed once for a molecule. All readings use one
 Constitution incidence graph, its colored search adapter, refined partition and node-to-cell
-index. The value also holds its config and the stereogenic-unit cache described below. It holds
-no molecule, borrowed or copied. A reading runs a search when asked, unless an exit by cell
-decides it. Stereo records are read from the supplied molecule when checking a remapping.
+index. Its fields are incidence, adapter, partition, cell_indices and config, in that order.
+It holds no molecule, borrowed or copied. A reading runs a search when asked, unless an exit by
+cell decides it. Stereo records are read from the supplied molecule when checking a remapping.
 
 `GraphSymmetryView` follows `RingViews`. `Molecule::graph_symmetry` borrows the molecule and
 returns a view owning the computed data. `from_graph_symmetry` borrows existing data and the
@@ -379,6 +379,10 @@ impl Molecule {
     pub fn same_star_orbit(&self, symmetry: &GraphSymmetry, a: AtomId, b: AtomId) -> bool;
     pub fn proper_orbit_of(&self, symmetry: &GraphSymmetry, a: AtomId) -> Vec<AtomId>;
     pub fn star_orbit_of(&self, symmetry: &GraphSymmetry, a: AtomId) -> Vec<AtomId>;
+    pub fn stereogenic_site_kinds(
+        &self,
+        symmetry: &GraphSymmetry,
+    ) -> Vec<(Entity, StereogenicSiteKind)>;
 }
 
 impl<'a> GraphSymmetryView<'a> {
@@ -390,19 +394,20 @@ impl<'a> GraphSymmetryView<'a> {
     pub fn same_star_orbit(&self, a: AtomId, b: AtomId) -> bool;
     pub fn proper_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
     pub fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
+    pub fn stereogenic_site_kinds(&self) -> Vec<(Entity, StereogenicSiteKind)>;
 }
 
 pub struct GraphSymmetryConfig {
     pub automorphism_algorithm: AutomorphismAlgorithm,
-    pub max_assignments: u32,
+    pub max_classification_trials: u32,
     pub include_constraints: bool,
 }
 ```
 
 - **Config.** `GraphSymmetryConfig` holds the automorphism algorithm, the limit
-  `max_assignments` of the stereogenic units, and `include_constraints`. It has a `Default`: the
-  algorithm the stereo operation configs default to, 4,096 assignments, and `false`. The caller
-  selects all three; they are not part of a chemistry model. The coloring, the fixpoint switch
+  max_classification_trials for site-kind confirmation, and `include_constraints`. It has a
+  `Default`: the algorithm the stereo operation configs default to, 4,096 assignments, and `false`.
+  The caller selects all three; they are not part of a chemistry model. The coloring, the fixpoint switch
   and the iteration limit of the present config are removed.
 - **Constraints.** `include_constraints` decides whether the constraints of the entities are
   compared, as described under Colors. With `false` a derived reading does not depend on an
@@ -428,10 +433,10 @@ pub struct GraphSymmetryConfig {
   change to the molecule a new value is built. Nothing ties a value to a molecule, as for
   `RingViews::from_ring_set`. Pairing data with a molecule does not validate that relationship;
   mismatched context has no specified semantic result and must not panic.
-- **Caches.** Every query shares the Constitution search prepared by the factory. The first
-  constitutional topicity check uses that same data. The stereogenic units are the one answer
-  kept, because they are computed for all records together in S5d. Other query answers are not
-  cached.
+- **Result ownership.** Every query shares the Constitution search prepared by the factory.
+  S5d computes the stereogenic-site kinds in one batch and returns the final classifications
+  to the caller. GraphSymmetry retains no query results. Its fields and construction remain
+  unchanged by S5d.
 
 **Selected layout: one Constitution search.** The search graph omits stereo entities. At a
 leaf, the image of a stereo record is found from its mapped atom or bond site; its kind,
@@ -498,7 +503,6 @@ let stereo = mol.stereo_atom(id).with_symmetry(&symmetry);
 stereo.stereogenicity();
 stereo.topicity(a, b);
 stereo.ligand_symmetry(permutation);
-stereo.stereogenic_unit();
 stereo.constraints().evidenced(key);
 ```
 
@@ -509,7 +513,6 @@ pub fn with_symmetry(self, symmetry: &'a GraphSymmetry) -> Self;
 pub fn stereogenicity(&self) -> Stereogenicity;
 pub fn topicity(&self, a: StereoLigandPosition, b: StereoLigandPosition) -> Topicity;
 pub fn ligand_symmetry(&self, permutation: OrientedLigandPermutation) -> bool;
-pub fn stereogenic_unit(&self) -> StereogenicUnit;
 ```
 
 - A derived reading on a view without the value attached is a caller error and panics, as a ring
@@ -522,15 +525,28 @@ pub fn stereogenic_unit(&self) -> StereogenicUnit;
   kind it stays vacuous.
 - `evidenced`, `satisfies` and `is_compatible` include the derivation through the keyed reading.
 
+**Keyed-reading contract, agreed 2026-11-15.** These symmetry-derived keys use the specified
+raw-input readings. Their contracts state the derived values, evidence and compatibility
+behavior, context requirements, and preservation of the supplied molecule directly.
+Normalization invariance is not a law of these readings. The keyed results retain their
+existing lattice semantics; adding the symmetry derivation does not impose normalization
+on its inputs.
+
 The validator and the enumerator read the derived values from the stereo views and keep their own
 comparison with the assertion, which reports the derived value in a contradiction.
 
-### Stereogenic units
+### Stereogenic-site kinds
 
-`StereogenicUnit` is a property of a stereo record on the constitution, decided among the stereo
-records the molecule has. It does not depend on the configurations stored in them. The adder, the
+StereogenicSiteKind classifies whether a candidate stereo entity can contribute to distinguishing
+the possible stereoisomers of the constitution, and how. It is decided among the kinded stereo
+records the molecule has and does not depend on their stored coset assignments. The adder, the
 remover and the enumerator select by it. The adder supplies every candidate before it asks. A
 single record on one center of 1,3-dichlorocyclobutane, with none on the other, is not a unit.
+
+The name StereogenicSiteKind was agreed on 2026-11-15: Site follows the repository's atom/bond
+site terminology, and Kind identifies the closed classification enum. Its four variants are
+unchanged. S3c implemented the name StereogenicUnit; S5d renames that enum and its exports.
+The completed S3c record below retains its implementation-time name.
 
 | Variant | Meaning | Published as |
 | --- | --- | --- |
@@ -544,12 +560,12 @@ The two kinds are told apart by the ligands, as in the papers. For the two-coset
 has equal ligands and is `Configurational`, although it depends on no other unit.
 
 "Stereogenic unit" is the term of IUPAC 1996 and of the CIP papers for a focus of
-stereoisomerism. The rustdoc of `StereogenicUnit`, `Stereogenicity` and `Topicity` and of their
+stereoisomerism. The rustdoc of StereogenicSiteKind, `Stereogenicity` and `Topicity` and of their
 variants cites the papers their definitions are taken from.
 
-`Stereogenicity` and `StereogenicUnit` are two types because they differ on the same site.
+`Stereogenicity` and StereogenicSiteKind are two types because they differ on the same site.
 
-| Site | `Stereogenicity` | `StereogenicUnit` |
+| Site | `Stereogenicity` | StereogenicSiteKind |
 | --- | --- | --- |
 | C1 of 1,3-dichlorocyclobutane, the other center undetermined | `Prostereogenic` | `Configurational` |
 | one of the two like centers of cis,trans-1,3,5-trimethylcyclohexane | `Prostereogenic` | `Configurational` |
@@ -560,9 +576,41 @@ In cis,trans-1,3,5-trimethylcyclohexane inverting one of the two like centers gi
 molecule, so the center is not stereogenic, and all three records are needed to tell the isomer
 from the all-cis one.
 
-The reading is `stereogenic_unit()` on the stereo views. It has no asserted side. Whether one site
-is a unit depends on which of the others are, so the value of every stereo record of the molecule
-is computed together, on first use, and kept in the `GraphSymmetry`.
+**Batch contract, agreed 2026-11-15.** Molecule::stereogenic_site_kinds takes the existing
+GraphSymmetry and computes the classifications together. GraphSymmetryView::stereogenic_site_kinds
+forwards using its borrowed molecule and owned or borrowed auxiliary data:
+
+```rust
+let kinds = mol.graph_symmetry(&config).stereogenic_site_kinds();
+```
+
+The result is an owned Vec<(Entity, StereogenicSiteKind)> with exactly one entry per kinded
+stereo entity. Keys are exclusively Entity::StereoAtom(StereoAtomId) and
+Entity::StereoBond(StereoBondId). They are strictly ordered by stereo-atom ID first, then
+stereo-bond ID, each ascending. These are stereo-record IDs, not the underlying AtomId or
+BondId. Kindless records are omitted from the calculation and output; their omission does not
+renumber the remaining IDs. A molecule without stereo records, or with only kindless records,
+returns an empty vector. Kinded records with undetermined cosets are still classified.
+Recognizing and adding candidate sites remains a separate operation.
+
+The caller owns and can retain the completed result, iterate it or use binary search by entity
+ID. The calculation can emit entries in ID order directly. It uses the borrowed molecule and
+prepared search data without copying or normalizing the molecule. Mismatched auxiliary context
+retains the existing unspecified-result/no-panic contract. Changing valid stored cosets alone
+does not invalidate these kinds; changes to the relevant constitution, candidate records or
+selected constraints can invalidate them. The result also reflects the supplied calculation
+settings, including max_classification_trials.
+
+There is no per-record computing accessor, new result carrier type or retained result field in
+GraphSymmetry. The rejected lazy-cache proposal computed the whole batch, returned one kind and
+kept the rest to make later per-record calls cheap. Returning the batch directly gives the caller
+that reuse. Eagerly retaining the same final results in GraphSymmetry is also unnecessary.
+The three S5c stereo-view readings and their attachment flow are unchanged.
+
+A BTreeMap<Entity, StereogenicSiteKind> was the alternative return shape. The sorted vector was
+selected for the bulk consumer flow, contiguous storage and binary-search lookup. No map/vector
+timing comparison was run or is claimed by this choice. The existing graph-layout measurements
+do not compare these result representations.
 
 The procedure decides the two conditions of Perdih and Razinger with the search.
 
@@ -584,19 +632,112 @@ Steps 2 and 3 read the frame action of a remapping on a record and apply it to t
 the kind. They do not read the stored cosets, which is why the units do not depend on them.
 
 Step 3 tries assignments one by one and is exponential in the number of moved records when none of
-them works. It tries at most `max_assignments` assignments for one record. When the limit is
+them works. It tries at most max_classification_trials assignments for one record. When the limit is
 reached the confirmation stops and the record stays a unit, as the iteration limit of the present
-fixpoint ends its work with the result so far. `stereogenic_unit()` does not fail. A record can
-then be kept whose configuration never changes the stereoisomer.
+fixpoint ends its work with the result so far. The batch calculation does not fail at the limit.
+A record can then be kept whose configuration never changes the stereoisomer.
 
 ### Transformers
 
-`StereoSelection` selects by `StereogenicUnit`: the field `stereogenic_units` replaces
+`StereoSelection` selects by StereogenicSiteKind: the field `stereogenic_site_kinds` replaces
 `stereogenicities`. The default of the adder is `Constitutional` and `Configurational`.
-`StereoPerceiver::classify` returns the `StereogenicUnit` of each requested site.
 
-The adder adds every recognized site to a copy of the molecule, builds its `GraphSymmetry`, and
-keeps the records whose unit is selected.
+**Consumer interfaces, agreed 2026-11-15.** StereoPerceiver keeps the related recognition and
+classification functionality together. Its classify method remains an instance method:
+
+```rust
+impl StereoPerceiver {
+    pub fn classify(
+        &self,
+        molecule: &Molecule,
+        sites: &[StereoSite],
+        symmetry: &GraphSymmetry,
+    ) -> Result<Vec<(StereoSite, StereogenicSiteKind)>, StereoPerceptionError>;
+
+    pub fn recognize(
+        &self,
+        molecule: &Molecule,
+        selection: &StereoSelection,
+        automorphism_algorithm: AutomorphismAlgorithm,
+        ring_config: RingConfig,
+        max_classification_trials: u32,
+    ) -> Result<StereoDerivation, StereoPerceptionError>;
+}
+```
+
+classify accepts requested topology sites as a borrowed slice. Input order is unrestricted;
+duplicate requests are coalesced. It returns one classification per distinct requested site,
+sorted by StereoSite::Atom(AtomId) followed by StereoSite::Bond(BondId), each ascending.
+These keys differ from the stereo-record IDs in the graph-IR batch. It validates the requested
+sites and kind/frame prerequisites, computes one batch over the supplied molecule's kinded
+records, and projects the requested results. It uses the supplied GraphSymmetry rather than
+constructing another one or taking separate algorithm/budget arguments. Requested-site failures
+retain StereoPerceptionError; the input slice and result vector require no tree collections.
+
+Classification accepts existing records of every geometry supported by the graph-IR batch.
+It does not reject a record solely because its coset is symbolic. Stored-coset interpretation
+and conformance checks belong to operations that require them, including enumeration and
+conformance validation. Classification does not use the model's geometry-recognition or
+fluxionality restrictions. Recognition and enumeration retain their existing supported
+geometries and fluxionality policies; this adds no recognition or enumeration algorithm.
+
+The kind calculation is model-independent, but that does not require changing the perceiver's
+ownership or model-bearing operation interfaces. Keep &self on classify, the existing model
+snapshots, and these StereoRemover constructors:
+
+```rust
+impl StereoRemover {
+    pub fn new(model: &StereoModel) -> Self;
+    pub fn with_config(model: &StereoModel, config: RemoveStereoConfig) -> Self;
+}
+```
+
+The model-taking remove_stereo and remove_stereo_into convenience methods, including their
+Python counterparts, also stay. Moving classify to a free function, making it an associated
+function without &self, or removing the model-taking removal interfaces is rejected. The current
+absence of a model read in classification does not by itself justify that public-interface churn.
+
+The shared budget name is max_classification_trials. It replaces the implemented
+GraphSymmetryConfig::max_assignments in S5d and the old para_stereo_max_iterations setting in
+AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig and StereoPerceiver::recognize in
+S5e. It bounds the internal assignment trials used to confirm one site's kind. It does not
+limit the number of batch results or stereoisomers generated. The adder uses it for prospective
+classification; the remover and enumerator use it when a site-kind filter requests classification.
+The completed implementation records retain their names at the time.
+
+StereoValidateConfig instead loses para_stereo_max_iterations without a replacement budget.
+The validator checks stereogenicity, topicity and ligand-symmetry assertions, which do not run
+the site-kind batch. Its operational fields are:
+
+```rust
+pub struct StereoValidateConfig {
+    pub automorphism_algorithm: AutomorphismAlgorithm,
+    pub ring_config: RingConfig,
+}
+```
+
+**Validator boundary, agreed 2026-11-15.** S5e uses the derived readings already available
+to check assertions, without adding symbolic analysis. A nonliteral stored coset does not by
+itself require Underdetermined when the asserted predicate can be established without it.
+Where inputs required by that predicate remain unresolved, validation stays Underdetermined.
+Broader handling of symbolic forms is deferred. This settles the remaining S5 semantics,
+interfaces and nomenclature.
+
+**Recognition context.** When site-kind filtering requires classification, collect all eligible
+candidates under the recognition model before applying the output selectors. Add those candidates
+to a temporary molecule together with the existing records, prepare its GraphSymmetry and compute
+the kinds in one batch. Then apply the site, geometry-kind and site-kind selectors to the returned
+additions. Site/kind selection does not narrow the candidate context used for classification.
+This is a general ordering rule, not special handling for a ring or one fixture.
+
+For example, with neither record present on 1,3-dichlorocyclobutane, selecting only C1 and
+Configurational still classifies against candidates at both C1 and C3, then returns only C1.
+The current early site/kind filtering must be corrected to implement that selection meaning.
+
+Each operation retains its returned classifications for its own use. Enumeration does not
+recompute the batch for different valid coset assignments while the relevant constitution and
+candidate records remain unchanged; candidate-specific symmetry data is still prepared for the
+asserted-constraint checks.
 
 - The sequence of issue 43, add, enumerate, add, no longer adds records at the CH₂ carbons. They
   are `Prostereogenic`, and the units do not depend on the configuration that the enumeration
@@ -764,8 +905,10 @@ application. Search machinery remains independent of both consumers.
 | the view conveniences `is_stereogenic`, `is_prostereogenic`, `is_homotopic`, `is_enantiotopic`, `is_diastereotopic` | comparison with the variant |
 | `MoleculeColoring`, `ConstitutionColoring`, `MoleculeColoringFeatures` | `AsColor`, the one definition of a color, with `include_constraints`; the field switches have no replacement |
 | `StereoModel::para_stereo` | nothing; selecting `Constitutional` alone leaves the units that depend on others out |
-| `para_stereo_max_iterations` of the stereo operation configs and perceiver methods | `max_assignments` |
-| `StereoSelection::stereogenicities` | `StereoSelection::stereogenic_units` |
+| `para_stereo_max_iterations` in AddStereoConfig, RemoveStereoConfig, EnumerateStereoConfig and StereoPerceiver::recognize | max_classification_trials |
+| `StereoValidateConfig::para_stereo_max_iterations` | removed without replacement |
+| the algorithm/iteration arguments and set/map types of StereoPerceiver::classify | a supplied GraphSymmetry, a site slice and a sorted result vector, with &self retained |
+| `StereoSelection::stereogenicities` | `StereoSelection::stereogenic_site_kinds` |
 
 The search has no iteration to switch on. A pseudoasymmetric center and a ring cis/trans center
 are `Configurational` units, and in a molecule whose other configurations make them so they have
@@ -773,14 +916,15 @@ the class `Stereogenic`.
 
 ### Consequences
 
-- **`umol-graph`.** `StereoPerceiver::classify`, the conformance validator and the enumerator
-  build one `GraphSymmetry` per molecule and read the stereo views. `StereoValidateConfig`,
-  `AddStereoConfig`, `RemoveStereoConfig` and `EnumerateStereoConfig` carry `max_assignments` in
-  place of the iteration limit, and `StereoModel` loses `para_stereo`. In a molecule whose other
+- **`umol-graph`.** Classification uses supplied GraphSymmetry data and one site-kind batch;
+  the validator and enumerator read the three derived stereo-view values using auxiliary data
+  for the relevant molecule. AddStereoConfig, RemoveStereoConfig and EnumerateStereoConfig
+  carry max_classification_trials in place of the iteration limit. StereoValidateConfig loses
+  that limit without replacement, and StereoModel loses para_stereo. In a molecule whose other
   configurations make them so, pseudoasymmetric and ring cis/trans centers have the class
   `Stereogenic`. The operations get no error from `graph_symmetry`. In a malformed molecule
   every recognized site reads `Constitutional`, and the default adder keeps all of them.
-- **Stereo transformers.** The adder, the remover and the enumerator select by `StereogenicUnit`,
+- **Stereo transformers.** The adder, the remover and the enumerator select by StereogenicSiteKind,
   as described above. Results of the default adder change for compounds with configurational
   units.
 - **`umol-io`.** The table reader names the two renamed variants.
@@ -789,11 +933,12 @@ the class `Stereogenic`.
   stand for `Nonstereogenic`, `Prostereogenic` and `Stereogenic`, and `Distinct` has the fourth
   topicity glyph `%` beside `=`, `'` and `/`.
 - **Python.** The `Stereogenicity` and `Topicity` enums, `StereoSelection`, the stereo operation
-  configs and `StereoModel` follow the Rust changes, and `StereogenicUnit` is added. The Python
+  configs and `StereoModel` follow the Rust changes, and StereogenicSiteKind is added. The Python
   stereo constraints views have the keyed readings, so Python gets `GraphSymmetry`,
   `GraphSymmetryConfig`, `GraphSymmetryView`, `Molecule.graph_symmetry`, `with_symmetry`, and
-  the four derived readings on the stereo views. A derived reading without the value raises
-  `ValueError`, as a ring key does.
+  the three derived readings on the stereo views. The molecule and symmetry view expose the
+  batch stereogenic_site_kinds operation. A derived stereo-view reading without the attached
+  value raises `ValueError`, as a ring key does.
 - **Guides.** `nomenclature.md`, `data-types.md`, `operations.md`, `python-api.md` and
   `docs/chemistry/representation.md` name the classes `Symmetric` and `Prochiral`, describe the
   para-stereo setting, and describe the coloring features.
@@ -811,8 +956,9 @@ the class `Stereogenic`.
 One `GraphSymmetry` per molecule carries one Constitution incidence graph, its colors and
 refinement. It does not pay for molecule copying or normalization. A view borrows the molecule and either owns or borrows
 that auxiliary data. Extracting owned data moves it; extracting borrowed data clones the auxiliary
-data. A reading costs an exit by cell or one or more searches. The stereogenic units are computed
-together and cached.
+data. A reading costs an exit by cell or one or more searches. Stereogenic-site classification
+computes one batch and returns its final sorted vector to the caller. GraphSymmetry construction
+does not perform that calculation or retain its output.
 
 The timing trials below used a setup that retained a normalized molecule. Their measurements
 describe those trials, not the cost of the revised setup and checks. The correctness trial of
@@ -2846,7 +2992,7 @@ molecule::symmetry::remapping_exists_at and molecule::symmetry::remapping_exists
 Those functions and GraphSymmetry::cell are crate-visible for the view consumers. The
 coset-change check now has its production caller. The auxiliary fields, generator filter,
 canonicalization checks, color calculation and generic search algorithm are unchanged.
-Constraint-view propagation remains S6a; stereogenic_unit remains S5d.
+Constraint-view propagation remains S6a; the batch site-kind calculation remains S5d.
 
 The first 80 view cases and all 15 benchmark workloads were written before production changes.
 Their initial library build failed only on the missing with_symmetry methods. They check the
@@ -2915,21 +3061,42 @@ Source hashes were captured before compilation and checked unchanged afterward. 
 | umol-graph-ir/benches/constraint_readings.rs | `fa8ff2c8b0adb335a737bc1dba2e82dc5f8b33e1510c7098fd3647f54d21e27a` |
 | Timed constraint_readings binary | `d7c8bcd261a074acb55c9cdd98b3b2ce75328a3fc4af8ae47c78286434772011` |
 
-#### S5d — Stereogenic units
+#### S5d — Batch stereogenic-site kinds
 
-- **Module:** `ir::molecule::symmetry` and `ir::view::stereo`.
-- **Tests and benches first:** establish the unit of every approved Razinger candidate against
-  the published classification and exhaustive assignment enumeration. Cover all four
+- **Module:** `ir::stereo`, its `ir` exports, `ir::molecule::symmetry`,
+  `ir::view::symmetry`, their tests and `benches/constraint_readings.rs`.
+- **Tests and benches first:** establish the complete batch for every approved Razinger input
+  against the published classifications and exhaustive assignment enumeration. Cover all four
   variants, literal/undetermined/mixed stored cosets, a single record on one cyclobutane center,
   square-planar and trigonal-bipyramidal fixtures, encoding failure and the assignment limit
-  below structure k's eight assignments. Write the unit-reading benchmark on the prepared
-  S0a inputs before the new computation.
-- **Changes:** add the frame-action reading used by the unit procedure, implement its four
-  steps and `stereogenic_unit` on the stereo views. Compute all records together on first use
-  and cache the result in the auxiliary data, using the supplied molecule for the computation.
-  The stored configurations do not decide the units. The assignment limit retains the result
-  so far as specified; it does not add an error surface.
-- **Kind:** additive; graph IR green, workspace still red. `[dep: S5c, S3c]`
+  below structure k's eight assignments. Assert the exact Entity keys and kinds in order,
+  including interleaved source-site/record numbering, both stereo entity kinds, omitted
+  kindless records with ID gaps, mixed kinded/kindless records, no stereo records and only
+  kindless records. Check molecule/view agreement and source preservation. Write the batch
+  workloads on S0a inputs before the computation: prepare GraphSymmetry outside the timed
+  region, then compute and consume one complete owned vector per iteration. Retain the
+  existing full-operation workloads for the S5e/S5g comparisons.
+- **Changes:** rename S3c's existing StereogenicUnit enum and exports to StereogenicSiteKind,
+  preserving all four variants and documenting the literature term. Rename the existing
+  GraphSymmetryConfig::max_assignments field and its default/test references to
+  max_classification_trials, preserving its value and meaning. Add the specified
+  remapping_frame_action calculation and implement the four-step classification procedure
+  as Molecule::stereogenic_site_kinds(&GraphSymmetry), with the same-name forwarding method
+  on GraphSymmetryView. Return the owned Vec<(Entity, StereogenicSiteKind)> specified above:
+  one entry per kinded record, stereo-atom IDs ascending followed by stereo-bond IDs ascending.
+  Omit kindless records from the calculation and output; return an empty vector when there
+  are no kinded records. The caller retains the final batch. Stored coset assignments do not
+  decide the kinds. The assignment limit retains the result so far as specified and adds no
+  error surface. Preserve raw-input and mismatched-context contracts.
+- **Representation:** keep GraphSymmetry's existing five fields and factory unchanged. Add
+  no result cache, per-record computing accessor or result carrier type. The three S5c
+  stereo-view readings remain unchanged.
+- **Gate:** run the affected batch tests and literature/property comparisons, the graph-IR
+  all-features tests and Clippy, and the fixed batch workloads. Record batch costs separately
+  from auxiliary preparation and the earlier per-record reading costs. Check the full diff
+  against the settled symbols, return contract and unchanged GraphSymmetry representation.
+- **Kind:** breaking enum/config-field renames plus additive batch operations; graph IR green,
+  workspace still red within the existing S5 migration. `[dep: S5c, S3c]`
 
 #### S5e — Rust operation consumers
 
@@ -2939,17 +3106,42 @@ Source hashes were captured before compilation and checked unchanged afterward. 
   43's add/enumerate/add sequence, the default selection of configurational units, removal on
   cis,trans-1,3,5-trimethylcyclohexane, all four config defaults, intersecting selectors with
   unrestricted and empty cases, and the published stereoisomer counts grouped by canonical
-  equality. Show old/new expected values where behavior changes.
+  equality. Cover the concrete C1-only dichlorocyclobutane selection above: both missing
+  candidates participate in classification, but only C1 is returned. Cover classify's slice
+  input, duplicate coalescing, sorted topology-site output, symbolic cosets, every supported
+  existing geometry, and independence from the model's recognition/fluxionality restrictions.
+  Keep the existing model-taking removal calls while migrating their cases. Check the classification budget
+  separately from enumeration's result count and the validator's budget-free config.
+  Cover an undetermined own coset whose asserted stereogenicity can already be established,
+  and unresolved required inputs that retain Underdetermined, within the validator boundary above.
+  Show old/new expected values where behavior changes.
   Keep the S0b and S5a workloads and inputs ready before migration; adapt their calls with the
-  API change so each still measures its stated workload.
+  API change so each still measures its stated workload. In the existing classify comparison,
+  include the auxiliary preparation previously performed inside classify; keep S5d's
+  preparation-excluding batch measurement separate.
 - **Changes:** build one auxiliary value per input or enumeration candidate, extracting it
   from the owning adapter for stereo views. Use the derived readings while keeping the
-  operation's assertion comparison and diagnostics. Select by `stereogenic_units`, return
-  `StereogenicUnit` from `StereoPerceiver::classify`, and migrate the selection's constructor
-  and `matches` argument with its field. Use the agreed adder defaults and replace
-  `para_stereo_max_iterations` by `max_assignments` in the operation configs and in
-  `StereoPerceiver::recognize` and `classify`. Remove `StereoModel::para_stereo` and the
-  enumerator's per-site cache. Keep the existing recognition kinds and other operation contracts.
+  operation's assertion comparison and diagnostics, within the agreed validator boundary and
+  without adding symbolic analysis. Select by `stereogenic_site_kinds`, return
+  the sorted site/kind vector from StereoPerceiver::classify with the instance/slice/supplied-data
+  interface above, and migrate the selection's constructor and matches argument with its field.
+  Preserve the model snapshots, StereoRemover constructors and model-taking convenience methods.
+  When site-kind filtering requires classification, recognition collects all eligible candidates
+  before applying output selectors; that context includes those candidates and the existing
+  records. Compute one batch for each relevant constitution/candidate set and retain the returned
+  vector within the operation; look up requested records using its sorted IDs. Reuse those final
+  kinds across valid coset assignments
+  while the relevant inputs and settings remain unchanged. Keep candidate-specific auxiliary
+  preparation for asserted-constraint readings. Use the agreed adder defaults. Replace
+  para_stereo_max_iterations with max_classification_trials in AddStereoConfig,
+  RemoveStereoConfig, EnumerateStereoConfig and StereoPerceiver::recognize. Remove the old
+  iteration field from StereoValidateConfig without replacement; it retains only
+  automorphism_algorithm and ring_config. classify takes its algorithm and budget through the
+  supplied GraphSymmetry. Remove StereoModel::para_stereo and the enumerator's per-site cache.
+  Keep the existing recognition/enumeration geometries and fluxionality policies; classification
+  accepts all existing geometries supported by the graph-IR batch and does not reject a record
+  solely because its coset is symbolic. Retain the other operation contracts outside these
+  explicit changes.
 - **Kind:** breaking; graph IR and graph green, workspace red until S5f. `[dep: S5d]`
 
 #### S5f — Python follows the Rust removals
@@ -2957,13 +3149,18 @@ Source hashes were captured before compilation and checked unchanged afterward. 
 - **Module:** `umol-py` model, stereo perception, selection and transformation bindings and tests.
 - **Tests first:** write the Python counterparts of the changed model/config/selector and
   classification contracts before their bindings. Preserve the corresponding Rust ownership
-  and error behavior; name each required Python/Rust difference explicitly.
-- **Changes:** expose `StereogenicUnit`, change `StereoSelection` to `stereogenic_units`, remove
-  `para_stereo`, replace the iteration limits by `max_assignments`, and migrate the existing
-  operation bindings and tests. The new graph-symmetry/view surface is added in S6b.
+  and error behavior; name each required Python/Rust difference explicitly. Cover the
+  max_classification_trials rename on the three operation configs, retained model arguments
+  on removal, and recognition's full candidate context followed by output selection.
+- **Changes:** expose StereogenicSiteKind, change `StereoSelection` to `stereogenic_site_kinds`,
+  remove para_stereo, and use max_classification_trials in AddStereoConfig, RemoveStereoConfig
+  and EnumerateStereoConfig. Retain the model-taking removal methods and migrate the existing
+  operation bindings and tests to the settled Rust contracts. The new graph-symmetry/view surface
+  is added in S6b.
+  StereoValidateConfig has no Python binding to migrate; its field removal belongs to S5e.
 - **Gate:** rebuild the extension in `umol-py/.venv`, then run the affected Python tests and
   Rust binding tests. Restore the workspace build and tests before S5g.
-- **Kind:** breaking, red-to-green for the workspace. `[dep: S5e, S3c]`
+- **Kind:** breaking, red-to-green for the workspace. `[dep: S5e, S5d]`
 
 #### S5g — Query and operation gate
 
@@ -2989,14 +3186,19 @@ stage boundary.
 - **Tests and benches first:** state exact results for each derived key with attached data and
   the missing-context failure before changing the keyed methods. Keep fluxionality and
   kindless cases vacuous. Cover `derived_complete`, `evidenced`, `evidenced_complete`,
-  `satisfies` and `is_compatible`, and both constraints settings. Show the old vacuous derived
+  `satisfies` and `is_compatible`, both constraints settings, and preservation of the supplied
+  molecule. Assert the specified raw-input behaviors directly. Migrate the affected stereo
+  keyed-reading properties to those contracts instead of requiring invariance under molecule
+  normalization; preserve unrelated normalization properties. Show the old vacuous derived
   results beside the new literal values before editing assertions. Add the keyed workloads
   and record their old timings as `pre-246-keyed` before changing their behavior; the old and
   new work performed by each reading is stated with the results.
 - **Changes:** add `with_symmetry` to the two stereo constraint views and propagate attached
   data when a stereo view yields its constraints view. Derive the three keys through the
   molecule-backed readings. Preserve the existing lattice semantics of evidence and assertion
-  comparison; those operations do not require changing the raw symmetry predicates.
+  comparison; those operations do not require changing the raw symmetry predicates. Update the
+  keyed-reading rustdoc to state the agreed behaviors and remove the normalization-invariance
+  guarantee for the symmetry-derived keys.
 - **Gate:** run the affected tests and property cases, build the benchmark and measure the new
   keyed workloads. Recheck graph consumers if the shared view plumbing changes.
 - **Kind:** breaking; Rust green, Python keyed consumers migrate in S6b. `[dep: S5g]`
@@ -3007,14 +3209,18 @@ stage boundary.
   existing ring bindings as the ownership/lifecycle reference.
 - **Tests first:** cover all config fields and defaults, including `include_constraints`; the
   factory's adapter return; owned/borrowed pairing, extraction and compatible data reuse; all
-  five molecule-wide queries and their view equivalents; stereo `with_symmetry`, the four
-  derived readings and the keyed readings. Cover missing context, consumed views and molecule
-  mutation using the existing error vocabulary. Map the old vacuous expectations in
+  five molecule-wide queries and their view equivalents; the molecule/view batch result,
+  stereo `with_symmetry`, the three derived readings and the keyed readings. Cover batch
+  ordering, caller-owned results, omitted kindless records and both empty-result cases.
+  Cover missing context, consumed views and molecule mutation using the existing error vocabulary.
+  Map the old vacuous expectations in
   `tests/test_constraint_readings.py` to attached-data readings and missing-context failures,
-  preserving the kindless cases. Tests are written before the bindings.
+  preserving the kindless cases. Use S6a's specified behaviors for the Python keyed-reading
+  assertions. Tests are written before the bindings.
 - **Changes:** bind `GraphSymmetry`, `GraphSymmetryConfig` and `GraphSymmetryView` with the
-  settled Rust surface. `Molecule.graph_symmetry` returns the view. Follow `RingViews` for
-  molecule ownership, owned/borrowed auxiliary storage, view counters, extraction costs and
+  settled Rust surface, including stereogenic_site_kinds on the molecule and symmetry view.
+  `Molecule.graph_symmetry` returns the view. Follow `RingViews` for molecule ownership,
+  owned/borrowed auxiliary storage, view counters, extraction costs and
   consumption. Attach the extracted data to stereo/constraint views. A derived stereo reading
   without attached data raises `ValueError`; kindless keyed readings retain their vacuous
   behavior. Use `from_rust` and `to_rust` where Rust/Python conversions are needed.
@@ -3032,7 +3238,8 @@ stage boundary.
   `umol-graph-ir/spec/umol-dsl-spec.md` where already implemented enum terminology is stated.
 - **Changes:** describe the one color definition, caller-owned normalization, constraint
   selection, shallow application, the molecule/data/view relationship and the RingViews-style
-  lifecycle. Carry the class/unit/transformer decisions into the guides. Reconcile the
+  lifecycle. Carry the class/site-kind/transformer decisions and caller-owned batch contract
+  into the guides, with "stereogenic unit" retained as the literature term. Reconcile the
   description-level entries: levels select entity kinds, canonicalization includes their
   constraints, and graph readings choose whether to compare entity constraints. Replace the
   obsolete coloring-features examples. Check the eight form and span implementations, Rust

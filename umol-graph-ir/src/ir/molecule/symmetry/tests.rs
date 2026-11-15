@@ -13,6 +13,7 @@ use super::*;
 use crate::ir::atom::AtomForm;
 use crate::ir::bond::BondForm;
 use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
+use crate::ir::molecule::MoleculeEntries;
 use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
 use crate::ir::symmetry::{
     remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, OrderedPartition,
@@ -67,7 +68,7 @@ fn tetrahedral(peripherals: [Element; 4]) -> Molecule {
 }
 
 #[fixture]
-pub(crate) fn initial_color_molecule() -> Molecule {
+fn initial_color_molecule() -> Molecule {
     let normalized_three = NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
         ArithExpr::Lit(1),
         ArithExpr::Lit(2),
@@ -199,7 +200,7 @@ pub(crate) fn initial_color_molecule() -> Molecule {
 }
 
 #[fixture]
-pub(crate) fn constrained_color_molecule(initial_color_molecule: Molecule) -> Molecule {
+fn constrained_color_molecule(initial_color_molecule: Molecule) -> Molecule {
     let mut molecule = initial_color_molecule;
     *molecule.atom_mut(AtomId(1)).attributes_mut() = AtomForm::from_element(Element::C)
         .with_charge(3)

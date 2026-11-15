@@ -96,6 +96,16 @@ Discussion documents are non-normative and must not be cited from source comment
   Check for unrequested renames, unnecessary abstractions, and changes to what tests exercise. Passing
   checks does not replace this review. When challenged, inspect the relevant producers and consumers
   before defending or editing the code.
+- A request for outstanding SIN (semantics, interfaces, nomenclature) requires an independent
+  completeness audit of the named scope. Inventory public and internal structures, stored state,
+  defaults, failure and lifecycle behavior, Rust/Python surfaces, and requirements from later subitems.
+- Check design assumptions against relevant producers, consumers, tests, properties, and normative
+  guides. Treat plans as claims to verify. Distinguish explicit user decisions, implemented facts,
+  consequences settled by repo rules, and unresolved questions. Preserve approved decisions and
+  expose conflicting requirements; existing code or plan text does not establish design approval.
+- Keep SIN audits read-only unless edits are requested; present unresolved questions one at a time.
+  Before declaring all SIN settled, state the checked coverage and any unexamined areas. Resolving
+  the questions surfaced so far does not establish that the audit is complete.
 
 ## Authority and synchronization
 
