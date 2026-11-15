@@ -1,4 +1,6 @@
 //! Unit tests for the symmetry, the colors and the remapping checks of a molecule.
+//! Exhaustive enumeration uses dense, simple constraint-free graphs, literal binary
+//! configurations and literal incidence weights, independently of production colors and search.
 
 use std::cmp::Ordering;
 
@@ -1798,5 +1800,666 @@ fn test_remapping_exists_individualized(
             },
         ),
         expected,
+    );
+}
+
+fn exhaustive_atom_remappings(molecule: &Molecule) -> Vec<Vec<u32>> {
+    let count = molecule.atoms().count();
+    let mut bonds = vec![vec![None; count]; count];
+    for bond in molecule.bonds().iter() {
+        let [first, second] = bond.atom_ids();
+        bonds[first.index()][second.index()] = Some(bond.attributes());
+        bonds[second.index()][first.index()] = Some(bond.attributes());
+    }
+
+    fn enumerate(
+        molecule: &Molecule,
+        bonds: &[Vec<Option<&BondForm>>],
+        images: &mut Vec<u32>,
+        used: &mut [bool],
+        output: &mut Vec<Vec<u32>>,
+    ) {
+        let source = images.len();
+        if source == used.len() {
+            if preserves_overlay_incidences(molecule, images) {
+                output.push(images.clone());
+            }
+            return;
+        }
+        for target in 0..used.len() {
+            if used[target]
+                || molecule.atom(AtomId(source as u32)).attributes()
+                    != molecule.atom(AtomId(target as u32)).attributes()
+                || images
+                    .iter()
+                    .enumerate()
+                    .any(|(other, &image)| bonds[source][other] != bonds[target][image as usize])
+            {
+                continue;
+            }
+            images.push(target as u32);
+            used[target] = true;
+            enumerate(molecule, bonds, images, used, output);
+            used[target] = false;
+            images.pop();
+        }
+    }
+
+    let mut output = Vec::new();
+    enumerate(
+        molecule,
+        &bonds,
+        &mut Vec::new(),
+        &mut vec![false; count],
+        &mut output,
+    );
+    output
+}
+
+fn weighted_participants(
+    atoms: impl Iterator<Item = AtomId>,
+    electrons: &ElectronCountsForm,
+    images: &[u32],
+) -> Vec<(u32, i64)> {
+    let ElectronCountsForm::Lit(counts) = electrons else {
+        panic!("exhaustive enumeration requires literal electron counts");
+    };
+    let atoms = atoms.collect::<Vec<_>>();
+    assert_eq!(atoms.len(), counts.len());
+    let mut result = atoms
+        .into_iter()
+        .zip(counts)
+        .map(|(atom, &count)| (images[atom.index()], count))
+        .collect::<Vec<_>>();
+    result.sort();
+    result
+}
+
+fn preserves_overlay_incidences(molecule: &Molecule, images: &[u32]) -> bool {
+    let identity = (0..molecule.atoms().count() as u32).collect::<Vec<_>>();
+    let dative = |mapping: &[u32]| {
+        let mut result = molecule
+            .dative_bonds()
+            .iter()
+            .map(|bond| {
+                let mut donors = bond
+                    .donor_ids()
+                    .map(|atom| mapping[atom.index()])
+                    .collect::<Vec<_>>();
+                donors.sort();
+                (
+                    mapping[bond.acceptor_id().index()],
+                    donors,
+                    bond.attributes().clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        result.sort();
+        result
+    };
+    let aromatic = |mapping: &[u32]| {
+        let mut result = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|system| {
+                let form = system.attributes();
+                (
+                    weighted_participants(system.atom_ids(), &form.electrons, mapping),
+                    form.charge.clone(),
+                    form.unpaired_electrons.clone(),
+                    form.constraints.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        result.sort();
+        result
+    };
+    let multicenter = |mapping: &[u32]| {
+        let mut result = molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|bond| {
+                let form = bond.attributes();
+                (
+                    weighted_participants(bond.atom_ids(), &form.electrons, mapping),
+                    form.charge.clone(),
+                    form.unpaired_electrons.clone(),
+                    form.constraints.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        result.sort();
+        result
+    };
+    let noncovalent = |mapping: &[u32]| {
+        let mut result = molecule
+            .noncovalent_bonds()
+            .iter()
+            .map(|bond| {
+                let mut atoms = bond.atom_ids().map(|atom| mapping[atom.index()]);
+                atoms.sort();
+                (atoms, bond.attributes().clone())
+            })
+            .collect::<Vec<_>>();
+        result.sort();
+        result
+    };
+    dative(images) == dative(&identity)
+        && aromatic(images) == aromatic(&identity)
+        && multicenter(images) == multicenter(&identity)
+        && noncovalent(images) == noncovalent(&identity)
+}
+
+struct StereoRecord {
+    site: Vec<AtomId>,
+    ligands: Vec<StereoLigand>,
+    kind: StereoKind,
+    coset: u32,
+}
+
+fn stereo_records(molecule: &Molecule) -> Vec<StereoRecord> {
+    let configuration = |form: &StereoConfigurationForm| {
+        let StereoConfigurationForm::Kinded(kind, StereoCoset::Lit(coset)) = form else {
+            panic!("exhaustive symmetry checks require literal configurations");
+        };
+        (*kind, *coset)
+    };
+    molecule
+        .stereo_atoms()
+        .iter()
+        .map(|stereo| {
+            let (kind, coset) = configuration(&stereo.attributes().configuration);
+            StereoRecord {
+                site: vec![stereo.site_id()],
+                ligands: stereo.ligand_ids().to_vec(),
+                kind,
+                coset,
+            }
+        })
+        .chain(molecule.stereo_bonds().iter().map(|stereo| {
+            let (kind, coset) = configuration(&stereo.attributes().configuration);
+            let mut site = molecule.bond(stereo.site_id()).atom_ids().to_vec();
+            site.sort();
+            StereoRecord {
+                site,
+                ligands: stereo.ligand_ids().to_vec(),
+                kind,
+                coset,
+            }
+        }))
+        .collect()
+}
+
+fn preserves_stereo_configuration(
+    records: &[StereoRecord],
+    images: &[u32],
+    mirrored: bool,
+    changed: Option<(usize, u32)>,
+) -> bool {
+    for (source_index, source) in records.iter().enumerate() {
+        let mut site = source
+            .site
+            .iter()
+            .map(|atom| AtomId(images[atom.index()]))
+            .collect::<Vec<_>>();
+        site.sort();
+        let Some(target_index) = records.iter().position(|target| target.site == site) else {
+            return false;
+        };
+        if changed.is_some_and(|(index, _)| index == source_index && target_index != index) {
+            return false;
+        }
+        let target = &records[target_index];
+        if source.kind != target.kind {
+            return false;
+        }
+        let permutation = source
+            .ligands
+            .iter()
+            .map(|ligand| {
+                let image = StereoLigand::new(AtomId(images[ligand.atom_id.index()]), ligand.kind);
+                target
+                    .ligands
+                    .iter()
+                    .position(|candidate| *candidate == image)
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(permutation) = permutation else {
+            return false;
+        };
+        let transported = match source.kind {
+            StereoKind::Tetrahedral => {
+                let inversions = (0..4)
+                    .flat_map(|first| (first + 1..4).map(move |second| (first, second)))
+                    .filter(|&(first, second)| permutation[first] > permutation[second])
+                    .count();
+                source.coset ^ (inversions % 2) as u32
+            }
+            StereoKind::CisTrans => {
+                if permutation[0] / 2 != permutation[1] / 2
+                    || permutation[2] / 2 != permutation[3] / 2
+                {
+                    return false;
+                }
+                source.coset ^ ((permutation[0] % 2) ^ (permutation[2] % 2)) as u32
+            }
+            _ => panic!("exhaustive symmetry checks require binary stereo kinds"),
+        };
+        let mut expected = changed
+            .filter(|(index, _)| *index == target_index)
+            .map_or(target.coset, |(_, coset)| coset);
+        if mirrored && source.kind == StereoKind::Tetrahedral {
+            expected ^= 1;
+        }
+        if transported != expected {
+            return false;
+        }
+    }
+    true
+}
+
+fn exhaustive_symmetry(molecule: &Molecule) -> (bool, Vec<u32>, Vec<u32>) {
+    let mappings = exhaustive_atom_remappings(molecule);
+    let records = stereo_records(molecule);
+    let proper = mappings
+        .iter()
+        .filter(|images| preserves_stereo_configuration(&records, images, false, None))
+        .collect::<Vec<_>>();
+    let improper = mappings
+        .iter()
+        .filter(|images| preserves_stereo_configuration(&records, images, true, None))
+        .collect::<Vec<_>>();
+    let orbits = |star: bool| {
+        (0..molecule.atoms().count())
+            .map(|atom| {
+                proper
+                    .iter()
+                    .copied()
+                    .chain(improper.iter().copied().filter(|_| star))
+                    .map(|images| images[atom])
+                    .min()
+                    .unwrap()
+            })
+            .collect()
+    };
+    (improper.is_empty(), orbits(false), orbits(true))
+}
+
+fn exhaustive_stereogenicities(molecule: &Molecule) -> Vec<Stereogenicity> {
+    let mappings = exhaustive_atom_remappings(molecule);
+    let records = stereo_records(molecule);
+    records
+        .iter()
+        .enumerate()
+        .map(|(index, record)| {
+            let stereogenic = |fixed: Option<AtomId>| {
+                (0..2).filter(|&coset| coset != record.coset).any(|coset| {
+                    !mappings
+                        .iter()
+                        .filter(|images| fixed.is_none_or(|atom| images[atom.index()] == atom.0))
+                        .any(|images| {
+                            preserves_stereo_configuration(
+                                &records,
+                                images,
+                                false,
+                                Some((index, coset)),
+                            )
+                        })
+                })
+            };
+            if stereogenic(None) {
+                Stereogenicity::Stereogenic
+            } else if record.ligands.iter().any(|ligand| {
+                ligand.kind == StereoLigandKind::Atom && stereogenic(Some(ligand.atom_id))
+            }) {
+                Stereogenicity::Prostereogenic
+            } else {
+                Stereogenicity::Nonstereogenic
+            }
+        })
+        .collect()
+}
+
+fn exhaustive_topicity(
+    molecule: &Molecule,
+    record: usize,
+    first: usize,
+    second: usize,
+) -> Topicity {
+    let mappings = exhaustive_atom_remappings(molecule);
+    let records = stereo_records(molecule);
+    let focus = &records[record];
+    let first = focus.ligands[first].atom_id;
+    let second = focus.ligands[second].atom_id;
+    let candidates = mappings
+        .iter()
+        .filter(|images| {
+            let mut site = focus
+                .site
+                .iter()
+                .map(|atom| AtomId(images[atom.index()]))
+                .collect::<Vec<_>>();
+            site.sort();
+            site == focus.site && images[first.index()] == second.0
+        })
+        .collect::<Vec<_>>();
+    if candidates
+        .iter()
+        .any(|images| preserves_stereo_configuration(&records, images, false, None))
+    {
+        Topicity::Homotopic
+    } else if candidates
+        .iter()
+        .any(|images| preserves_stereo_configuration(&records, images, true, None))
+    {
+        Topicity::Enantiotopic
+    } else if !candidates.is_empty() {
+        Topicity::Diastereotopic
+    } else {
+        Topicity::Distinct
+    }
+}
+
+#[fixture]
+fn dichlorodifluoroethane_chiral() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                       {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn dichlorodifluoroethane_meso() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                       {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn dichlorodifluoroethane_chiral_renumbered() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "H" "F" "Cl" "F" "H" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                       {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn dichlorodifluoroethane_meso_renumbered() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "H" "F" "Cl" "F" "H" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                       {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn trichloropentane_meso() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#h3" "C" "C" "C" "C#h3" "Cl" "Cl" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]
+                [1 8 "1"] [2 9 "1"] [3 10 "1"]]
+        :stereo-atoms [{:site 1 :ligands [0 2 5 8] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 6 9] :attrs "Th0"}
+                       {:site 3 :ligands [2 4 7 10] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn trichloropentane_meso_inverted_c3() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#h3" "C" "C" "C" "C#h3" "Cl" "Cl" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]
+                [1 8 "1"] [2 9 "1"] [3 10 "1"]]
+        :stereo-atoms [{:site 1 :ligands [0 2 5 8] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 6 9] :attrs "Th1"}
+                       {:site 3 :ligands [2 4 7 10] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn trichloropentane_chiral() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C#h3" "C" "C" "C" "C#h3" "Cl" "Cl" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [1 5 "1"] [2 6 "1"] [3 7 "1"]
+                [1 8 "1"] [2 9 "1"] [3 10 "1"]]
+        :stereo-atoms [{:site 1 :ligands [0 2 5 8] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 6 9] :attrs "Th0"}
+                       {:site 3 :ligands [2 4 7 10] :attrs "Th1"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn dichlorocyclobutane_cis() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C#h2" "C" "C#h2" "Cl" "Cl" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"] [0 6 "1"] [2 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 6] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 5 7] :attrs "Th1"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn dichlorocyclobutane_trans() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C#h2" "C" "C#h2" "Cl" "Cl" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"] [0 6 "1"] [2 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 6] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 5 7] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn chlorofluoropropane() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
+                       {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn chlorofluoropropane_without_c1() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 1 :ligands [0 2 6 7] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn trimethylcyclohexane_all_cis() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C#h2" "C" "C#h2" "C" "C#h2" "C#h3" "C#h3" "C#h3" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [2 7 "1"] [4 8 "1"] [0 9 "1"] [2 10 "1"] [4 11 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 9] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 7 10] :attrs "Th1"}
+                       {:site 4 :ligands [3 5 8 11] :attrs "Th1"}]
+    }"#
+    )
+}
+
+#[fixture]
+fn trimethylcyclohexane_cis_trans() -> Molecule {
+    mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C#h2" "C" "C#h2" "C" "C#h2" "C#h3" "C#h3" "C#h3" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                [0 6 "1"] [2 7 "1"] [4 8 "1"] [0 9 "1"] [2 10 "1"] [4 11 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 5 6 9] :attrs "Th0"}
+                       {:site 2 :ligands [1 3 7 10] :attrs "Th0"}
+                       {:site 4 :ligands [3 5 8 11] :attrs "Th0"}]
+    }"#
+    )
+}
+
+#[rstest]
+#[case::dichlorodifluoroethane_chiral(dichlorodifluoroethane_chiral(), (true, vec![0, 0, 2, 3, 4, 2, 3, 4], vec![0, 0, 2, 3, 4, 2, 3, 4]))]
+#[case::dichlorodifluoroethane_meso(dichlorodifluoroethane_meso(), (false, vec![0, 1, 2, 3, 4, 5, 6, 7], vec![0, 0, 2, 3, 4, 2, 3, 4]))]
+#[case::dichlorodifluoroethane_chiral_renumbered(dichlorodifluoroethane_chiral_renumbered(), (true, vec![0, 0, 2, 3, 4, 3, 2, 4], vec![0, 0, 2, 3, 4, 3, 2, 4]))]
+#[case::dichlorodifluoroethane_meso_renumbered(dichlorodifluoroethane_meso_renumbered(), (false, vec![0, 1, 2, 3, 4, 5, 6, 7], vec![0, 0, 2, 3, 4, 3, 2, 4]))]
+#[case::trichloropentane_meso(trichloropentane_meso(), (false, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], vec![0, 1, 2, 1, 0, 5, 6, 5, 8, 9, 8]))]
+#[case::trichloropentane_meso_inverted_c3(trichloropentane_meso_inverted_c3(), (false, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], vec![0, 1, 2, 1, 0, 5, 6, 5, 8, 9, 8]))]
+#[case::trichloropentane_chiral(trichloropentane_chiral(), (true, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))]
+#[case::dichlorocyclobutane_cis(dichlorocyclobutane_cis(), (false, vec![0, 1, 0, 1, 4, 4, 6, 6], vec![0, 1, 0, 1, 4, 4, 6, 6]))]
+#[case::dichlorocyclobutane_trans(dichlorocyclobutane_trans(), (false, vec![0, 1, 0, 3, 4, 4, 6, 6], vec![0, 1, 0, 1, 4, 4, 6, 6]))]
+#[case::chlorofluoropropane(chlorofluoropropane(), (true, vec![0, 1, 2, 3, 4, 5, 6, 7], vec![0, 1, 2, 3, 4, 5, 6, 7]))]
+#[case::chlorofluoropropane_without_c1(chlorofluoropropane_without_c1(), (false, vec![0, 1, 2, 3, 4, 5, 6, 7], vec![0, 1, 2, 3, 4, 5, 6, 6]))]
+#[case::butene_cis(
+    mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h" "C#h" "C#h3"]
+      :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+      :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#),
+    (false, vec![0, 1, 1, 0], vec![0, 1, 1, 0])
+)]
+#[case::butene_trans(
+    mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h" "C#h" "C#h3"]
+      :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+      :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#),
+    (false, vec![0, 1, 1, 0], vec![0, 1, 1, 0])
+)]
+fn test_exhaustive_symmetry(
+    #[case] molecule: Molecule,
+    #[case] expected: (bool, Vec<u32>, Vec<u32>),
+) {
+    let original = molecule.clone();
+    assert_eq!(molecule.check_integrity(), Ok(()));
+    assert_eq!(exhaustive_symmetry(&molecule), expected);
+    assert_eq!(molecule, original);
+}
+
+#[rstest]
+#[case::dichlorodifluoroethane_chiral(dichlorodifluoroethane_chiral(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::dichlorodifluoroethane_meso(dichlorodifluoroethane_meso(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::dichlorodifluoroethane_chiral_renumbered(dichlorodifluoroethane_chiral_renumbered(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::dichlorodifluoroethane_meso_renumbered(dichlorodifluoroethane_meso_renumbered(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::trichloropentane_meso(trichloropentane_meso(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::trichloropentane_meso_inverted_c3(trichloropentane_meso_inverted_c3(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::trichloropentane_chiral(trichloropentane_chiral(), vec![Stereogenicity::Stereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic])]
+#[case::dichlorocyclobutane_cis(dichlorocyclobutane_cis(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::dichlorocyclobutane_trans(dichlorocyclobutane_trans(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::chlorofluoropropane(chlorofluoropropane(), vec![Stereogenicity::Stereogenic, Stereogenicity::Prostereogenic])]
+#[case::chlorofluoropropane_without_c1(chlorofluoropropane_without_c1(), vec![Stereogenicity::Prostereogenic])]
+#[case::trimethylcyclohexane_all_cis(trimethylcyclohexane_all_cis(), vec![Stereogenicity::Stereogenic, Stereogenicity::Stereogenic, Stereogenicity::Stereogenic])]
+#[case::trimethylcyclohexane_cis_trans(trimethylcyclohexane_cis_trans(), vec![Stereogenicity::Stereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Prostereogenic])]
+fn test_exhaustive_stereogenicities(
+    #[case] molecule: Molecule,
+    #[case] expected: Vec<Stereogenicity>,
+) {
+    assert_eq!(exhaustive_stereogenicities(&molecule), expected);
+}
+
+#[rstest]
+#[case::dative(
+    mol_dsl!(r#"{:atoms ["B" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+    vec![vec![0, 1]], vec![0, 1]
+)]
+#[case::aromatic(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
+    vec![vec![0, 1, 2, 3, 4], vec![0, 4, 3, 2, 1]], vec![0, 1, 2, 2, 1]
+)]
+#[case::multicenter(
+    mol_dsl!(r#"{:atoms ["C" "C" "C"]
+        :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,1,1]"}]}"#),
+    vec![vec![0, 1, 2], vec![0, 2, 1]], vec![0, 1, 1]
+)]
+fn test_exhaustive_atom_remappings(
+    #[case] molecule: Molecule,
+    #[case] expected: Vec<Vec<u32>>,
+    #[case] expected_orbits: Vec<u32>,
+) {
+    assert_eq!(molecule.check_integrity(), Ok(()));
+    let mappings = exhaustive_atom_remappings(&molecule);
+    assert_eq!(mappings, expected);
+    assert_eq!(
+        exhaustive_symmetry(&molecule),
+        (false, expected_orbits.clone(), expected_orbits)
+    );
+}
+
+#[rstest]
+#[case::chiral_proper(dichlorodifluoroethane_chiral(), false,
+    vec![vec![0, 1, 2, 3, 4, 5, 6, 7], vec![1, 0, 5, 6, 7, 2, 3, 4]])]
+#[case::chiral_improper(dichlorodifluoroethane_chiral(), true, vec![])]
+#[case::meso_proper(dichlorodifluoroethane_meso(), false, vec![vec![0, 1, 2, 3, 4, 5, 6, 7]])]
+#[case::meso_improper(dichlorodifluoroethane_meso(), true, vec![vec![1, 0, 5, 6, 7, 2, 3, 4]])]
+fn test_preserves_stereo_configuration(
+    #[case] molecule: Molecule,
+    #[case] mirrored: bool,
+    #[case] expected: Vec<Vec<u32>>,
+) {
+    let records = stereo_records(&molecule);
+    let accepted = exhaustive_atom_remappings(&molecule)
+        .into_iter()
+        .filter(|images| preserves_stereo_configuration(&records, images, mirrored, None))
+        .collect::<Vec<_>>();
+    assert_eq!(accepted, expected);
+}
+
+#[rstest]
+#[case::chlorofluoropropane(chlorofluoropropane(), 1, 2, 3, Topicity::Diastereotopic)]
+#[case::chlorofluoropropane_without_c1(
+    chlorofluoropropane_without_c1(),
+    0,
+    2,
+    3,
+    Topicity::Enantiotopic
+)]
+#[case::trichloropentane_meso(trichloropentane_meso(), 1, 0, 1, Topicity::Enantiotopic)]
+#[case::trichloropentane_chiral(trichloropentane_chiral(), 1, 0, 1, Topicity::Diastereotopic)]
+#[case::distinct(chlorofluoropropane(), 1, 0, 1, Topicity::Distinct)]
+#[case::methane(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::H),
+                    AtomForm::from_element(Element::H), AtomForm::from_element(Element::H), AtomForm::from_element(Element::H)],
+        bonds: (1..=4).map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1))).collect(),
+        stereo_atoms: vec![(AtomId(0), (1..=4).map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)).collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32))],
+        ..Default::default()
+    }), 0, 0, 1, Topicity::Homotopic
+)]
+fn test_exhaustive_topicity(
+    #[case] molecule: Molecule,
+    #[case] record: usize,
+    #[case] first: usize,
+    #[case] second: usize,
+    #[case] expected: Topicity,
+) {
+    assert_eq!(
+        exhaustive_topicity(&molecule, record, first, second),
+        expected
     );
 }

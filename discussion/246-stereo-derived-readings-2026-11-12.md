@@ -896,9 +896,10 @@ themselves.
 
 ### Third trial: shallow application and comparison
 
-A standalone crate in `scratch/246-normalization-trial` used the current workspace crates as
-dependencies, without a repository copy or production edits. The final run passed all 39 cases.
-The [report](../scratch/246-normalization-trial/report.txt) records its scope and command.
+A standalone correctness trial used the workspace crates at `b98caac18227` as dependencies,
+without a repository copy or production edits. All 39 cases passed. It enumerated complete small
+candidate remapping sets directly, without search pruning; its non-stereo entity domain was
+atoms and localized bonds.
 
 The trial evaluated literals, sets and undetermined cosets at their outer form. For a symbolic
 term it preserved the whole operand and recorded only the new action; a coset-identity action
@@ -914,12 +915,31 @@ application and compared representations directly. Canonical comparison controls
 | ignored and included raw constraints | excluded contradictions and invalid constraint positions were not read; included payloads were compared structurally |
 | accepted symbolic remappings | proper and star group checks passed on 1,000 bounded three-record assignments, including 2,600 group products |
 
+The 12 molecule cases covered literal, undetermined, finite-set, singleton-set and symbolic
+chlorofluoromethane configurations; contradictory atom constraints under both option settings;
+a stored singleton element versus a literal; meso and chiral dichlorodifluoroethane; and both
+cis/trans stereo-bond configurations. They checked complete orbit vectors and retained the
+source molecules structurally. The raw element example deliberately gave different symmetry
+readings before and after explicit normalization, while canonical forms agreed.
+
+For composition, every permitted first action was paired with at most the first eight second
+actions in permutation order. Canonical comparison used eight normalized input rows per kind,
+including symbolic expressions, under every permitted frame action, with and without mirroring.
+The 115,712 agreements establish local comparison parity; they do not represent a rebuilt
+canonicalizer using the prototype. The group checks used ten term shapes, all six permutations
+of the three records and the specified compatible frames. These are bounded checks rather than
+exhaustive checks of every expression or pair of actions.
+
 An initial interpretation contracted an operator already inside the supplied term. It lost raw
 syntax in `Mirror(Mirror(x))` across an action and its inverse. That interpretation was rejected.
 The final checks assert the complete newly constructed expression trees and separately check
 their value equivalence; exact operand preservation is checked when the new actions compose to
-the identity. This does not impose normalization on graph inputs or alter the public
-`FrameTransport` contract.
+the identity. In particular, separately applying an action and its inverse to
+`Mirror(Mirror(x))` constructs
+`Apply(Apply(Mirror(Mirror(x)), action), inverse)`. It preserves the original operand as a
+subexpression and is value-equivalent to it. Composing those two actions before application
+preserves the original expression exactly. This does not impose normalization on graph inputs
+or alter the public `FrameTransport` contract.
 
 The trial checked the application and comparison decisions using direct enumeration. It did
 not implement the new `GraphSymmetry`, its view or the shared `AsColor` path, and it measured no
@@ -927,10 +947,10 @@ timings. The implementation tests and measurements below precede those changes.
 
 ## Staged implementation plan
 
-The remaining work starts at S4. Its foundation is one color definition through `AsColor` and
-shared search-color construction. S0 to S3 retain their completed scope. Each subitem carries its
-own tests under the test-writing skill. Required tests, independent expected values and benchmark
-harnesses are written before the implementation they exercise. An intended initial test failure
+S0 to S4 are complete. The remaining work starts at S5 and uses one color definition through
+`AsColor` and shared search-color construction. Each subitem carries its own tests under the
+test-writing skill. Required tests, independent expected values and benchmark harnesses are
+written before the implementation they exercise. An intended initial test failure
 belongs inside that subitem; it does not justify leaving a nonbreaking subitem red. Where an
 existing assertion changes or is removed, its old and new statements are shown before editing it.
 Fixtures stay beside their tests and are added when approved.
@@ -1435,6 +1455,18 @@ cargo bench --locked -p umol-graph --bench transform -- \
 | dative_roles | Two boron atoms, one donor and one acceptor. |
 | stereo_frame_constraints | The tetrahedral input with entity- and molecule-level topicity constraints from the existing corpus. |
 
+The input manifest recorded counts in the order atom, localized bond, dative bond, aromatic
+system, multicenter bond, noncovalent bond, stereo atom, stereo bond:
+
+| Case | Molecule counts | Span counts |
+| --- | --- | --- |
+| entity_constraints | `[8, 8, 1, 1, 1, 1, 1, 1]` | `[9, 8, 1, 1, 1, 1, 1, 1]` |
+| raw_forms | `[8, 8, 1, 1, 1, 1, 1, 1]` | `[9, 8, 1, 1, 1, 1, 1, 1]` |
+| aromatic_nonuniform | `[5, 5, 0, 1, 0, 0, 0, 0]` | `[6, 5, 0, 1, 0, 0, 0, 0]` |
+| multicenter_nonuniform | `[3, 0, 0, 0, 1, 0, 0, 0]` | `[4, 0, 0, 0, 1, 0, 0, 0]` |
+| dative_roles | `[2, 0, 1, 0, 0, 0, 0, 0]` | `[3, 0, 1, 0, 0, 0, 0, 0]` |
+| stereo_frame_constraints | `[5, 4, 0, 0, 0, 0, 1, 0]` | `[6, 4, 0, 0, 0, 0, 1, 0]` |
+
 Each span adds one nitrogen atom to its molecule. Equality compares the input with a reversed
 atom/entity numbering. Construction, renumbering and cloning for the consuming calls are outside
 timing. The four columns are `canonicalize` and `canonical_eq` on the molecule and its span.
@@ -1450,11 +1482,16 @@ timing. The four columns are `canonicalize` and `canonical_eq` on the molecule a
 
 `pre-246-readings` holds 116 cases: the 84 existing setup, local-projection and class-reading
 cases, plus four workloads on eight additional inputs. The new inputs are the approved meso and
-chiral dichlorodifluoroethane fixtures, chlorofluoropropane, and the meso and chiral
-trichloropentane fixtures. Three more inputs copy the meso dichlorodifluoroethane fixture:
+chiral dichlorodifluoroethane fixtures, chlorofluoropropane, and two sampled meso
+trichloropentane forms. Three more inputs copy the meso dichlorodifluoroethane fixture:
 `readings_raw_term` stores `Term(Lit(0))` at its first center; `readings_raw_singleton` stores a
 singleton carbon element and singleton coset there; `readings_constraints` stores singleton
 valence 1 on H2 and singleton stereogenicity `Stereogenic` on the first stereo record.
+
+The historical benchmark ID `readings_trichloropentane_chiral` inverts the middle record at
+C3. S5a's exhaustive check identifies it as the second meso form. The approved chiral fixture
+instead inverts a terminal record. The benchmark ID and input remain unchanged to preserve the
+fixed workload and baseline; the new query cases use the correctly named chiral fixture.
 
 The reading config is `ConstitutionColoring::full()`, fixpoint disabled, `max_iterations = 16`
 and Nauty. These are the current controls, before the config replacement. The setup and local
@@ -1476,6 +1513,20 @@ fixed workloads include setup once per iteration:
 | readings_raw_term | 5.247 | 2.996 | 5.574 | 9.954 |
 | readings_raw_singleton | 4.499 | 3.045 | 4.912 | 9.329 |
 | readings_constraints | 5.444 | 3.000 | 5.732 | 10.120 |
+
+The old molecule-query outputs were also recorded. Here `singletons` means that each atom
+forms its own orbit; the other entries list complete orbit partitions. The raw-term,
+raw-singleton and constrained variants all had the same eight-atom output as `readings_meso`.
+These are observations of the old implementation; S5a establishes the expected replacement readings
+independently. In particular, the old code incorrectly reported `readings_meso` as chiral.
+
+| Case | Atoms | Old chiral | Old proper orbits | Old star orbits |
+| --- | ---: | --- | --- | --- |
+| readings_meso, readings_raw_term, readings_raw_singleton, readings_constraints | 8 | true | singletons | singletons |
+| readings_chiral | 8 | true | `{0,1}, {2,5}, {3,6}, {4,7}` | `{0,1}, {2,5}, {3,6}, {4,7}` |
+| readings_prostereogenic | 8 | true | singletons | singletons |
+| readings_trichloropentane_meso | 11 | false | singletons | `{0,4}, {1,3}, {2}, {5,7}, {6}, {8,10}, {9}` |
+| readings_trichloropentane_chiral | 11 | true | singletons | singletons |
 
 The existing 84 cases retain their inputs and workload definitions:
 
@@ -1521,9 +1572,10 @@ select the original 215 IDs with
 The broader S0b `canonical_eq` filter now also selects 12 added color cases, whose baseline is
 `pre-246-colors`.
 
-The [run record](../scratch/246-s4a/context.json), [input manifest](../scratch/246-s4a/input-manifest.txt)
-and [full medians](../scratch/246-s4a/baseline-results.json) retain the commands and machine-readable
-results. Source hashes match before and after both runs. The graph-IR package tests pass
+The tables above record all 24 color-control and all 116 reading medians. Their input
+constructors and workload definitions are committed in `umol-graph-ir/benches/canonicalize.rs`
+and `umol-graph/benches/transform/stereo.rs` at `16f06bae5542`, the completed S4a revision.
+Source hashes matched before and after both runs. The graph-IR package tests pass
 (12,538 library tests, three ignored, plus integration and documentation tests). Both benchmark
 targets pass the preflight checks, and clippy with `--all-targets -- -D warnings` passes for
 `umol-graph-ir` and `umol-graph`. Formatting and the diff check pass.
@@ -1589,7 +1641,8 @@ cargo bench --locked -p umol-graph-ir --bench canonicalize -- \
     '^canonicalize/colors/(molecule|reaction_span)/canonical_eq_equal/(raw_forms|dative_roles)$'
 ```
 
-The [comparison record](../scratch/246-s4b/comparison-results.json) retains both runs' medians.
+The baseline medians in S4a, the first-run changes in the table above and the two focused
+recheck medians preserve the evidence used for this subitem's conclusion.
 
 #### S4c — Shared search colors and canonicalization callers **Done**
 
@@ -1628,11 +1681,10 @@ roles, electron counts and incompatible selected data. Excluded incompatible con
 succeed; incompatible configurations fail in both modes. Raw contradictory constraints are
 read as stored when included. The existing canonicalization expectations are unchanged.
 
-The [all-features graph-IR test run](../scratch/246-s4c/package-tests.txt) passes: 12,732 library
-tests, three ignored, plus 559 property tests, one ignored, and the integration and documentation
-tests. [Clippy](../scratch/246-s4c/clippy.txt) passes with all features and targets and warnings
-denied. Formatting and the diff check pass. The benchmark comparison remains the S4e gate,
-after S4d.
+At `61f7918b6`, the all-features graph-IR test run passes: 12,732 library tests, three ignored,
+plus 559 property tests, one ignored, and the integration and documentation tests. Clippy passes
+with all features and targets and warnings denied. Formatting and the diff check pass. The
+benchmark comparison remains the S4e gate, after S4d.
 
 #### S4d — Shallow coset application **Done**
 
@@ -1670,11 +1722,17 @@ Comparison controls use normalized inputs and retain `normalized_eq`, with and w
 composed mirror action.
 The public expression constructors, frame transport and canonicalization sources are unchanged.
 
-The [all-features graph-IR test run](../scratch/246-s4d/package-tests.txt) passes: 12,791 library
-tests, three ignored, plus 559 property tests, one ignored, and the integration and documentation
-tests. [Clippy](../scratch/246-s4d/clippy.txt) passes with all features and targets and warnings
-denied. Formatting and the diff check pass. S4e supplies the benchmark comparison and
-dependent-crate gate.
+At `73698c3fe`, the all-features graph-IR test run passes: 12,791 library tests, three ignored,
+plus 559 property tests, one ignored, and the integration and documentation tests. Clippy passes
+with all features and targets and warnings denied. Formatting and the diff check pass. Reproduce
+the S4c and S4d package gates with:
+
+```text
+cargo test --locked -p umol-graph-ir --all-features --quiet
+cargo clippy --locked -p umol-graph-ir --all-features --all-targets -- -D warnings
+```
+
+S4e supplies the benchmark comparison and dependent-crate gate.
 
 #### S4e — Shared-foundation gate **Done**
 
@@ -1687,11 +1745,43 @@ dependent-crate gate.
   before the graph-symmetry consumer migration.
 - **Kind:** verification and its shared-color correction (green). `[dep: S4c, S4d]`
 
-The initial comparison covered all 215 original canonicalization cases and all 24 added color
-cases. Its [run context](../scratch/246-s4e/context.json),
-[grouped report](../scratch/246-s4e/results.md) and
-[complete estimates](../scratch/246-s4e/comparison-results.json) retain those measurements. They
-precede the representation correction and are not timings of the integrated generic version.
+The initial comparison at `73698c3fe` covered all 215 original canonicalization cases and all
+24 added color cases. It used Nauty, 100 samples, a 0.5 s warm-up and a 1.5 s measurement time,
+with the S0b and S4a baselines. These measurements precede the representation correction and
+are not timings of the integrated generic version:
+
+```text
+cargo bench --locked -p umol-graph-ir --bench canonicalize -- \
+    --warm-up-time 0.5 --measurement-time 1.5 --sample-size 100 --baseline pre-246 \
+    '^canonicalize/(complete|inline_constraint|reaction|reaction_span|reaction_span_modified|scaling)/.*canonical_eq'
+cargo bench --locked -p umol-graph-ir --bench canonicalize -- \
+    --warm-up-time 0.5 --measurement-time 1.5 --sample-size 100 --baseline pre-246-colors \
+    '^canonicalize/colors/'
+```
+
+The first original-case comparison produced 86 Criterion regression flags. A focused recheck
+selected ten flagged cases above 1 µs, six constraint controls and two extreme count checks.
+Four of the ten microsecond-scale flags repeated:
+
+| Case | Baseline µs | First µs | Recheck µs | Recheck change |
+| --- | ---: | ---: | ---: | ---: |
+| scaling, equal, symmetry-heavy radicals | 7.5146 | 7.6649 | 7.6445 | +1.73% |
+| molecule, equal, overlay-heavy | 35.8111 | 36.8263 | 36.1987 | +1.08% |
+| molecule, unequal stereo, symmetric triisopropanolamine | 69.8670 | 71.1654 | 71.1130 | +1.78% |
+| modified span, unequal colors, symmetric charge sum | 4.7768 | 5.0303 | 4.9947 | +4.56% |
+
+The initially flagged count checks and newly flagged control varied between runs. The old
+baseline comparison alone did not attribute the changes to this work. None of the 24 added
+color-control cases was flagged in the initial S4e comparison; their median changes were:
+
+| Input | Molecule C | Molecule eq | Span C | Span eq |
+| --- | ---: | ---: | ---: | ---: |
+| entity_constraints | -3.40% | -2.99% | -2.86% | -1.84% |
+| raw_forms | -4.21% | -2.84% | -2.85% | -2.18% |
+| aromatic_nonuniform | -2.84% | -2.64% | -1.30% | -1.97% |
+| multicenter_nonuniform | -0.25% | -2.38% | -1.57% | -1.41% |
+| dative_roles | +0.90% | -1.61% | -0.16% | -1.47% |
+| stereo_frame_constraints | -2.40% | -2.59% | -0.81% | -1.13% |
 
 A fresh comparison against `16f06bae5`, before S4b and with the identical benchmark harness,
 localized an added cost to S4b's wider full-color values. The correction retains the original
@@ -1699,33 +1789,88 @@ full-color representations and derived comparisons, adds separate inherent-color
 selects the generic calculation once before the entity loops. The existing ranker and both
 canonicalization modules are unchanged by this correction. A Boolean is not stored in a color.
 
+The stage-isolation comparison used reference-S4b-S4c-S4c-S4b-reference order, with the same
+100-sample settings. S4b was `2beacd9c9`; S4c was `61f7918b6`. Six cases were checked; the two
+below drove the final focused comparison. The geometric means of the paired median estimates
+give:
+
+| Case | Reference µs | S4b µs | S4c µs | S4b/reference | S4c/S4b |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| molecule, unequal colors, symmetric butan-2-ol | 8.66962 | 8.77744 | 8.82573 | +1.24% | +0.55% |
+| modified span, unequal colors, symmetric charge sum | 4.84031 | 5.06407 | 5.04906 | +4.62% | -0.30% |
+
+The full atom-color ranking entry had grown from 16 to 64 bytes; the corresponding span entry
+had grown from 32 to 128 bytes. An AtomColor-only control added a Boolean to the form reference,
+with the original ranker, callers and other color types unchanged. It measured +1.44% on the
+molecule case and +0.18% on the span case in its focused run. Its atom entry was 24 bytes and
+retained runtime flag checks. These observations motivated separate projection types rather
+than carrying the reading choice in every value.
+
 The four size controls were written and failed before the correction, then passed with the
 single-reference atom, bond, dative-bond and noncovalent-bond wrappers. The scratch trial passed
 467 focused color cases and 520 canonicalization cases; those filtered counts may overlap.
 All eight full-color definitions and methods were checked against the reference implementation.
 
-The focused reference-candidate-candidate-reference comparison used Nauty, 80 samples, a 0.2 s
-warm-up and a 0.8 s measurement time per case. It took 11.8 s. The table uses the geometric mean
-of the two median estimates for each binary:
+The accepted implementation is `93c1fa476` (`Add InherentColor`); the reference is
+`16f06bae55423acab07c9d3fdefb8e5fab281ba9`. Both used the same committed
+`umol-graph-ir/benches/canonicalize.rs` input definitions and workloads. The benchmark source's
+Git blob is `3f7ae0fc4fab34998b007f68b7024b3300506823`. The compiler was rustc 1.99.1
+(`58cf8f9c3`, 2026-10-13), on arm64, with Criterion 0.8.1 and Nauty.
+
+The focused reference-candidate-candidate-reference comparison used 80 samples, a 0.2 s warm-up
+and a 0.8 s measurement time per case. It took 11.8 s. The exact benchmark IDs were
+`canonicalize/complete/canonical_eq_unequal_colors/symmetric_stereo_butanol` and
+`canonicalize/reaction_span_modified/canonical_eq_unequal_colors/symmetric_charge_sum`.
+The table uses the geometric mean of the two median estimates for each binary:
 
 | Case | Reference µs | Generic µs | Change |
 | --- | ---: | ---: | ---: |
 | molecule, unequal colors, symmetric butan-2-ol | 8.61063 | 8.61913 | +0.10% |
 | modified span, unequal colors, symmetric charge sum | 4.79817 | 4.82826 | +0.63% |
 
-The [trial report](../scratch/246-s4e/generic-color-trial/report.md),
-[measurements](../scratch/246-s4e/generic-color-trial/measurements.json) and
-[run commands](../scratch/246-s4e/generic-color-trial/runs.json) retain the evidence. The focused
-comparison and this design were accepted for integration. These are preliminary results for the
-two measured workloads; they do not establish performance parity across the complete suite.
+The individual median estimates, in run order and in microseconds, were:
 
-The integrated Rust sources match the reviewed trial. The [workspace test gate](../scratch/246-s4e/generic-color-trial/workspace-tests.txt)
-passes with Python 3.13 active and `umol-graph-ir/proptest`, `umol-graph/proptest` and
+| Case | Reference 1 | Generic 1 | Generic 2 | Reference 2 |
+| --- | ---: | ---: | ---: | ---: |
+| molecule | 8.58210 | 8.62674 | 8.61154 | 8.63925 |
+| modified span | 4.80492 | 4.82534 | 4.83119 | 4.79143 |
+
+The paired molecule changes were +0.52% and -0.32%; the paired span changes were +0.43% and
++0.83%. To repeat this comparison, build the benchmark once at each revision and save a copy of
+each executable identified by Cargo's JSON `compiler-artifact` record before building the other
+revision. Run those saved executables in the order above, using a distinct baseline label per
+run. The executable and run-label arguments below stand for those paths and labels:
+
+```text
+cargo bench --locked -p umol-graph-ir --bench canonicalize --no-run --message-format=json
+<benchmark-executable> --bench --warm-up-time 0.2 --measurement-time 0.8 --sample-size 80 \
+    --save-baseline <run-label> \
+    '^(?:canonicalize/complete/canonical_eq_unequal_colors/symmetric_stereo_butanol|canonicalize/reaction_span_modified/canonical_eq_unequal_colors/symmetric_charge_sum)$'
+```
+
+The focused comparison and this design were accepted for integration. These are preliminary
+results for the two measured workloads; they do not establish performance parity across the
+complete suite.
+
+The integrated Rust sources match the reviewed trial. The workspace test gate passes with
+Python 3.13.18 active and `umol-graph-ir/proptest`, `umol-graph/proptest` and
 `umol-graph/conformance` enabled: 32,287 passed and ten ignored. This includes the affected form,
 span, color and canonicalization cases and the required property and conformance suites.
-[Workspace clippy](../scratch/246-s4e/generic-color-trial/clippy.txt) passes with those features,
-all targets and warnings denied. Formatting, the scope review and the diff check pass. S4 is
-complete.
+Workspace clippy passes with those features, all targets and warnings denied. The integrated
+gate used:
+
+```text
+source umol-py/.venv/bin/activate && python --version
+source umol-py/.venv/bin/activate && cargo test --locked --workspace \
+    --features umol-graph-ir/proptest,umol-graph/proptest,umol-graph/conformance --quiet
+source umol-py/.venv/bin/activate && cargo clippy --locked --workspace \
+    --features umol-graph-ir/proptest,umol-graph/proptest,umol-graph/conformance \
+    --all-targets -- -D warnings
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
+Formatting, the scope review and the diff check pass. S4 is complete.
 
 ### S5 — Symmetry data, molecule-backed queries and consumer migration
 
@@ -1736,22 +1881,116 @@ after S5c supplies the stereo-view readings. `umol-graph` is green after S5e; S5
 Rust/Python workspace. Each implementation subitem writes its required tests before its
 production changes. S5g is the green stage boundary.
 
-#### S5a — Query oracles and workload controls
+#### S5a — Exhaustive correctness checks and workload controls **Done**
 
-- **Module:** `ir/molecule/symmetry/tests.rs`, the existing stereo property/reference modules,
+- **Module:** `ir/molecule/symmetry/tests.rs`, the stereo property/exhaustive modules,
   `umol-graph/benches/transform/stereo.rs` and `umol-graph-ir/benches/canonicalize.rs`.
 - **Tests and benches first:** bring in the needed approved S0a fixtures beside their tests.
   Establish expected remappings, chirality, complete orbit vectors, classes and published unit
   counts through exact cases and bounded independent enumeration. Include the dative donor and
   acceptor, the five-carbon aromatic system with electron counts 2, 1, 1, 1, 1, and a nonuniform
   multicenter case. The query assertions are written first in their owning implementation
-  subitems; their expected values and reference inputs are established here.
+  subitems; their expected values and fixture inputs are established here.
 - **Benchmark controls:** check that S4a's `pre-246-readings` cases still measure the fixed
   build-and-read workloads before the API migration. Preserve their inputs and scope as their
   calls migrate. Do not replace that baseline after the shared transport change: the old
   symmetry implementation also calls `coset_apply_permutation`. Keep the 51 operation cases of
   `pre-246` and report setup-only and fixed-workload comparisons separately.
 - **Kind:** additive (green). `[dep: S4e, S0a, S0b, S3b]`
+
+All 38 approved S0a fixtures now live beside their tests in the permanent
+[molecule symmetry tests](../umol-graph-ir/src/ir/molecule/symmetry/tests.rs) and
+[exhaustive stereo checks](../umol-graph-ir/tests/property/stereo/exhaustive.rs).
+
+The exhaustive symmetry calculation enumerates atom bijections on dense, simple constraint-free
+graphs with literal binary configurations and literal incidence weights. It compares atom
+and bond forms directly, preserves dative roles and weighted overlay participants, and checks
+tetrahedral parity or cis/trans endpoint blocks without production colors, transport or
+remapping search. It establishes 39 exact cases:
+
+- 13 chirality and complete proper/star orbit vectors, including renumberings and virtual
+  hydrogen ligands;
+- 13 stereogenicity vectors on the approved multirecord fixtures;
+- three complete remapping lists and orbit vectors for dative roles, aromatic counts
+  `[2,1,1,1,1]` and multicenter counts `[2,1,1]`;
+- four complete proper/improper remapping lists for the chiral and meso dichlorodifluoroethanes;
+- six topicity cases covering all four variants.
+
+An orbit vector records each atom's minimum numbered representative. These calculations establish
+the expected values for the replacement queries, while existing production assertions and
+property laws remain unchanged. Raw symbolic forms and constraint handling receive their query
+assertions in S5b and S5c before those implementations change.
+
+The literature checks exhaust all 420 binary assignments across 21 approved inputs, with
+at most seven records and 128 assignments in one input. It groups complete canonical molecules
+by structural equality using explicitly selected Nauty. Mirrored assignments establish the
+chiral and achiral counts. Changing each record's bit over all assignments establishes the
+unit set independently of the old stereo-symmetry readings. The separate published
+Constitutional and Configurational sets remain explicit in the case rows for S5d; S5a validates
+their union, rather than claiming to derive that subdivision.
+
+The 13 Table I count controls are listed below; all 21 cases check complete unit sets. The
+remaining eight inputs are Figure 1 structures a, c, f, g, i, j, k and n. Source figure numbers
+are recorded beside every permanent fixture.
+
+| Figure 7 no. | Input | Total | Chiral | Achiral |
+| --- | --- | ---: | ---: | ---: |
+| 1 | bromochloroethanol | 2 | 2 | 0 |
+| 13 | bis(fluoroethyl)difluorohexane | 10 | 6 | 4 |
+| 14 | dimethylcyclopentane | 3 | 2 | 1 |
+| 16 | 1,2-dimethylcyclohexane | 3 | 2 | 1 |
+| 17 | 1,3-dimethylcyclohexane | 3 | 2 | 1 |
+| 18 | 1,4-dimethylcyclohexane | 2 | 0 | 2 |
+| 19 | 1,2,3-trimethylcyclohexane | 4 | 2 | 2 |
+| 22 | tetramethylcyclobutane | 4 | 0 | 4 |
+| 28 | cyclohexanetriol | 2 | 0 | 2 |
+| 30 | butene | 2 | 0 | 2 |
+| 38 | bis(fluoroethyl)difluorohexene | 7 | 4 | 3 |
+| 48 | decalin | 2 | 0 | 2 |
+| 69 | inositol | 9 | 2 | 7 |
+
+Four further cases enumerate every square-planar and trigonal-bipyramidal coset.
+The platinum cis/trans fixtures have class vector `[0,1,0]`; the phosphorane axial/equatorial
+fixtures have one class for cosets 0–7 and another for 8–19. Each case also checks the class of
+its named stored configuration. Together these are 25 new literature/coset tests.
+
+The three exhaustive calculations have continuing checking roles. Atom-remapping enumeration
+supplies the independent calculation for molecule and per-record symmetry comparisons in S5b
+and S5c. Assignment enumeration checks the canonicalizer's literature counts and supplies the
+unit-membership comparison in S5d. Coset enumeration checks canonical configuration equivalence
+and supplies the nonbinary stereo comparisons. Their private StereoRecord and StereoSite types
+carry the data those calculations need. Names describe these computations and data, rather than
+their role during development.
+
+S5a's symmetry assertions check the exhaustive calculation against explicit expected values;
+they do not establish correctness of the replacement GraphSymmetry queries. S5b and S5c add
+those production comparisons before changing the query implementations. One-off derivation
+drivers, diagnostic output and performance probes remain in scratch; none is imported into
+these test modules. The expected cases and necessary evidence remain in permanent tests and
+this record.
+
+Both benchmark source files are byte-identical to S4a revision `16f06bae5542`. All 116 reading
+workloads pass their Criterion preflight in test mode, including the unchanged historical
+trichloropentane input described in S4a. All 408 saved baseline estimate files have unchanged
+hashes before and after that check. This subitem records no new timing measurements and
+replaces no baseline.
+
+The all-features graph-IR gate passes with 13,472 tests and seven ignored, including 12,834
+library tests and 584 property tests. The four stored nonbinary configuration assertions were
+also checked after their addition. Clippy passes with all features, all targets and warnings
+denied. The commands are:
+
+```text
+cargo test --locked -p umol-graph-ir --all-features --quiet
+cargo test --locked -p umol-graph-ir --features proptest --test property test_exhaustive_coset_classes --quiet
+cargo clippy --locked -p umol-graph-ir --all-features --all-targets -- -D warnings
+cargo bench --locked -p umol-graph --bench transform --no-run --message-format=json
+<transform-benchmark-executable> --test '^stereo/(graph_symmetry|local_symmetry|classification|build_molecule_readings|build_stereo_readings)/'
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
+Production behavior and public interfaces are unchanged. S5a ends green.
 
 #### S5b — `GraphSymmetryConfig`, auxiliary data and molecule queries
 
@@ -1800,8 +2039,8 @@ production changes. S5g is the green stage boundary.
   ligands, undetermined cosets, kindless records and encoding failures. Test missing attached
   symmetry data and equivalence under renumbering. Write the per-record reading workloads
   before implementing these methods, using S5a's established inputs. Map the old local-group
-  assertions in `tests/property/stereo/reference.rs` and `semantics.rs` to the independent
-  reference and new readings, preserving each stated law. Show changed topicity expectations
+  assertions in `tests/property/stereo/exhaustive.rs` and `semantics.rs` to exhaustive
+  calculations and new readings, preserving each stated law. Show changed topicity expectations
   before editing them; any necessary change to a law is an explicit design decision.
 - **Changes:** add `with_symmetry` to the stereo views and the three derived readings without
   a symmetry argument. The caller extracts `GraphSymmetry` from the owning view to attach it.
@@ -1817,7 +2056,7 @@ production changes. S5g is the green stage boundary.
 
 - **Module:** `ir::molecule::symmetry` and `ir::view::stereo`.
 - **Tests and benches first:** establish the unit of every approved Razinger candidate against
-  the published classification and the independent assignment reference. Cover all four
+  the published classification and exhaustive assignment enumeration. Cover all four
   variants, literal/undetermined/mixed stored cosets, a single record on one cyclobutane center,
   square-planar and trigonal-bipyramidal fixtures, encoding failure and the assignment limit
   below structure k's eight assignments. Write the unit-reading benchmark on the prepared
@@ -1944,7 +2183,9 @@ stage boundary.
 - **Check:** collect the comparisons from S4e, S5g and S6a, distinguishing canonicalization,
   setup, fixed query workloads and operation workloads. Reuse valid measurements; rerun only
   groups affected by subsequent implementation changes. Record medians and conclusions here.
-  New correct stereo behavior does not establish a runtime improvement by itself.
+  Record source revisions, benchmark IDs, commands, relevant medians and conclusions inline;
+  temporary logs are not persistent evidence references. New correct stereo behavior does not
+  establish a runtime improvement by itself.
 - **Kind:** verification (green). `[dep: S7a, S4e, S5g, S6a]`
 
 #### S7c — Closeout
@@ -1986,9 +2227,9 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S4 are complete. The remaining path is:
+S0-S4 and S5a are complete. The remaining path is:
 
-S5a -> S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
 S4e checks the shared color calculation and shallow application before their graph-symmetry
 consumer is replaced. Baselines precede each affected implementation, and every required test

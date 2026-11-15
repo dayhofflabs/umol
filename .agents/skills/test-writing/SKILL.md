@@ -29,6 +29,10 @@ For property-test work, read `docs/development/property-tests.md` completely fir
   `_partial`. Never encode behavior (`returns_zero`, `drops_x`) in the function name; put it in the
   `#[case]` label. Add a scenario suffix only when it simplifies assertions or separates a large
   surface.
+- Name auxiliary test computations and their data types by what they compute or represent, and
+  their method where relevant. Do not introduce `reference`, `oracle`, `regression` or historical
+  implementation labels as module, type, function or test names. A term used colloquially in a
+  discussion does not settle a code name or justify an additional implementation.
 - Assert exact values or error variants. A length, `is_some`, or error presence is insufficient by
   itself. For transforms returning `Self`, prefer full structural equality.
 - Split unchanged transform cases into `test_X_method_identity`; each row supplies only the input and
@@ -43,6 +47,11 @@ Do not construct a test through behavior on which the subject depends. In partic
 - Comparing `into_zeroed` with the corresponding macro is allowed as cross-path equivalence.
 
 Prefer a verbose independent expected value to a concise circular one.
+
+Keep an auxiliary algorithm only for an ongoing check of current semantics. One-off derivations
+and experimental drivers belong in `scratch/`; permanent tests retain the explicit inputs,
+expected values and necessary provenance. Testing the auxiliary algorithm alone does not test
+the production operation.
 
 ## Order
 

@@ -84,7 +84,7 @@ proptest! {
         let expected = symmetry.group().elements().iter().all(|operation| {
             let image = array::from_fn(|position| operation.permutation().apply(position));
             (0..2).all(|index| {
-                super::reference::binary_coset_action(StereoKind::Tetrahedral, index, &image) == Some(index)
+                super::exhaustive::binary_coset_action(StereoKind::Tetrahedral, index, &image) == Some(index)
             })
         });
 
