@@ -125,7 +125,7 @@ mod tests {
             .graph_symmetry(&GraphSymmetryConfig::default())
             .into_graph_symmetry();
         for symmetry in [&symmetry, &cloned, &moved] {
-            assert_eq!(molecule.is_chiral(symmetry), false);
+            assert!(!molecule.is_chiral(symmetry));
             assert_eq!(
                 molecule.proper_orbit_of(symmetry, AtomId(0)),
                 vec![AtomId(0)]
@@ -143,11 +143,8 @@ mod tests {
         :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
     }"#))]
     fn test_graph_symmetry_view_is_chiral(#[case] input: Molecule) {
-        assert_eq!(
-            input
-                .graph_symmetry(&GraphSymmetryConfig::default())
-                .is_chiral(),
-            false
-        );
+        assert!(!input
+            .graph_symmetry(&GraphSymmetryConfig::default())
+            .is_chiral());
     }
 }

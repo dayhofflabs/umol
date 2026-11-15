@@ -11,10 +11,10 @@ use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, ConstitutionColoring,
-    GraphSymmetryConfig, Molecule, MoleculeEntries, Reframe, StereoAtomForm, StereoAtomId,
-    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, Stereogenicity,
+    AtomForm, AtomId, BondForm, BondId, Canonicalize, CanonicalizeContext, GraphSymmetryConfig,
+    Molecule, MoleculeEntries, Reframe, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    Stereogenicity,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_perm::PermutationGroup;
@@ -259,11 +259,10 @@ fn test_molecule_framed_eq(#[case] kind: StereoKind, #[values(0, 1)] coset: u32)
 #[rstest]
 #[case::tetrahedral(StereoKind::Tetrahedral)]
 #[case::cis_trans(StereoKind::CisTrans)]
-fn test_stereo_symmetry_stereogenicity(
+fn test_stereo_view_stereogenicity(
     #[case] kind: StereoKind,
     #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
     coset: StereoCoset,
-    #[values(false, true)] iterate_to_fixpoint: bool,
 ) {
     let labels = [Element::H, Element::F, Element::Cl, Element::Br];
     for pattern in 0..256 {
@@ -321,38 +320,51 @@ fn test_stereo_symmetry_stereogenicity(
                 ligands,
                 StereoBondForm::new(kind, coset.clone()),
             ));
-            if elements[0] != elements[1] && elements[2] != elements[3] {
-                Stereogenicity::Stereogenic
-            } else {
-                Stereogenicity::Nonstereogenic
+            match (elements[0] == elements[1], elements[2] == elements[3]) {
+                (false, false) => Stereogenicity::Stereogenic,
+                (true, true) => Stereogenicity::Nonstereogenic,
+                _ => Stereogenicity::Prostereogenic,
             }
         };
         let molecule = Molecule::from_entries(entries);
-        let graph = molecule.graph_symmetry(&GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint,
-            max_iterations: 16,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-        });
-        let symmetry = if kind == StereoKind::Tetrahedral {
-            molecule.stereo_atom_symmetry(&graph, StereoAtomId(0))
+        let symmetry = molecule
+            .graph_symmetry(&GraphSymmetryConfig {
+                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                ..Default::default()
+            })
+            .into_graph_symmetry();
+        let (actual, stored_coset) = if kind == StereoKind::Tetrahedral {
+            let stereo = molecule
+                .stereo_atom(StereoAtomId(0))
+                .with_symmetry(&symmetry);
+            (stereo.stereogenicity(), stereo.coset())
         } else {
-            molecule.stereo_bond_symmetry(&graph, StereoBondId(0))
+            let stereo = molecule
+                .stereo_bond(StereoBondId(0))
+                .with_symmetry(&symmetry);
+            (stereo.stereogenicity(), stereo.coset())
         };
-        let action_is_stereogenic = symmetry.group().elements().iter().all(|operation| {
-            let image = array::from_fn(|position| operation.permutation().apply(position));
-            (0..2).all(|index| binary_coset_action(kind, index, &image) == Some(index))
-        });
+        let action_is_stereogenic = PermutationGroup::symmetric(4)
+            .elements()
+            .iter()
+            .filter(|permutation| {
+                let image = array::from_fn(|position| permutation.apply(position));
+                (0..4).all(|position| elements[position] == elements[image[position]])
+                    && binary_coset_action(kind, 0, &image).is_some()
+            })
+            .all(|permutation| {
+                let image = array::from_fn(|position| permutation.apply(position));
+                (0..2).all(|index| binary_coset_action(kind, index, &image) == Some(index))
+            });
         assert_eq!(
             action_is_stereogenic,
             expected == Stereogenicity::Stereogenic,
             "kind {kind:?}, coset {coset:?}, elements {elements:?}"
         );
-        assert_eq!(symmetry.is_stereogenic(), action_is_stereogenic);
-        assert_eq!(symmetry.coset(), &coset);
+        assert_eq!(actual == Stereogenicity::Stereogenic, action_is_stereogenic);
+        assert_eq!(stored_coset, &coset);
         assert_eq!(
-            symmetry.stereogenicity(),
-            expected,
+            actual, expected,
             "kind {kind:?}, coset {coset:?}, elements {elements:?}"
         );
     }

@@ -23,10 +23,10 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g, S5a and S5b are implemented. The reviewed S4/S5 semantics, interfaces and names are
-settled. Main now has the selected Constitution search, flat auxiliary representation, narrower
-generator filter and FieldColor names. S5c's derived stereo readings and their consumer migration
-are next; the workspace-wide S5 gate remains ahead.
+S4f, S4g and S5a-S5c are implemented. The reviewed S4/S5 semantics, interfaces and names are
+settled. Main has the selected Constitution search, flat auxiliary representation, narrower
+generator filter, FieldColor names and the three derived stereo-view readings. S5d's stereogenic
+units are next; the workspace-wide S5 gate remains ahead.
 
 ## Starting state
 
@@ -2808,7 +2808,7 @@ unrelated shared specialization was present in both. The build driver now captur
 hashes before compilation and verifies that they remain unchanged. Main code and documents
 were unchanged by the trial; no mutating git operation was performed.
 
-#### S5c — Derived stereo-view readings
+#### S5c — Derived stereo-view readings **Done**
 
 - **Module:** `ir::view::stereo` and `ir::molecule::symmetry`.
 - **Tests and benches first:** add the exact three-class and four-topicity cases on the approved
@@ -2837,6 +2837,83 @@ were unchanged by the trial; no mutating git operation was performed.
   copied or normalized molecule.
 - **Kind:** additive after the breaking removal; graph IR green, workspace still red.
   `[dep: S5b, S2a, S2b]`
+
+**Completion, 2026-11-14.** StereoAtomView and StereoBondView have with_symmetry,
+stereogenicity, topicity and ligand_symmetry. Each view holds an optional borrowed
+GraphSymmetry beside its molecule reference and id; its existing producers leave the attachment
+empty. The readings use the single prepared Constitution graph and the existing
+molecule::symmetry::remapping_exists_at and molecule::symmetry::remapping_exists_for functions.
+Those functions and GraphSymmetry::cell are crate-visible for the view consumers. The
+coset-change check now has its production caller. The auxiliary fields, generator filter,
+canonicalization checks, color calculation and generic search algorithm are unchanged.
+Constraint-view propagation remains S6a; stereogenic_unit remains S5d.
+
+The first 80 view cases and all 15 benchmark workloads were written before production changes.
+Their initial library build failed only on the missing with_symmetry methods. They check the
+approved classes and topicities, raw own cosets, proper/improper ligand actions, virtual
+positions, missing attachments, kindless records, incompatible constraints, moved focus records,
+renumbered fixtures, and square-planar, trigonal-bipyramidal and octahedral cosets. Nine
+supplementary cases for mismatched context, unavailable topicity positions, degree/coset
+encoding failures and virtual bond ligands were added after the first implementation; these
+nine are not test-first evidence. All 89 pass. The tests exercise production readings against
+explicit expected values; the S5a independent calculations remain separate checks.
+
+The property consumers now enumerate label-preserving ligand permutations and apply
+stereo::exhaustive::binary_coset_action independently of the production search. They retain
+binary own-coset independence, the generated element/coset distribution, all 256 four-label
+patterns for each kind and own-coset form, and the stored-coset assertions on the supplied
+views. The retired iteration flag adds no domain variation and is removed. The cis/trans
+expectation is now Prostereogenic when exactly one endpoint has equal ligands, as stated before
+editing the cases: replacing one ligand then makes the site stereogenic. Equal pairs at both
+ends remain Nonstereogenic. Constitutionally distinct ligand pairs use S5a's approved Distinct
+expectation. Literature counts and canonicalization laws are unchanged.
+
+The all-features graph-IR gate passes: 12,963 library tests (three ignored), 52 integration and
+compile-fail tests, 576 property tests (one ignored), and one doctest (three ignored). Clippy
+passes with all features and all targets under -D warnings. Its fixes include a Range import in
+the new tests and two boolean assertions in the GraphSymmetry view tests; the five affected
+view cases pass afterward. Formatting and git diff --check pass. Workspace restoration remains
+S5f's boundary.
+
+**Per-record timing.** One bounded Criterion pass on arm64 macOS 15.7.3 with rustc 1.99.1,
+default graph-symmetry config and the bench profile measured these medians in microseconds:
+
+| Fixture | stereogenicity | topicity | ligand_symmetry |
+| --- | ---: | ---: | ---: |
+| Chlorofluoropropane, CH₂ record | 33.2364 | 10.8579 | 5.39852 |
+| Meso dichlorodifluoroethane, first record | 0.0127228 | 0.00459169 | 4.67822 |
+| Square-planar Ma₂b₂ | 16.122 | 8.01221 | 3.13394 |
+| Trigonal-bipyramidal Pa₄b | 744.753 | 25.6256 | 3.87548 |
+| Cis/trans FClC=CFCl | 6.68062 | 5.8237 | 8.11575 |
+
+Each sample measures one derived reading on an already attached view. Molecule construction,
+GraphSymmetry preparation and attachment are outside the timed region. Searches, temporary
+allocations and checks needed by the reading are inside it. The existing counting allocator
+remains installed with counting disabled. The meso class and topicity workloads finish at the
+cell exits. Topicity positions are [2, 3], [0, 1], [0, 1], [1, 2] and [0, 2] in table order.
+Ligand symmetry requests proper identity for atoms and proper endpoint-block exchange for the
+bond. These costs establish the new workloads; they do not compare the removed local-group
+computation or the complete operation pipeline. The previous layout and generator-filter
+comparisons were not repeated.
+
+The command used 40 samples, 0.1-second warmup, a 0.4-second measurement target and 1,000
+bootstrap resamples. Criterion extended the trigonal-bipyramidal class collection to about
+0.615 seconds to obtain 40 samples. The entire command, including the release build, took
+50.1 seconds:
+
+```text
+CARGO_TARGET_DIR=/Users/dr/.cargo-target cargo bench --locked -p umol-graph-ir --bench constraint_readings -- '^stereo_derived_readings/' --warm-up-time 0.1 --measurement-time 0.4 --sample-size 40 --nresamples 1000 --noplot --save-baseline s5c-readings-2026-11-14
+```
+
+The source was the S5c working-tree overlay on afffc23f7b499e9f9eb30dafdade4be235b3e411.
+Source hashes were captured before compilation and checked unchanged afterward. SHA-256 values:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| umol-graph-ir/src/ir/view/stereo.rs | `7f3a9b6511b99ad6f6764a86de0dcf76b020815c9d043781cb5ff779425d4920` |
+| umol-graph-ir/src/ir/molecule/symmetry.rs | `0df6aeef62cdccd7dacc6ede265911d1a39edf9844658e06ada5c311a30ea5e5` |
+| umol-graph-ir/benches/constraint_readings.rs | `fa8ff2c8b0adb335a737bc1dba2e82dc5f8b33e1510c7098fd3647f54d21e27a` |
+| Timed constraint_readings binary | `d7c8bcd261a074acb55c9cdd98b3b2ce75328a3fc4af8ae47c78286434772011` |
 
 #### S5d — Stereogenic units
 
@@ -2985,7 +3062,7 @@ stage boundary.
 
 ### Stage gates
 
-S4f, S4g and S5b are complete. The sustained breaking migration continues with S5c, and S5f
+S4f, S4g, S5b and S5c are complete. The sustained breaking migration continues with S5d, and S5f
 restores the workspace; S5g is its acceptance
 and performance gate. S6 ends green with keyed and Python parity complete. No later stage is
 used to repair an earlier stage's compilation.
@@ -3017,12 +3094,12 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 S0-S3, S4a-S4e and S5a have implementation records. S4f is integrated and its standalone gate
 passes. The remaining path is:
 
-S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
 S4f replaces the selector after S4e's measurements; S4g applies the later approved names and
 the repository-required color-test corrections. The single Constitution search and narrower
 generator filter from the recorded comparisons and the other settled review corrections are
-integrated by S5b. S5c supplies the derived readings. The reviewed SIN
+integrated by S5b. S5c supplies the implemented derived readings and property migration. The reviewed SIN
 questions are settled as recorded in Review dispositions.
 The completed trial fixtures and measurements precede the port. New required tests are written
 before their production changes; the existing late-written cases retain their actual history.

@@ -9,12 +9,15 @@ use criterion::Criterion;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     ArithExpr, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId,
-    BondForm, BondId, Lattice, Molecule, MoleculeEntries, Normalize, NumForm,
-    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomForm, StereoAtomId,
-    StereoBondConstraintForm, StereoBondConstraintKey, StereoBondForm, StereoBondId,
-    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    Stereogenicity, StereogenicityForm,
+    BondForm, BondId, GraphSymmetryConfig, Lattice, LigandPermutation, Molecule, MoleculeEntries,
+    Normalize, NumForm, OrientedLigandPermutation, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondConstraintKey, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPosition, Stereogenicity,
+    StereogenicityForm,
 };
+use umol_graph_ir::mol_dsl_concrete;
+use umol_perm::{Orientation, Permutation};
 
 struct CountingAllocator;
 static COUNTING: AtomicBool = AtomicBool::new(false);
@@ -209,6 +212,129 @@ macro_rules! stereo_readings {
     };
 }
 
+fn derived_stereo_readings(criterion: &mut Criterion, allocations: bool) {
+    let cases = [
+        (
+            "chlorofluoropropane",
+            mol_dsl_concrete!(
+                r#"{
+        :atoms ["C" "C" "C#h3" "F" "Cl" "H" "H" "H"]
+        :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
+                       {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]
+    }"#
+            ),
+            StereoAtomId(1),
+            [2, 3],
+        ),
+        (
+            "meso",
+            mol_dsl_concrete!(
+                r#"{
+        :atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                       {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]
+    }"#
+            ),
+            StereoAtomId(0),
+            [0, 1],
+        ),
+        (
+            "square_planar",
+            mol_dsl_concrete!(
+                r#"{
+           :atoms ["Pt#c-2" "N#c+#h3" "N#c+#h3" "Cl" "Cl"]
+           :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+           :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
+       }"#
+            ),
+            StereoAtomId(0),
+            [0, 1],
+        ),
+        (
+            "trigonal_bipyramidal",
+            mol_dsl_concrete!(
+                r#"{
+           :atoms ["P" "Cl" "F" "F" "F" "F"]
+           :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]
+           :stereo-atoms [{:site 0 :ligands [1 2 3 4 5] :attrs "Tb0"}]
+       }"#
+            ),
+            StereoAtomId(0),
+            [1, 2],
+        ),
+    ];
+    for (name, molecule, id, pair) in &cases {
+        let symmetry = molecule
+            .graph_symmetry(&GraphSymmetryConfig::default())
+            .into_graph_symmetry();
+        let stereo = molecule.stereo_atom(*id).with_symmetry(&symmetry);
+        let permutation = OrientedLigandPermutation {
+            permutation: LigandPermutation(Permutation::identity(stereo.ligand_count())),
+            orientation: Orientation::Proper,
+        };
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_derived_readings/{name}/stereogenicity"),
+            || black_box(black_box(stereo).stereogenicity()),
+        );
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_derived_readings/{name}/topicity"),
+            || {
+                black_box(
+                    black_box(stereo)
+                        .topicity(StereoLigandPosition(pair[0]), StereoLigandPosition(pair[1])),
+                )
+            },
+        );
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_derived_readings/{name}/ligand_symmetry"),
+            || black_box(black_box(stereo).ligand_symmetry(black_box(permutation))),
+        );
+    }
+    let molecule = mol_dsl_concrete!(
+        r#"{
+        :atoms ["C" "C" "F" "Cl" "F" "Cl"]
+        :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]
+    }"#
+    );
+    let symmetry = molecule
+        .graph_symmetry(&GraphSymmetryConfig::default())
+        .into_graph_symmetry();
+    let stereo = molecule
+        .stereo_bond(StereoBondId(0))
+        .with_symmetry(&symmetry);
+    let permutation = OrientedLigandPermutation {
+        permutation: LigandPermutation(Permutation::from_image(&[2, 3, 0, 1])),
+        orientation: Orientation::Proper,
+    };
+    measure(
+        criterion,
+        allocations,
+        "stereo_derived_readings/cis_trans/stereogenicity",
+        || black_box(black_box(stereo).stereogenicity()),
+    );
+    measure(
+        criterion,
+        allocations,
+        "stereo_derived_readings/cis_trans/topicity",
+        || black_box(black_box(stereo).topicity(StereoLigandPosition(0), StereoLigandPosition(2))),
+    );
+    measure(
+        criterion,
+        allocations,
+        "stereo_derived_readings/cis_trans/ligand_symmetry",
+        || black_box(black_box(stereo).ligand_symmetry(black_box(permutation))),
+    );
+}
+
 fn main() {
     let allocations = env::args().any(|arg| arg == "--allocations");
     let mut criterion = if allocations {
@@ -344,6 +470,7 @@ fn main() {
         [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5)],
         [2, 3, 4, 5]
     );
+    derived_stereo_readings(&mut criterion, allocations);
     if !allocations {
         criterion.final_summary();
     }

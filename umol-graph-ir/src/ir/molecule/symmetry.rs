@@ -44,7 +44,7 @@ pub struct GraphSymmetry {
 }
 
 impl GraphSymmetry {
-    fn cell(&self, entity: Entity) -> Option<u32> {
+    pub(crate) fn cell(&self, entity: Entity) -> Option<u32> {
         (entity.kind_id() < self.incidence.entity_count(entity.kind()))
             .then(|| self.cell_indices[self.incidence.node_of(entity).index()])
     }
@@ -204,7 +204,7 @@ impl Molecule {
     }
 }
 
-fn remapping_exists_at(
+pub(crate) fn remapping_exists_at(
     molecule: &Molecule,
     symmetry: &GraphSymmetry,
     level: DescriptionLevel,
@@ -215,8 +215,7 @@ fn remapping_exists_at(
     molecule_remapping_exists(molecule, symmetry, level, orientation, source, target, None)
 }
 
-#[cfg(test)]
-fn remapping_exists_for(
+pub(crate) fn remapping_exists_for(
     molecule: &Molecule,
     symmetry: &GraphSymmetry,
     entity: Entity,
@@ -268,27 +267,37 @@ fn molecule_remapping_exists(
                 partition.individualize(cell, node)
             })
     };
-    let matches_stereo =
-        |images: &[NodeId], orientation: Orientation, changed: Option<(Entity, u32)>| {
-            level == DescriptionLevel::Constitution
-                || if orientation == Orientation::Improper && changed.is_none() {
-                    remapping_mirrors_stereo(
-                        molecule,
-                        &symmetry.incidence,
-                        images,
-                        symmetry.config.include_constraints,
-                    )
-                } else {
-                    remapping_matches_stereo(
-                        molecule,
-                        &symmetry.incidence,
-                        images,
-                        symmetry.config.include_constraints,
-                        orientation,
-                        changed,
-                    )
-                }
-        };
+    let matches_stereo = |images: &[NodeId],
+                          orientation: Orientation,
+                          changed: Option<(Entity, u32)>| {
+        level == DescriptionLevel::Constitution
+            || if orientation == Orientation::Improper && changed.is_none() {
+                remapping_mirrors_stereo(
+                    molecule,
+                    &symmetry.incidence,
+                    images,
+                    symmetry.config.include_constraints,
+                )
+            } else if let (Orientation::Proper, Some((entity, coset))) = (orientation, changed) {
+                remapping_changes_coset(
+                    molecule,
+                    &symmetry.incidence,
+                    images,
+                    entity,
+                    coset,
+                    symmetry.config.include_constraints,
+                )
+            } else {
+                remapping_matches_stereo(
+                    molecule,
+                    &symmetry.incidence,
+                    images,
+                    symmetry.config.include_constraints,
+                    orientation,
+                    changed,
+                )
+            }
+    };
     remapping_exists(
         &symmetry.adapter,
         partition(source),
@@ -545,7 +554,6 @@ fn remapping_mirrors_stereo(
     )
 }
 
-#[cfg(test)]
 fn remapping_changes_coset(
     molecule: &Molecule,
     incidence: &IncidenceGraph,
