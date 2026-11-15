@@ -806,16 +806,16 @@ pub(crate) struct MulticenterBondColor<'a> {
     constraints: &'a MulticenterBondConstraintsForm,
 }
 
-/// The inherent color of [`MulticenterBondForm`].
+/// The field color of [`MulticenterBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentMulticenterBondColor<'a> {
+pub(crate) struct MulticenterBondFieldColor<'a> {
     charge: &'a NumForm,
     unpaired_electrons: &'a UnpairedElectronsForm,
 }
 
 impl AsColor for MulticenterBondForm {
     type Color<'a> = MulticenterBondColor<'a>;
-    type InherentColor<'a> = InherentMulticenterBondColor<'a>;
+    type FieldColor<'a> = MulticenterBondFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         MulticenterBondColor {
@@ -825,8 +825,8 @@ impl AsColor for MulticenterBondForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentMulticenterBondColor {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        MulticenterBondFieldColor {
             charge: &self.charge,
             unpaired_electrons: &self.unpaired_electrons,
         }
@@ -2225,13 +2225,16 @@ mod tests {
         MulticenterBondForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(MulticenterBondConstraintForm::electron_count(NumForm::lit_set([4]))),
         MulticenterBondForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8))
     )]
-    fn test_multicenter_bond_form_as_inherent_color(
+    fn test_multicenter_bond_form_as_field_color(
         #[case] input: MulticenterBondForm,
         #[case] expected: MulticenterBondForm,
     ) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = MulticenterBondFieldColor {
+            charge: &expected.charge,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

@@ -708,22 +708,22 @@ impl FrameTransport for NoncovalentBondForm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct NoncovalentBondColor<'a>(&'a NoncovalentBondForm);
 
-/// The inherent color of [`NoncovalentBondForm`].
+/// The field color of [`NoncovalentBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentNoncovalentBondColor<'a> {
+pub(crate) struct NoncovalentBondFieldColor<'a> {
     kind: &'a NoncovalentBondKindForm,
 }
 
 impl AsColor for NoncovalentBondForm {
     type Color<'a> = NoncovalentBondColor<'a>;
-    type InherentColor<'a> = InherentNoncovalentBondColor<'a>;
+    type FieldColor<'a> = NoncovalentBondFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         NoncovalentBondColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentNoncovalentBondColor { kind: &self.kind }
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        NoncovalentBondFieldColor { kind: &self.kind }
     }
 }
 
@@ -822,6 +822,7 @@ pub enum NoncovalentBondKind {
 mod tests {
     use std::cmp::Ordering;
     use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::mem::size_of;
     use std::{iter, ptr};
 
     use pretty_assertions::assert_eq;
@@ -1763,6 +1764,44 @@ mod tests {
     }
 
     #[rstest]
+    #[case::both_default(
+        NoncovalentBondForm::default(),
+        NoncovalentBondForm::default(),
+        Some(NoncovalentBondForm::default())
+    )]
+    #[case::kind_mismatch(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+        None
+    )]
+    #[case::kind_narrows_from_undetermined(
+        NoncovalentBondForm::default(),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        Some(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))
+    )]
+    fn test_noncovalent_bond_form_meet(
+        #[case] a: NoncovalentBondForm,
+        #[case] b: NoncovalentBondForm,
+        #[case] expected: Option<NoncovalentBondForm>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rstest]
+    #[case::kind_mismatch_widens_to_default(
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+        NoncovalentBondForm::default()
+    )]
+    fn test_noncovalent_bond_form_join(
+        #[case] a: NoncovalentBondForm,
+        #[case] b: NoncovalentBondForm,
+        #[case] expected: NoncovalentBondForm,
+    ) {
+        assert_eq!(a.join(&b), Ok(expected));
+    }
+
+    #[rstest]
     #[case::equal(
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
@@ -1824,13 +1863,15 @@ mod tests {
         NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic).with_constraint(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Lit(false))),
         NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic)
     )]
-    fn test_noncovalent_bond_form_as_inherent_color(
+    fn test_noncovalent_bond_form_as_field_color(
         #[case] input: NoncovalentBondForm,
         #[case] expected: NoncovalentBondForm,
     ) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = NoncovalentBondFieldColor {
+            kind: &expected.kind,
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();
@@ -1838,6 +1879,14 @@ mod tests {
         expected_color.hash(&mut expected_hash);
         assert_eq!(actual_hash.finish(), expected_hash.finish());
         assert_eq!(input, original);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_color_size() {
+        assert_eq!(
+            size_of::<NoncovalentBondColor<'_>>(),
+            size_of::<&NoncovalentBondForm>()
+        );
     }
 
     #[rustfmt::skip]
@@ -1943,43 +1992,5 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    #[case::both_default(
-        NoncovalentBondForm::default(),
-        NoncovalentBondForm::default(),
-        Some(NoncovalentBondForm::default())
-    )]
-    #[case::kind_mismatch(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
-        None
-    )]
-    #[case::kind_narrows_from_undetermined(
-        NoncovalentBondForm::default(),
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        Some(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))
-    )]
-    fn test_noncovalent_bond_form_meet(
-        #[case] a: NoncovalentBondForm,
-        #[case] b: NoncovalentBondForm,
-        #[case] expected: Option<NoncovalentBondForm>,
-    ) {
-        assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rstest]
-    #[case::kind_mismatch_widens_to_default(
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
-        NoncovalentBondForm::default()
-    )]
-    fn test_noncovalent_bond_form_join(
-        #[case] a: NoncovalentBondForm,
-        #[case] b: NoncovalentBondForm,
-        #[case] expected: NoncovalentBondForm,
-    ) {
-        assert_eq!(a.join(&b), Ok(expected));
     }
 }

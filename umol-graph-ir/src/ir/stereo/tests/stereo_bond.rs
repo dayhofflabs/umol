@@ -490,34 +490,24 @@ fn test_stereo_bond_form_as_color_order(
 }
 
 #[rstest]
-#[case::empty(StereoBondForm::default(), StereoBondForm::default())]
+#[case::empty(StereoBondForm::default(), None)]
 #[case::kindless(
-    StereoBondForm::default().with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-    StereoBondForm::default()
-)]
+    StereoBondForm::default().with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), None)]
 #[case::constraint(
-    StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32)
-)]
+    StereoBondForm::new(StereoKind::CisTrans, 1_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), Some(StereoKind::CisTrans))]
 #[case::contradiction(
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))),
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32)
-)]
+    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), Some(StereoKind::CisTrans))]
 #[case::raw_coset(
-    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::term(StereoTerm::mirror(StereoTerm::var_in("x", [])))).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))),
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32)
-)]
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::term(StereoTerm::mirror(StereoTerm::var_in("x", [])))).with_constraint(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), Some(StereoKind::CisTrans))]
 #[case::raw_frame_constraint(
-    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0])).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })),
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32)
-)]
-fn test_stereo_bond_form_as_inherent_color(
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0])).with_constraint(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })), Some(StereoKind::CisTrans))]
+fn test_stereo_bond_form_as_field_color(
     #[case] input: StereoBondForm,
-    #[case] expected: StereoBondForm,
+    #[case] expected: Option<StereoKind>,
 ) {
     let original = input.clone();
-    let color = input.as_inherent_color();
-    let expected_color = expected.as_inherent_color();
+    let color = input.as_field_color();
+    let expected_color = StereoBondFieldColor { kind: expected };
     assert_eq!(color, expected_color);
     let mut actual_hash = DefaultHasher::new();
     let mut expected_hash = DefaultHasher::new();

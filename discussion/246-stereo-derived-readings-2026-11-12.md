@@ -1,6 +1,6 @@
 # 246 — Derived stereo readings
 
-Status: Proposed
+Status: In Progress
 Date: 2026-11-12
 Relates: [245](245-canonical-eq-cost-2026-11-12.md)
 
@@ -23,10 +23,16 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-## Current state
+S4f, S4g, S5a and S5b are implemented. The reviewed S4/S5 semantics, interfaces and names are
+settled. Main now has the selected Constitution search, flat auxiliary representation, narrower
+generator filter and FieldColor names. S5c's derived stereo readings and their consumer migration
+are next; the workspace-wide S5 gate remains ahead.
 
-The readings are derived in `umol-graph-ir/src/ir/molecule/symmetry.rs` through two public helper
-values. S1 moved the implementation without changing these computations.
+## Starting state
+
+Before S5b, the readings were derived in `umol-graph-ir/src/ir/molecule/symmetry.rs` through two
+public helper values. S1 moved that implementation without changing these computations. This
+section describes the implementation used for the original baselines.
 
 1. `Molecule::graph_symmetry(config)` returns `GraphSymmetry`. It runs the automorphism search on
    the incidence graph. The color of a stereo node includes its stored coset index, reduced by
@@ -295,9 +301,10 @@ The readings never use the `Full` level, so molecule-level constraints are compa
 neither value. Canonicalization always compares constraints, as the guides require of every
 equality, and what it computes does not change.
 
-**`AsColor`.** The full and inherent readings have separate associated color types. The full
-reading retains its original representation and comparisons. The inherent reading contains the
-frame-independent inherent fields without constraints:
+**`AsColor`.** The trait remains AsColor. Its full and field readings have separate associated
+color types. The full reading retains its original representation and comparisons. The field
+reading contains the frame-independent inherent fields without constraints. The names below
+are the approved names; S4g applies them to the implementation-time InherentColor spellings.
 
 ```rust
 pub(crate) trait AsColor {
@@ -305,7 +312,7 @@ pub(crate) trait AsColor {
     where
         Self: 'a;
 
-    type InherentColor<'a>: Ord + Hash
+    type FieldColor<'a>: Ord + Hash
     where
         Self: 'a;
 
@@ -313,20 +320,25 @@ pub(crate) trait AsColor {
     fn as_color(&self) -> Self::Color<'_>;
 
     /// The inherent fields without constraints.
-    fn as_inherent_color(&self) -> Self::InherentColor<'_>;
+    fn as_field_color(&self) -> Self::FieldColor<'_>;
 }
 ```
 
 - The full colors keep their existing field order and comparison implementations. The atom,
   bond, dative-bond and noncovalent-bond colors remain single-reference wrappers. A color carries
   no runtime constraints flag.
-- The inherent colors contain the selected inherent fields. For stereo atoms and stereo bonds
-  that is the kind; the stereogenicity assertion belongs to the full color. Each span reading
+- The field colors contain the selected inherent fields. Their names are AtomFieldColor,
+  BondFieldColor, DativeBondFieldColor, AromaticSystemFieldColor, MulticenterBondFieldColor,
+  NoncovalentBondFieldColor, StereoAtomFieldColor and StereoBondFieldColor. For stereo atoms
+  and stereo bonds that is the kind; the stereogenicity assertion belongs to the full color. Each span reading
   composes its selected color type and collapses a modification whose two projected sides agree.
-- `initial_colors` takes `include_constraints` and selects `FullColorProjection` or
-  `InherentColorProjection` once before the entity loops. Both instantiate the same generic
-  calculation. The existing ranker sorts the selected values and groups them with equality;
-  its algorithm is unchanged. The graph-symmetry checks retain their constraints option.
+- `molecule::symmetry::initial_colors` and `reaction_span::symmetry::initial_colors` take
+  `include_constraints` and select `as_color` or `as_field_color` directly at each entity-kind
+  ranking site. Both readings use the existing generic ranker, which sorts the selected values
+  and groups them with equality. The repeated branches are deliberate; no selector trait,
+  marker types or additional ranking helper are needed. S4f records this selected replacement
+  for the implemented selector machinery. The graph-symmetry checks retain their constraints
+  option.
 - The molecule and reaction-span canonicalization callers pass `true`. Their direct `as_color`
   reads, full-color order, upfront normalization and normalized stereo comparisons are unchanged.
 
@@ -342,10 +354,11 @@ added to the one definition later, by dividing the inherent part of a color.
 
 ### `GraphSymmetry`
 
-`GraphSymmetry` is auxiliary data computed once for a molecule. It holds the incidence graph,
-the ranked entity and incidence colors, the search adapter and refined cells, the operation
-config and the caches described below. It holds no molecule, borrowed or copied. A reading
-runs a search when it is asked, unless an exit by cell decides it.
+`GraphSymmetry` is auxiliary data computed once for a molecule. All readings use one
+Constitution incidence graph, its colored search adapter, refined partition and node-to-cell
+index. The value also holds its config and the stereogenic-unit cache described below. It holds
+no molecule, borrowed or copied. A reading runs a search when asked, unless an exit by cell
+decides it. Stereo records are read from the supplied molecule when checking a remapping.
 
 `GraphSymmetryView` follows `RingViews`. `Molecule::graph_symmetry` borrows the molecule and
 returns a view owning the computed data. `from_graph_symmetry` borrows existing data and the
@@ -358,12 +371,6 @@ search check reads that borrowed molecule. The stereo views likewise already bor
 molecule; attaching the auxiliary data gives their readings both inputs.
 
 ```rust
-pub struct GraphSymmetryConfig {
-    pub automorphism_algorithm: AutomorphismAlgorithm,
-    pub max_assignments: u32,
-    pub include_constraints: bool,
-}
-
 impl Molecule {
     pub fn graph_symmetry(&self, config: &GraphSymmetryConfig) -> GraphSymmetryView<'_>;
 
@@ -384,6 +391,12 @@ impl<'a> GraphSymmetryView<'a> {
     pub fn proper_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
     pub fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
 }
+
+pub struct GraphSymmetryConfig {
+    pub automorphism_algorithm: AutomorphismAlgorithm,
+    pub max_assignments: u32,
+    pub include_constraints: bool,
+}
 ```
 
 - **Config.** `GraphSymmetryConfig` holds the automorphism algorithm, the limit
@@ -398,12 +411,13 @@ impl<'a> GraphSymmetryView<'a> {
   An excluded constraint is not normalized, transported or validated by the symmetry checks.
   An included constraint participates in its stored representation after the required frame
   transport; a contradictory assertion is not by itself a normalization failure here.
-- **Malformed molecules.** `graph_symmetry` remains infallible. `initial_colors` can fail when
-  literal electron counts do not match their aromatic or multicenter participants, or when a
-  stereo kind, frame or literal coset cannot support the required action. Compatibility checks
-  of entity constraints apply only when `include_constraints` is `true`. For an input that
-  cannot be encoded, every entity gets a number of its own in place of a color. No two atoms
-  then share a cell, and the exits decide the readings: every atom is alone in its orbit, each
+- **Malformed molecules.** `Molecule::graph_symmetry` remains infallible. Preparation checks
+  literal electron counts against aromatic or multicenter participants and checks the selected
+  stereo attributes for kind, frame and coset-action compatibility. The stereo checks still
+  run even though the Constitution graph omits stereo nodes. Compatibility checks of entity
+  constraints apply only when `include_constraints` is `true`. For an input that cannot be
+  encoded, every entity in the search graph gets a number of its own in place of a color. No two
+  atoms then share a cell, and the exits decide the readings: every atom is alone in its orbit, each
   stereo record with a kind is `Stereogenic` and `Constitutional`, each pair of ligand atoms is
   `Distinct`, and `is_chiral` is decided by the identity alone. These are the readings of a
   molecule without symmetry. They are not correct for the malformed molecule, and the symmetry
@@ -414,10 +428,48 @@ impl<'a> GraphSymmetryView<'a> {
   change to the molecule a new value is built. Nothing ties a value to a molecule, as for
   `RingViews::from_ring_set`. Pairing data with a molecule does not validate that relationship;
   mismatched context has no specified semantic result and must not panic.
-- **Caches.** The incidence graph and the cells of the Constitution level, which the `Distinct`
-  test needs, are built on first use and kept in the value. The stereogenic units are the one
-  answer that is kept, because they are computed for all records together. No other answer is
-  kept.
+- **Caches.** Every query shares the Constitution search prepared by the factory. The first
+  constitutional topicity check uses that same data. The stereogenic units are the one answer
+  kept, because they are computed for all records together in S5d. Other query answers are not
+  cached.
+
+**Selected layout: one Constitution search.** The search graph omits stereo entities. At a
+leaf, the image of a stereo record is found from its mapped atom or bond site; its kind,
+configuration and selected constraints are then checked against that image record. A proper,
+mirror or coset-change query adds its stereo predicate to incidence preservation. A Constitution
+query checks incidence preservation without the stereo predicate. All these queries use the
+same prepared graph and the existing search algorithm.
+
+The trial retained SymmetrySearch in both candidates to isolate the graph-layout comparison.
+The subsequent decision removes that private bundle: incidence, adapter, partition and
+cell_indices belong directly to GraphSymmetry, followed by config. Preparation stays in
+Molecule::graph_symmetry and the existing private cell method moves to GraphSymmetry.
+GraphSymmetryConfig remains the last type in the module. Inlining the bundle adds no semantic
+distinction or additional heap allocation. The rejected second search and its lazy cache have
+no place in this representation.
+
+The cell_indices field stores one integer per adapter node for constant-time cell comparisons.
+It is the reverse lookup of OrderedPartition::cells, which stores the nodes of each cell.
+OrderedPartition does not already store that reverse lookup. Retain the index, at four bytes
+per adapter node plus vector storage, and construct it with the existing
+OrderedPartition::cell_indices method, made pub(crate), instead of repeating its calculation.
+
+| Layout | Preparation and checking | Disposition |
+| --- | --- | --- |
+| One Constitution search | Prepare one graph without stereo entities. Check stereo through mapped sites at the leaves. Reuse that graph for every reading. | Selected. Preparation was 35–48% faster and fixed build-and-read 37–60% faster on the four measured fixtures. |
+| Structure search plus lazy Constitution search | Prepare the graph including stereo entities for stereo queries, and build a second graph for the constitutional fallback. | Rejected for this implementation. It examined the same number of final candidates on these fixtures while preparing larger backend graphs and retaining more storage. |
+
+The Structure graph can offer extra pruning when stereo kinds or selected constraints
+distinguish otherwise equivalent sites. That possible benefit was not observed in this focused
+comparison. Stereo nodes are unnecessary for the query semantics, and no public layout selector
+or persistent second implementation is added.
+
+The separate-worktree comparison in S5b preserves the exact workloads, all medians, paired
+changes, cell and candidate-check counts, allocation measurements and source identities. Both
+candidates passed the same 254 molecule-symmetry cases, and the eight fixed fixture/config
+outputs matched exactly. These results describe four fixtures rather than performance across
+all molecules. The selected layout and its correctness fixes remain to be integrated into
+main; selection does not complete S5b or close the other review findings.
 
 Molecule chirality and atom equivalence have no assertion in the constraint language. They are
 derived readings on the molecule and its symmetry view.
@@ -563,9 +615,11 @@ keeps the records whose unit is selected.
 ### Computation
 
 Every reading is decided by the search of [245](245-canonical-eq-cost-2026-11-12.md) for a
-remapping of the molecule onto itself that passes a check. Source and target of the search are
-the molecule itself. The color of a stereo entity holds its kind, with `include_constraints`
-also its stereogenicity assertion, and not its coset, so the refined cells do not depend on the
+remapping of the molecule onto itself that passes a check. Source and target use the same
+Constitution graph, whose colors come from S4f's shared calculation with the selected constraints
+setting. Stereo entities have no nodes in this graph, so their kinds, configurations and
+constraints do not refine its cells. Those selected stereo forms are checked at the leaves,
+using the image record found at the mapped site. The refined cells do not depend on stored
 configurations.
 
 | Reading | Remapping searched for | Result |
@@ -582,7 +636,8 @@ configurations.
 - **Mirror image.** The coset space of each kind supplies the mirror image of a coset. For a
   tetrahedral or axial configuration it is the other coset; for a cis/trans configuration it is
   the same coset. The graph check composes the new mirror action with the remapping's frame
-  action before applying it once to the source coset. Constraints receive only the frame action.
+  action before applying it once to the source coset. Check that the kind and frame degrees
+  agree before composition, which otherwise panics. Constraints receive only the frame action.
 - **Application.** `coset_apply_permutation` evaluates the new action at the outer
   `StereoCoset` level. It transports literals and set members, preserves `Undetermined` and
   the set variant, and rejects an incompatible action or an out-of-range literal. For a `Term`
@@ -601,12 +656,22 @@ configurations.
   other coset of the kind. X is `Stereogenic` at the first coset for which no remapping is
   found, and not stereogenic if one is found for every coset. A kind with two cosets needs one
   search. For a coset of X that is not a literal the cosets are compared with the first one.
+- **Generator pruning.** The target automorphisms kept by the search must preserve the
+  particular query predicate. Preserving generators alone do not guarantee this for a
+  coset-change query whose focus can move or whose kind has more than two cosets. For these
+  queries, retain a preserving generator only if it also fixes the focus record and preserves
+  the requested target coset under the induced ligand-frame action. Reject a generator if its
+  focus record, kind or frame cannot be read or transported. This is the selected correction
+  from the generator-filter comparison under S5b. Clearing every generator is a correct
+  alternative with the same query semantics, but loses this pruning. Bypassing the filter
+  would instead keep all generators. Proper and mirror queries retain their preserving filter.
 - **Prostereogenic.** For a stereo entity that is not stereogenic, the same decision is repeated
   once per explicit ligand with that ligand held fixed. If X comes out stereogenic for some
   ligand, it is `Prostereogenic`. Otherwise it is `Nonstereogenic`.
 - **Topicity.** The three searches run in the order of the table, and the first that finds a
-  remapping decides. The third runs on the incidence graph of the Constitution level, which has
-  no stereo entities.
+  remapping decides. All three use the prepared Constitution graph. The first two check the
+  selected stereo forms at the leaves; the third omits that predicate. It prepares no second
+  graph.
 - **Fixed and sent atoms.** An atom is kept fixed, or sent to another atom, by partitions in
   which it is a single cell, one partition for the source and one for the target. The existing
   `OrderedPartition::individualize` makes an atom a single cell, once per atom.
@@ -645,9 +710,18 @@ changed.
 | `remapping_frame_action` | the permutation of a record's ligands under a remapping that sends the record to itself |
 | `molecule::symmetry::remapping_exists_at` | a remapping at a description level and of an `Orientation` sends given atoms to given atoms |
 | `molecule::symmetry::remapping_exists_for` | a remapping that keeps given atoms fixed changes the coset of a stereo entity to a given one |
+| molecule::symmetry::molecule_remapping_exists | shared atom validation, partition preparation and search for the two entry points |
+| molecule::symmetry::remapping_matches_stereo | the shared stereo walk, selected by Orientation and an optional entity/coset substitution |
+| molecule::symmetry::entity_image | the checked image of an entity under the incidence-node mapping |
 
-The two search entry points take the molecule and its auxiliary symmetry data and call
-`remapping_exists`. Their graph checks compare transported representations directly. The
+The two search entry points take the molecule and its auxiliary symmetry data and delegate
+to the private molecule::symmetry::molecule_remapping_exists. That function calls the existing
+generic ir::symmetry::remapping_exists; their names differ without relying on module paths.
+The stereo checks share the private molecule::symmetry::remapping_matches_stereo walk with its
+existing Orientation and optional entity/coset arguments. No new selector type is introduced.
+Keep molecule::symmetry::entity_image as a private function with its existing signature. Its
+single consumer uses it at several mapping sites; relocating it into a closure would merely
+move the same helper. Their graph checks compare transported representations directly. The
 canonicalization consumer continues to use its normalized comparisons. The molecular operations
 and the stereo views supply their borrowed molecule; the auxiliary data does not supply one.
 
@@ -734,8 +808,8 @@ the class `Stereogenic`.
 
 ### Cost
 
-One `GraphSymmetry` per molecule carries the incidence data, colors and refinement. It does not
-pay for molecule copying or normalization. A view borrows the molecule and either owns or borrows
+One `GraphSymmetry` per molecule carries one Constitution incidence graph, its colors and
+refinement. It does not pay for molecule copying or normalization. A view borrows the molecule and either owns or borrows
 that auxiliary data. Extracting owned data moves it; extracting borrowed data clones the auxiliary
 data. A reading costs an exit by cell or one or more searches. The stereogenic units are computed
 together and cached.
@@ -746,6 +820,19 @@ shallow application below did not measure time. Required benchmarks precede the 
 and comparisons follow the shared-color work and the consumer migration. Setup-only timings are
 reported separately: the old setup precomputes chirality and orbits, while the new setup prepares
 queries. The comparison also measures a fixed build-and-read workload.
+
+The later search-layout comparison in S5b measured the selected setup directly. One Constitution
+search was faster on every measured workload and retained 43–59% less Rust-owned storage
+initially, and 63–70% less after the constitutional fallback. The final-candidate counts were
+identical on those fixtures. The record distinguishes the primitive constitutional query from
+the complete topicity method, and Rust-owned storage from native allocations.
+
+The separate generator-filter comparison under S5b measures one coset-change query with prepared
+data. Retaining the generators that also fix the focus and requested coset costs 5.2–7.1% in
+six selected queries where it removes no candidates, and is about ten times faster in two
+queries with symmetry away from the focus. This is a defensible selected tradeoff, not evidence
+that it is the best choice across workloads. The full operation's slowdown is expected to be
+smaller because the extra filter work is only part of that operation; it has not been measured.
 
 Canonicalization keeps its input normalization and normalized comparisons. Its color ordering
 and results must remain unchanged, and its benchmarks are checked before proceeding from the
@@ -945,11 +1032,58 @@ The trial checked the application and comparison decisions using direct enumerat
 not implement the new `GraphSymmetry`, its view or the shared `AsColor` path, and it measured no
 timings. The implementation tests and measurements below precede those changes.
 
+## Review dispositions: S4 and unfinished S5
+
+The supplied review is evidence for discussion, not a blanket approval of its findings or
+proposed corrections. The identifiers below refer to that review. This record distinguishes
+changes verified in main, behavior checked only in the trial, remaining implementation work,
+and design questions that still need a decision. S4f completes the selector replacement; it
+does not close every S4 finding. Selecting one Constitution search likewise does not complete
+S5b or approve all of its private machinery. The table records the findings and work assigned
+before implementation: the requirements assigned to S4g and S5b are now complete, as recorded
+in the completion checkpoint under S5b. Coverage and consumers assigned to S5c and later
+subitems remain pending.
+
+| Review items | Current finding and disposition | Remaining work |
+| --- | --- | --- |
+| P1, B1, B3, N1–N3 | S4f removed ColorProjection, its marker types and constant, and both generic dispatch bodies. Full colors remain reference-sized and the ranker remains generic. | Closed for the selector mechanism. No selector or replacement ranking abstraction is added by the S5 port. |
+| P2, P3 | The operative design and S4e approval wording have been corrected. S4c now explicitly labels the selector as an initial implementation superseded by S4f. The earlier mechanism was not approved by accepting the reference-sized color outcome. | Keep completion claims scoped to their verified subitems; the remaining S4/S5 items below are open. |
+| B2 | Both molecule and reaction-span constraints flags were retained by the accepted S4f design. Current reaction-span production callers pass true. | No new span consumer is claimed or added. This explicit design decision closes the flag question for the current work. |
+| B4 | The proposed stereo-bond frame-admissibility helper and the analysis offered to justify it were rejected. The user then dropped this review item. | Dropped. Do not introduce the proposed helper or treat this review finding as an approved consolidation task. |
+| P4, B5, N5 | The selected representation inlines incidence, adapter, partition and cell_indices into GraphSymmetry, with config last. Retain the node-to-cell index and reuse OrderedPartition::cell_indices with pub(crate) visibility. | Remove SymmetrySearch and the second-search cache. Prepare the fields in Molecule::graph_symmetry and move the private cell method onto GraphSymmetry. These are settled choices. |
+| B6, N6 | Shared search setup and the shared stereo walk are retained. Their approved private names are molecule::symmetry::molecule_remapping_exists and molecule::symmetry::remapping_matches_stereo. Keep the existing Orientation/optional-substitution interface and the private entity_image function, including its name and signature. | Apply the two renames and retain the shared implementation. Do not add selector types or replace entity_image with a closure. The generic ir::symmetry::remapping_exists keeps its existing name. |
+| B7 | The trial reproduced the degree-mismatch panic under both constraint settings, then passed the cases with a degree check before mirror composition. That correction is accepted. Main still needs the guard. | Put the two exact encoding-failure cases in the owning main tests before porting the correction. The public operation remains infallible and preserves its input. |
+| B8 | Explicit mappings now demonstrate both failures of predicate invariance: a preserving generator can move the focus, or fix its stored coset while moving the requested coset. The two safe filters have identical query semantics and each passes all 261 trial molecule-symmetry cases. The narrower filter is selected on the qualified cost/complexity grounds recorded under S5b; the comparison does not establish that it is the best choice overall. | Put the explicit invariance cases and exact coset answers in the owning tests before porting the narrower filter. Extend production reading coverage in S5c. Main still has the old filter; no wrong public answer from that backend has been reproduced. |
+| B9 | The single-search decision already eliminates the provisional second-search cache. Its initialization, contents and pointer-identity assertions describe the rejected implementation. | Remove those assertions and the duplicate call while retaining the Constitution-query assertion when integrating the selected layout. This is a consequence of the settled decision, not a new approval question. |
+| B10 | All nine form/span tests compute expected_color by calling as_inherent_color on another form. The test-writing skill requires independent expected values; this is a repository requirement, not an unresolved design choice. | In S4g, use explicit expected color fields and field-distinguishing cases while preserving the existing exclusion, hashing and input-preservation requirements. The exact-rank cases remain. |
+| B11 | Module grouping and the test-writing skill determine the ownership and order of these tests. The four color-size controls currently live in the generic search tests, and GraphSymmetryView tests live in the molecule tests. | Move size controls beside their color types in S4g. Move view tests to the view module in S5b and order tests with their subjects. Do not add a production seam merely to share fixtures. No separate design decision is needed. |
+| N4 | Retain AsColor as the trait. The approved associated type and method are FieldColor and as_field_color; the eight concrete names are <Kind>FieldColor. These supersede the briefly accepted <Kind>InherentColor names. | Apply the settled names consistently to forms, EntitySpan, aggregate color consumers and their tests in S4g. Full Color and as_color retain their names and semantics. |
+| Correction 7 | Existing symbol names and the nomenclature guide supply symmetry for GraphSymmetry locals and config for operational choices. The module description must cover the colors and checks it owns. | Apply these narrow consistency and documentation corrections in S5b. They introduce no new concept or API and do not require another naming decision. |
+| P5 | The supplied review identifies six tests written after the code. The recorded initial compile failure has 25 errors, including authoring errors involving push, TopicityForm::single and StereoLigandPair. S4f subsequently ran the whole current main library suite: 12,859 passed, three ignored. | Preserve the actual chronology. The earlier claim that some current library cases had no recorded run is outdated; passing them later does not make them test-first. The new degree cases did fail on the panic before their trial fix. |
+| P6 | The old retirement list contained eight names without their assertions and omitted the changed stereo-view test. The ledger under S5b below now records the requirements and remaining production coverage. | Complete the pending S5c replacements and make the mixed stereo-view test's name, inputs and assertions agree. A ledger entry is not a claim that its replacement already exists. |
+| B12 | The exhaustive class/topicity calculations establish values but do not yet compare those readings with production. The molecule symmetry cases already compare the calculation and the molecule/view queries with explicit expectations. | Preserve the accepted exhaustive calculations as ongoing correctness checks. S5c must compare its production classes and topicities with the established values; testing a calculation alone is not production coverage. |
+| D: gates and consumers | Main's canonicalization/integrity tests and stereo property consumers still use removed APIs; Clippy and formatting failures remain recorded. No direct removed symmetry API use was found in the graph-IR benchmark sources during this pass. | Finish the named S5b consumers and its cleanup; migrate stereo properties with S5c. Build graph-IR benchmark targets to verify them rather than assuming every target needs source migration. The higher-level stereo benchmarks still migrate with S5e. |
+| D: later consumers | remapping_exists_for and remapping_changes_coset are currently test-only; max_assignments is for the unit computation. | Enable the production consumers in S5c and S5d. Rust operations and Python follow in S5e/S5f; their absence here is planned sequencing, not a reason to add speculative paths. |
+
+No further semantic, interface or naming decision has been identified for this reviewed S4 and
+unfinished S5b scope. The explicit decisions above settle the representation and helper names;
+the remaining test independence, ownership, ordering and terminology corrections follow the
+repository rules. They are implementation requirements, not additional approval questions.
+The stereo-bond proposal was dropped and is not pending. This does not claim that implementation,
+coverage or the S5 gates are complete.
+
+Test corrections follow the repository's current requirements: independent expected values,
+owner placement and ongoing semantic checks. Temporary drivers, allocation counters and
+unselected implementations stay in scratch. No historical-role label or duplicate algorithm is
+retained in production or tests solely because it was used during this development.
+
 ## Staged implementation plan
 
-S0 to S4 are complete. The remaining work starts at S5 and uses one color definition through
-`AsColor` and shared search-color construction. Each subitem carries its own tests under the
-test-writing skill. Required tests, independent expected values and benchmark harnesses are
+S0-S3, S4a-S4f and S5a have implementation records. S4g applies the settled naming and test
+corrections before the unfinished S5b port of the selected single Constitution search.
+The remaining work uses one color definition through AsColor and
+shared search-color construction. Each subitem carries its own tests under the test-writing
+skill. Required tests, independent expected values and benchmark harnesses are
 written before the implementation they exercise. An intended initial test failure
 belongs inside that subitem; it does not justify leaving a nonbreaking subitem red. Where an
 existing assertion changes or is removed, its old and new statements are shown before editing it.
@@ -1664,8 +1798,11 @@ recheck medians preserve the evidence used for this subitem's conclusion.
 - **Kind:** breaking internally, red-to-green within the subitem as all call sites migrate.
   `[dep: S4b]`
 
-Both shared color constructors take `include_constraints`. A dispatcher selects the full or
-inherent `ColorProjection` once; each aggregate's generic calculation then ranks the selected
+The following describes the initial S4c implementation, superseded by S4f. Its selector
+mechanism was not approved as part of the reference-sized color decision.
+
+Both shared color constructors took `include_constraints`. A dispatcher selected the full or
+inherent `ColorProjection` once; each aggregate's generic calculation then ranked the selected
 associated color type with the existing ranker. The projection supplies a constant for the stereo
 compatibility checks. Excluded stereo constraints are neither transported nor checked.
 Configuration compatibility remains checked in both modes, on each present side of a span.
@@ -1848,9 +1985,10 @@ cargo bench --locked -p umol-graph-ir --bench canonicalize --no-run --message-fo
     '^(?:canonicalize/complete/canonical_eq_unequal_colors/symmetric_stereo_butanol|canonicalize/reaction_span_modified/canonical_eq_unequal_colors/symmetric_charge_sum)$'
 ```
 
-The focused comparison and this design were accepted for integration. These are preliminary
-results for the two measured workloads; they do not establish performance parity across the
-complete suite.
+The focused comparison supported retaining reference-sized full colors and separate inherent
+types. The selector mechanism itself was not approved; S4f below records its selected
+replacement. These are preliminary results for the two measured workloads; they do not
+establish performance parity across the complete suite.
 
 The integrated Rust sources match the reviewed trial. The workspace test gate passes with
 Python 3.13.18 active and `umol-graph-ir/proptest`, `umol-graph/proptest` and
@@ -1870,7 +2008,189 @@ cargo +nightly fmt --all -- --check
 git diff --check
 ```
 
-Formatting, the scope review and the diff check pass. S4 is complete.
+Formatting, the scope review and the diff check pass. These checks describe the selector
+implementation; S4f below records its replacement.
+
+#### S4f — Direct selection of full and inherent colors **Done**
+
+The 2026-11-14 decision selects direct branching at each entity kind. The corrected trial is
+integrated into the main worktree's existing color function bodies. The integration and
+standalone stage-gate results are recorded below.
+This subitem replaces the selector machinery recorded in S4c and S4e and precedes resumption of
+unfinished S5b. It does not repeat S5a or settle the other S4/S5 review questions.
+
+- **Module:** `ir::molecule::symmetry`, `ir::reaction_span::symmetry` and `ir::symmetry`.
+- **Tests and measurements first:** reuse the existing S4a-S4c full/inherent color, span,
+  encoding-failure and canonicalization cases with their exact expectations. Run the focused
+  color and canonicalization tests on the integration base before changing production code.
+  The trial and the three-version comparison below already precede main-worktree integration.
+  This refactor requires no new correctness algorithm, fixture or changed expectation.
+- **Changes:** retain the existing signatures of `molecule::symmetry::initial_colors` and
+  `reaction_span::symmetry::initial_colors`, including `include_constraints`. At each entity-kind
+  ranking site, branch on that argument, convert forms with `as_color` or `as_inherent_color`,
+  and call `symmetry::rank_colors` with the corresponding associated color type. Both aggregate
+  flags remain. Define each producer iterator and its encoding checks once; execute only the
+  selected branch. For aromatic, multicenter and stereo entities, retain explicit vector
+  capacity and push loops rather than introducing fallible collection. Preserve kind order,
+  incidence colors and integer ranks.
+- **Removal and boundaries:** remove `ColorProjection`, `FullColorProjection`,
+  `InherentColorProjection`, `INCLUDE_CONSTRAINTS`, `molecule::symmetry::initial_colors_with`
+  and `reaction_span::symmetry::initial_colors_with`. Introduce no replacement trait, marker,
+  helper or color flag. Retain the two AsColor associated types and the reference-sized full
+  colors. Preserve selected-data compatibility checks and failure behavior: excluded constraints
+  are not transported or checked; included
+  constraints are read as stored; configuration compatibility is checked in both modes. Add
+  no normalization. Canonicalization continues to pass `true` and owns its normalization and
+  normalized comparisons. Port only this selection change into the current function bodies;
+  do not replace the containing files with older trial copies.
+- **Gate:** rerun the focused tests, then the all-features graph-IR tests, including the
+  explicit property suite, all-target Clippy with warnings denied, formatting and diff checks.
+  Complete the existing S4 dependent-crate gate on a green integration base before resuming
+  S5b. Review the full diff for extra abstractions, names, visibility changes and altered test
+  coverage. Reuse the recorded timings when the port matches the reviewed trial; further edits
+  to the measured path require a bounded comparison of the affected cases, not a tuning loop.
+- **Kind:** internal refactor, green at completion; existing signatures are unchanged.
+  `[dep: S4c, S4e]`
+
+**Measurements before integration.** The three versions are original AsColor at `16f06bae5`,
+the implemented selector at `93c1fa476`, and the corrected direct-branching trial based on
+`93c1fa476`. Only the three source modules above differ in the measured trial. Its source-patch
+SHA-256 is
+`e31a888b02bbf8b5784d605aceded2db3eee157cbc22c65adffa7ae5edecae29`.
+The original executable's hash matches its build record, and all 143 recorded source-file
+hashes match its revision. The benchmark is unchanged, blob
+`3f7ae0fc4fab34998b007f68b7024b3300506823`. All versions use rustc 1.99.1 (`58cf8f9c3`,
+2026-10-13), Nauty and matching profiles: optimization level 3, debuginfo 2, debug assertions
+and overflow checks disabled.
+
+The exact workload IDs are
+`canonicalize/complete/canonical_eq_unequal_colors/symmetric_stereo_butanol` and
+`canonicalize/reaction_span_modified/canonical_eq_unequal_colors/symmetric_charge_sum`.
+One original/selector/direct/direct/selector/original comparison used 80 samples, a 0.2 s
+warm-up and a 0.8 s measurement time per case; the six runs took 17.80 s. The table gives the
+geometric mean of the two median estimates per implementation, in microseconds. Negative
+changes mean faster execution.
+
+| Workload | Original AsColor µs | Selector µs | Direct µs | Direct vs original | Direct vs selector |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| molecule, unequal colors, symmetric butan-2-ol | 8.66205 | 8.64902 | 8.50111 | −1.86% | −1.71% |
+| modified span, unequal colors, symmetric charge sum | 4.84906 | 4.83831 | 4.82556 | −0.48% | −0.26% |
+
+The individual medians, in run order and microseconds, were:
+
+| Workload | Original 1 | Selector 1 | Direct 1 | Direct 2 | Selector 2 | Original 2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| molecule | 8.70996 | 8.69755 | 8.49195 | 8.51029 | 8.60077 | 8.61440 |
+| modified span | 4.86579 | 4.84756 | 4.82362 | 4.82749 | 4.82908 | 4.83239 |
+
+Paired direct-versus-original changes were −2.50% and −1.21% for the molecule, and −0.87% and
+−0.10% for the span. Against the selector they were −2.36% and −1.05%, and −0.49% and −0.03%,
+respectively. No penalty was observed on these two coloring-sensitive workloads. The small
+span differences are treated as roughly equal performance; these results do not establish a
+persistent speedup or describe the complete suite.
+
+An earlier two-version trial also changed reserved vectors and push loops to fallible
+collection. It measured +1.11% for the molecule and +0.72% for the span against the selector,
+and omitted original AsColor. It does not establish the cost of direct branching. The corrected
+comparison above preserves the allocation strategy and supplies the original baseline.
+
+The corrected trial passes 467 focused color cases and 520 canonicalization cases; the filters
+may overlap. All-features, all-target Clippy, formatting, diff checks and both workload
+preflights for each executable pass. The trial's commands were:
+
+```text
+cargo test --locked -p umol-graph-ir --lib color --quiet
+cargo test --locked -p umol-graph-ir --lib canonical --quiet
+cargo clippy --locked -p umol-graph-ir --all-features --all-targets -- -D warnings
+cargo +nightly fmt -p umol-graph-ir -- --check
+git diff --check
+cargo bench --locked -p umol-graph-ir --bench canonicalize --no-run --message-format=json
+<saved-executable> --test <exact-workload-filter>
+<saved-executable> --bench --warm-up-time 0.2 --measurement-time 0.8 --sample-size 80 \
+    --save-baseline <unique-run-label> <exact-workload-filter>
+```
+
+The filter selects exactly the two IDs above. Separate Cargo and Criterion directories preserve
+other builds and timing baselines. These inline measurements and source identities remain the
+record when temporary trial directories are removed.
+
+**Alternatives not implemented as the replacement.** A generic form-ranking helper could select
+the reading and reuse one body per entity kind while retaining the two associated color types.
+Its proposed iterator, lifetime, associated-type and fallibility requirements complicate the
+signature to avoid repeated direct branches. It was not implemented or measured; no relative
+performance claim is made. The repetition in the selected design is acceptable, and a later
+abstraction remains possible if a concrete need justifies it.
+
+A common output type for `as_color` and `as_inherent_color`, carrying the reading choice, remains
+the fallback rather than the selected replacement. Earlier wider-color and flag experiments
+motivated concern about approximately 1–4% costs on affected cases; that is not a measurement
+of this unimplemented final design. This option trades simpler type machinery for a possible
+persistent cost and would be reconsidered only if the selected direct design proved inadequate.
+
+The selector trait and marker types were implemented at `93c1fa476`; they were not an
+unimplemented alternative. They retained one generic aggregate body and chose the reading once,
+but added an abstraction, names, visibility and placement decisions that were not approved.
+S4f removes them; their measured timings appear in the comparison above.
+
+**Integration checks.** The two integrated color function bodies are byte-for-byte identical
+to the measured corrected trial. The port changes only these bodies, their imports and the
+selector declarations in `ir::symmetry`. It preserves the unfinished S5b code around them,
+the form/color types, the ranker, both canonicalization modules, all tests and the benchmark
+harness. No additional timing run was needed.
+
+Before the port, the main worktree passed 454 focused color cases and 520 canonicalization
+cases. Both counts and results are unchanged after the port. The main all-features library
+suite passes: 12,859 passed, three ignored. The lower color count than the trial reflects the
+existing S5b changes; this port changes no tests or expectations.
+
+The standalone S4f gate uses the green S4 base at `93c1fa476` with exactly the measured source
+patch. With the repository's Python 3.13.18 environment active, the workspace tests pass:
+32,287 passed, ten ignored. This includes every graph-IR feature and the explicitly enabled
+property and conformance suites. Workspace Clippy with all targets and warnings denied,
+workspace formatting and the diff check pass. The gate commands were:
+
+```text
+cargo test --locked --workspace \
+    --features umol-graph-ir/proptest,umol-graph/proptest,umol-graph/conformance --quiet
+cargo clippy --locked --workspace \
+    --features umol-graph-ir/proptest,umol-graph/proptest,umol-graph/conformance \
+    --all-targets -- -D warnings
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
+The following describes the S4f integration checkpoint. The main worktree remains in the
+unfinished S5b migration. Its all-features package compile has
+the same 22 error diagnostics before and after the port, from the retired coloring/config
+surface and stereo methods in `tests/canonicalization.rs`, `tests/integrity.rs` and the stereo
+property tests. Main Clippy reports the existing unused `StereoCoset` import and two absolute
+paths in the S5b cache test. Main workspace formatting still reports the existing S5b edits;
+the molecule module has exactly the same 27 formatter edits before and after S4f. These main
+checks remain outstanding for the S5b/S5c migration. The standalone S4f gate above passes;
+it does not assert that the main workspace migration is complete.
+
+#### S4g — Field-color names and test corrections **Done**
+
+- **Module:** ir::traits; the eight form/color owners; ir::span; molecule and reaction-span
+  color consumers; their owning tests and the misplaced size controls in ir::symmetry::tests.
+- **Tests first:** before the production rename, replace the nine method-derived expected
+  values with explicit expected color fields and include cases distinguishing retained fields.
+  Preserve the existing constraint-exclusion, equal-color hash and input-preservation checks.
+  Move each of the four reference-size checks beside its color type, preserving the exact
+  requirement. Use the existing exact-rank and canonicalization cases as correctness controls.
+- **Changes:** keep AsColor and its full Color/as_color reading. Rename InherentColor to
+  FieldColor, as_inherent_color to as_field_color, and all eight Inherent<Kind>Color types to
+  <Kind>FieldColor. Update EntitySpan and both aggregate consumers in the same change. This
+  changes names and test independence; the selected fields, layouts, comparisons and ranking
+  algorithm are unchanged. Add no new abstraction or public surface.
+- **Gate:** the 43 corrected color cases pass before the rename and as part of the all-features
+  library suite afterward. The library, canonicalization/integrity integration suites, Clippy,
+  benchmark linking and formatting pass. This correction ran after S5b within the ongoing S5
+  migration; its workspace gate remains S5g. No new timing comparison was required.
+- **Kind:** additive (green); internal names and test corrections only. `[dep: S4f]`
+
+The completed S4b-S4f records retain their implementation-time inherent-color names. The
+operative design above uses the approved field-color names; this subitem applies them to code.
 
 ### S5 — Symmetry data, molecule-backed queries and consumer migration
 
@@ -1992,44 +2312,501 @@ git diff --check
 
 Production behavior and public interfaces are unchanged. S5a ends green.
 
-#### S5b — `GraphSymmetryConfig`, auxiliary data and molecule queries
+#### S5b — `GraphSymmetryConfig`, auxiliary data and molecule queries **Done**
 
 - **Module:** `ir::molecule::symmetry`, `ir::view::symmetry`, `ir::view`, `ir::coloring` and
   the affected exports and graph-IR tests/benchmarks.
-- **Tests first:** cover config defaults and both constraints settings; the five molecule
-  queries and the same five view queries on S0a fixtures and their renumberings; owned and
-  borrowed views; extraction, source/data independence and compatible reuse. Test the raw
+- **Readiness:** the single Constitution layout, flat auxiliary representation, field-color
+  names, helper names and narrower generator filter are settled. S4g is independent. The remaining
+  review corrections below follow the repository rules and do not need separate approval.
+- **Tests first:** retain the trial's degree-mismatch cases as permanent cases before changing
+  the main checks. Before replacing the coset-change generator filter, add the explicit mappings
+  for a moving focus and a fixed square-planar focus whose other cosets are permuted, and the
+  exact coset answers from the generator-filter comparison below. Reuse the existing raw-form,
+  constraints, orbit and exact coset cases and the recorded comparison. Replace the provisional
+  cache/pointer assertions with the query assertion; the selected layout has no second-search
+  cache. Cover config defaults and both
+  constraints settings; the five molecule queries and the same five view queries on S0a fixtures
+  and their renumberings; owned and borrowed views; extraction, source/data independence and compatible reuse. Test the raw
   literal/singleton distinction, excluded contradictory or frame-incompatible constraints,
   included raw constraints, molecule-level constraints and encoding failures. Test the exact
   shallow symbolic operands and composed mirror/frame actions from the correctness trial.
   Check that mismatched context does not panic without promising a semantic result.
-- **Changes:** replace the old prepared value with auxiliary incidence data, shared colors,
-  adapter, cells, config and caches. It holds no molecule. Make the config nongeneric, with
-  `automorphism_algorithm`, `max_assignments` and `include_constraints`. Build colors from the
-  supplied forms through S4c, and remove `ir::coloring` and its three types when this consumer
-  switches. Remove their exports and feature-selector callers.
+- **Changes:** complete the auxiliary-data implementation with one Constitution incidence
+  graph, shared colors, adapter, refined partition and cell_indices. Inline incidence, adapter,
+  partition and cell_indices into GraphSymmetry, remove SymmetrySearch, and construct the index
+  with OrderedPartition::cell_indices, made pub(crate). Prepare the fields in
+  Molecule::graph_symmetry and move the private cell method onto GraphSymmetry. Remove the
+  provisional Structure input, its unused preparation branch and the lazy Constitution-search
+  cache. The value holds
+  no molecule, and config stays last. Preserve the nongeneric config with `automorphism_algorithm`, `max_assignments` and
+  `include_constraints`. Build colors from supplied forms through S4f and check selected stereo
+  encoding compatibility even though the graph omits stereo nodes. Complete the removal of
+  `ir::coloring`, its three types, exports and feature-selector callers.
 - **Interface:** `Molecule::graph_symmetry` returns `GraphSymmetryView`, owning the auxiliary
   data and borrowing the molecule. The view's owning constructor is crate-private;
   `from_graph_symmetry` borrows data and molecule, and `into_graph_symmetry` moves owned data
   or clones borrowed data. The auxiliary data supports that explicit cloning and has no
   arbitrary-parts constructor. The five query names move to `Molecule`, taking the data, and
   the view forwards them. Export the adapter with the other views and from `ir`.
-- **Checks:** implement the graph-operation remapping checks and search entry points with the
-  molecule supplied by the query. Compare selected transported forms structurally, compose the
-  new mirror and frame actions before shallow application, and skip excluded constraint
-  transport. Preserve the existing normalized-comparison path for canonicalization. Use the
-  existing generic search and the established cell exits. Build Constitution-level data and
-  cells on first use. Encoding failure uses distinct colors; lack of a normal form is not a
-  reason for that fallback.
+- **Checks:** find image stereo records through their mapped sites in the supplied molecule.
+  Keep the shared search setup as molecule::symmetry::molecule_remapping_exists and the shared
+  stereo walk as molecule::symmetry::remapping_matches_stereo, with its existing Orientation
+  and optional entity/coset arguments. Retain the private entity_image function and its
+  signature. The generic ir::symmetry::remapping_exists keeps its name.
+  Compare selected transported forms structurally, check degrees before composing mirror and
+  frame actions, apply the composition shallowly, and skip excluded constraint transport.
+  For coset-change queries, retain a preserving generator only if it fixes the focus record
+  and preserves the requested target coset under its induced ligand-frame action. Use the
+  selected direct implementation from the generator-filter comparison below, with no new
+  production types or helpers. Proper and mirror queries retain their preserving filter.
+  Preserve the normalized-comparison path for canonicalization, the generic search and the
+  established cell exits. Every query uses the same prepared graph; the Constitution query
+  omits the stereo predicate. Encoding failure uses distinct colors; lack of a normal form is
+  not a reason for that fallback.
 - **Migration:** retire `StereoSymmetry`, the two molecule methods returning it, the forwarding
   view methods and their conveniences with the old derivation. Remove their graph-IR tests
   only after recording which definitions the replacement cases state. Migrate the molecule
-  query consumers in `tests/canonicalization.rs`, the config use in `tests/integrity.rs` and
-  affected graph-IR benchmarks; remove the isotope-ignoring orbit selection. The stereo
-  property consumers migrate in S5c, when their replacement readings exist.
+  query consumers in `tests/canonicalization.rs` and the config use in `tests/integrity.rs`;
+  remove the isotope-ignoring orbit selection. Audit and build graph-IR benchmark targets,
+  adapting actual affected callers. The stereo property consumers migrate in S5c, when their
+  replacement readings exist.
+- **Review corrections:** move GraphSymmetryView tests to its owning view module and keep
+  tests in source order. Correct the mixed stereo-view test so its name, values and assertions
+  describe the current operations. Use symmetry for GraphSymmetry locals, config in its
+  rustdoc, and an accurate module description of its colors and checks. Use the retirement
+  ledger below to account for every
+  removed assertion, recording the actual test/code ordering. Finish the graph-IR integration
+  consumers, formatting and Clippy work; build affected benchmark targets before claiming
+  benchmark migration is needed. Do not copy temporary counters or drivers into main.
 - **Kind:** breaking; graph-IR library tests green, integration/property consumers can remain
   red until S5c and the workspace until S5f.
-  `[dep: S5a, S4c, S4d]`
+  `[dep: S5a, S4f, S4d]`
+
+**Completion checkpoint, 2026-11-14.** S5b was completed first, followed by the independent
+S4g correction. Before the search port, the focused suite had 259 passing and six failing cases:
+two kind/frame-degree panics and four Constitution-remapping checks. After the port all 265
+passed. Existing late-written tests retain their earlier chronology; this does not claim that
+they were test-first.
+
+The completed code has one Constitution graph, flat GraphSymmetry fields with config last,
+the existing cell-index calculation, the approved private helper names, the degree guard and
+the selected narrower generator filter. Adapter tests now live in the view module. The mixed
+stereo-view test is separated into kind chirality and exact ligand-position cases; its irrelevant
+own-coset variation is removed. The isotope-ignoring corpus selector is retired as planned.
+
+S4g gives the eight atomic color tests explicit expected fields or kinds. The span test constructs
+its expected variants explicitly, using the separately tested atomic color producer for its
+opaque atomic values; the expected carrier never calls the span projection or collapse. All
+43 field-color cases passed before the production rename. The four reference-size assertions
+now live beside their types. Full and field-color implementations retain their fields, layout,
+comparison and hash behavior; only the agreed names change.
+
+Final verification in main passes: 12,874 all-features library cases, three ignored; nine
+canonicalization and 19 integrity integration cases; Clippy with warnings denied for those
+targets and all benchmarks; all ten benchmark executables linked in the test profile; workspace
+formatting and the diff check. The commands were:
+
+```text
+cargo test --locked -p umol-graph-ir --all-features --lib --test canonicalization --test integrity
+cargo clippy --locked -p umol-graph-ir --all-features --lib --test canonicalization --test integrity --benches -- -D warnings
+cargo test --locked -p umol-graph-ir --all-features --benches --no-run
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
+The scope audit confirms that both canonicalization modules are unchanged, the generic search
+changes only the approved cell_indices visibility, and both existing canonical stereo checks
+and full-color bodies are unchanged apart from formatting. Field-color bodies change only
+names and formatting. No temporary benchmark driver, counter, selector trait or extra production
+helper was retained. The unrelated umol-graph stereo edit is preserved. No new timing run or
+mutating git command was used. The stereo property consumers remain assigned to S5c, and the
+higher Rust/Python consumers to S5e/S5f; this is not a workspace-wide completion claim.
+
+**Retired and changed test requirements.** This ledger covers the current S5b working-tree
+changes. A pending replacement remains work for the named subitem.
+
+| Test or group | Requirement represented | Current disposition and replacement |
+| --- | --- | --- |
+| test_graph_symmetry_site_stabilizer, test_molecule_observable_descriptor, test_project_onto_ligands | Details of the removed stabilizer/descriptor/local-projection implementation. | Those internals have no requirement in the replacement. Their helper-specific assertions are retired. |
+| test_project_onto_ligands_virtual | Implicit-hydrogen, lone-pair and virtual ligands keep their positions under a remapping. | The rule remains. Implicit hydrogen is covered by the remapping-exists and S3a cases; lone-pair and virtual-ligand production coverage remains required in S5c. |
+| test_molecule_stereo_atom_symmetry_stereogenic, test_molecule_stereo_atom_symmetry_prostereogenic, test_molecule_stereo_bond_symmetry | Classes of the elementary atom/bond examples and topicities of selected ligand pairs. | Preserve the class requirements in S5c. Pairs of constitutionally different ligands now read Distinct instead of Diastereotopic under the settled definition; show the changed exact values in those cases. |
+| test_stereo_symmetry_is_stereogenic, 15 cases | The removed local-group rule and independence from the own coset for binary kinds. | The local-group rule is replaced by the remapping definition. Binary own-coset independence remains required in S5c. The existing multicoset remapping cases are partial coverage, not a replacement for the derived reading. |
+| test_stereo_atom_view_stereo_queries, now test_stereo_atom_view_is_chiral | Forwarded stereo readings, plus kind chirality and ligand lookup over four own-coset forms. | S5b separates kind chirality and ligand-position tests and retains the existing exact ligand/count checks. The irrelevant own-coset variation is removed. Restore derived-reading coverage with attached symmetry data in S5c. |
+| test_graph_symmetry_is_chiral_no_stereo, now test_graph_symmetry_view_is_chiral | Benzene is achiral. | The query assertion remains; place it with the owning view tests. |
+| test_exhaustive_symmetry, now test_molecule_graph_symmetry | Explicit chirality and full orbit expectations established by exhaustive atom-bijection calculations. | Kept and extended to compare the molecule queries and owned/borrowed views with the same exact values. |
+| rdkit_isotope_excluded in tests/canonicalization.rs | The old feature selector could ignore isotope fields. | Feature selection is retired. The isotope-including exact partition and renumbering case remain; there is no isotope-ignoring query in the new interface. |
+
+**Search-layout comparison and decision, 2026-11-14.** The single Constitution search is
+selected for S5b. Both designs were implemented in a separate worktree, based on the current
+S5b source over `a02f535b6`. Main still contains the provisional two-search implementation;
+porting the selected layout and its correctness fixes is pending. The search-bundle and field
+names were accepted separately, and config ordering is already applied. The temporary drivers
+and the rejected candidate are not part of the production implementation.
+
+The two-search candidate prepares Structure data and lazily prepares Constitution data. The
+one-search candidate prepares Constitution data once and uses it for all queries; stereo images
+are identified through their mapped atom or bond sites. Both retain SymmetrySearch for this
+comparison, use the same ranker and search kernel, read the supplied molecule, and preserve raw
+forms without normalization. Both check selected stereo encoding compatibility when preparing
+Constitution data, so omitting stereo nodes does not bypass the encoding-failure fallback.
+
+Before timing, a kind/frame-degree mismatch reproduced the mirror-composition panic with both
+constraint settings. Both candidates check the degree before composing. Coset-change searches
+clear the backend generators to disable generator pruning for that predicate; ordinary preserving
+and mirror searches retain their filter. Bypassing the filter would retain all backend generators,
+which is not the same operation. The existing exact coset cases pass with pruning disabled.
+This describes the candidates used for the layout timings. The later generator-filter
+comparison below selects a narrower preserving filter for integration; it does not change
+these recorded layout results.
+The provisional cache/pointer assertions were removed from the trial's Constitution-query test;
+its query assertion remains. These correctness changes are in the trial, pending integration
+with the selected layout.
+
+Each candidate passes the same 254 molecule-symmetry test cases, including raw forms, selected
+and excluded constraints, malformed encodings, the new degree cases and the existing coset
+cases. The eight outputs for the four fixed fixtures under both constraint settings agree
+exactly. This is a focused correctness check, not the completed S5b workspace gate.
+
+The fixtures are the accepted meso and chiral dichlorodifluoroethanes and chlorofluoropropane
+from the permanent molecule-symmetry tests, and the inositol input from the stereo operation
+benchmarks: six `C#h` ring atoms, six `O#h` substituents, and six tetrahedral records with
+undetermined cosets. Timings use the default config, Nauty and excluded constraints. The fixed
+workloads, established before adapting the candidates, are:
+
+| Workload ID component | Timed operation |
+| --- | --- |
+| prepare | Build and drop the owning symmetry view. |
+| prepared_readings | On prepared data, read chirality, proper/star equivalence of atoms 0 and 1, and both complete orbits of atom 0. |
+| first_constitution | Query constitutional equivalence with the site fixed, on fresh prepared data. Preparation and input destruction are outside timing through Criterion PerIteration batching by reference. |
+| build_and_read | Prepare data, run the five prepared readings, then the Constitution query; includes destruction. |
+| repeated_readings | After the Constitution query has initialized any cache, repeat the five readings and Constitution query three times. |
+
+The Constitution query fixes atom 0 and sends atom 1 to atom 2 for both dichlorodifluoroethanes;
+fixes atom 1 and sends atom 6 to atom 7 for chlorofluoropropane; and fixes atom 0 and sends atom 1
+to atom 6 for inositol. It measures the primitive needed by topicity's constitutional fallback,
+not the as-yet-unimplemented complete topicity method. All but the chlorofluoropropane query
+exit by different cells; the latter executes one candidate check. The repeated workload is a
+fixed comparison, with no claim about real query frequencies.
+
+The run used rustc 1.99.1 (`58cf8f9c3`, 2026-10-13), matching optimized benchmark profiles
+(optimization level 3, debuginfo 2, debug assertions and overflow checks disabled), 80 samples,
+0.1 s warm-up and 0.4 s measurement per workload. The fixed order was two/one/one/two, with
+separate Criterion output directories and no concurrent builds. The four runs took 12.75,
+12.61, 12.66 and 12.70 s: 50.72 s total. Allocation and check-count instrumentation is enabled
+only in the debug binaries; it is absent from the timed binaries.
+
+Every full benchmark ID is `layout/<workload>/<fixture>`, with the five workload components
+above and fixtures `meso`, `chiral`, `chlorofluoropropane` and `inositol`. The table gives the
+geometric mean of each candidate's two median estimates, in microseconds. Negative changes
+mean that one search is faster; paired changes compare corresponding repeats.
+
+| Workload | Fixture | Two µs | One µs | One vs two | Pair 1 | Pair 2 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| build_and_read | chiral | 45.27982 | 23.91083 | -47.19% | -47.90% | -46.48% |
+| build_and_read | chlorofluoropropane | 26.79639 | 16.87100 | -37.04% | -37.97% | -36.09% |
+| build_and_read | inositol | 368.93548 | 148.07002 | -59.87% | -60.06% | -59.67% |
+| build_and_read | meso | 60.57229 | 32.86440 | -45.74% | -46.56% | -44.92% |
+| first_constitution | chiral | 2.58497 | 0.02180 | -99.16% | -99.16% | -99.16% |
+| first_constitution | chlorofluoropropane | 6.85427 | 3.52282 | -48.60% | -49.56% | -47.63% |
+| first_constitution | inositol | 3.58724 | 0.02188 | -99.39% | -99.39% | -99.39% |
+| first_constitution | meso | 2.60629 | 0.02181 | -99.16% | -99.17% | -99.15% |
+| prepare | chiral | 4.05133 | 2.62747 | -35.15% | -35.84% | -34.44% |
+| prepare | chlorofluoropropane | 5.31540 | 3.37707 | -36.47% | -37.49% | -35.42% |
+| prepare | inositol | 6.77280 | 3.55159 | -47.56% | -48.19% | -46.93% |
+| prepare | meso | 4.06545 | 2.65204 | -34.77% | -35.47% | -34.05% |
+| prepared_readings | chiral | 37.93832 | 21.18839 | -44.15% | -44.62% | -43.68% |
+| prepared_readings | chlorofluoropropane | 14.49105 | 9.77477 | -32.55% | -33.51% | -31.57% |
+| prepared_readings | inositol | 356.14304 | 145.00263 | -59.29% | -59.99% | -58.57% |
+| prepared_readings | meso | 53.54934 | 29.90544 | -44.15% | -45.22% | -43.07% |
+| repeated_readings | chiral | 113.76004 | 63.48991 | -44.19% | -44.84% | -43.54% |
+| repeated_readings | chlorofluoropropane | 53.85235 | 40.15540 | -25.43% | -26.76% | -24.09% |
+| repeated_readings | inositol | 1069.08068 | 433.81367 | -59.42% | -59.93% | -58.90% |
+| repeated_readings | meso | 160.83263 | 89.53043 | -44.33% | -45.06% | -43.59% |
+
+The individual median estimates, in run order and microseconds, are:
+
+| Workload | Fixture | Two 1 | One 1 | One 2 | Two 2 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| build_and_read | chiral | 45.44777 | 23.67895 | 24.14499 | 45.11250 |
+| build_and_read | chlorofluoropropane | 26.97102 | 16.72947 | 17.01372 | 26.62289 |
+| build_and_read | inositol | 370.15325 | 147.82668 | 148.31377 | 367.72171 |
+| build_and_read | meso | 61.01548 | 32.60815 | 33.12266 | 60.13233 |
+| first_constitution | chiral | 2.59685 | 0.02191 | 0.02169 | 2.57314 |
+| first_constitution | chlorofluoropropane | 6.91326 | 3.48680 | 3.55922 | 6.79578 |
+| first_constitution | inositol | 3.60744 | 0.02190 | 0.02185 | 3.56716 |
+| first_constitution | meso | 2.62760 | 0.02177 | 0.02185 | 2.58515 |
+| prepare | chiral | 4.07278 | 2.61296 | 2.64206 | 4.03000 |
+| prepare | chlorofluoropropane | 5.34543 | 3.34124 | 3.41329 | 5.28553 |
+| prepare | inositol | 6.82578 | 3.53674 | 3.56650 | 6.72023 |
+| prepare | meso | 4.07928 | 2.63233 | 2.67189 | 4.05168 |
+| prepared_readings | chiral | 38.15405 | 21.13138 | 21.24556 | 37.72382 |
+| prepared_readings | chlorofluoropropane | 14.58917 | 9.70032 | 9.84979 | 14.39359 |
+| prepared_readings | inositol | 360.72768 | 144.32376 | 145.68470 | 351.61667 |
+| prepared_readings | meso | 54.13189 | 29.65351 | 30.15951 | 52.97305 |
+| repeated_readings | chiral | 114.30966 | 63.05780 | 63.92499 | 113.21306 |
+| repeated_readings | chlorofluoropropane | 54.35749 | 39.81334 | 40.50039 | 53.35191 |
+| repeated_readings | inositol | 1080.94580 | 433.10417 | 434.52433 | 1057.34580 |
+| repeated_readings | meso | 162.05672 | 89.02683 | 90.03689 | 159.61779 |
+
+The untimed debug-build counts explain the work and storage difference. Storage below is the inline value
+plus live requested Rust heap bytes retained by it; it excludes allocator overhead and native
+C allocations. Allocation counts cover Rust allocation/reallocation calls during preparation.
+The prepared-read column counts final candidate predicates / stereo-check calls, including
+stereo checks used by the generator filter. These counts are identical between candidates.
+
+| Fixture | Backend vertices two/one | Initial cells two/one | Prepared bytes two/one | After fallback bytes two/one | Preparation allocations two/one | Prepared checks, both |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| meso | 27/15 | 14/8 | 3368/1838 | 5022/1838 | 60/47 | 9/10 |
+| chiral | 27/15 | 14/8 | 3368/1838 | 5022/1838 | 60/47 | 6/7 |
+| chlorofluoropropane | 27/15 | 24/13 | 3836/2178 | 5830/2178 | 80/58 | 3/4 |
+| inositol | 60/24 | 9/4 | 6126/2504 | 8446/2504 | 68/48 | 13/13 |
+
+The inline GraphSymmetry values are 368 bytes for two searches and 184 for one. The initial
+refined cell sizes are:
+
+| Fixture | Two searches | One search |
+| --- | --- | --- |
+| meso | `[2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2]` | `[2, 2, 2, 2, 2, 1, 2, 2]` |
+| chiral | `[2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2]` | `[2, 2, 2, 2, 2, 1, 2, 2]` |
+| chlorofluoropropane | `[2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1]` | `[2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1]` |
+| inositol | `[6, 6, 6, 6, 6, 6, 12, 6, 6]` | `[6, 6, 6, 6]` |
+
+On these fixtures, one search examines the same number of final candidates and stereo checks.
+It prepares and queries smaller backend graphs, clones smaller partitions, and retains one
+input instead of two after the fallback. Identifying stereo records through mapped sites adds
+work at the leaves, but the measured totals favor the smaller input. This is not a claim that
+the number of candidates stays equal for every molecule: the Structure graph can provide
+additional pruning when stereo kinds or selected constraints distinguish otherwise equivalent
+sites.
+
+Preparation is 35–48% faster, prepared readings 33–59% faster, build-and-read 37–60% faster,
+and repeated readings 25–59% faster with one search. Both paired comparisons agree in direction
+for every workload. The approximately 22 ns first-Constitution results for three fixtures are
+cell exits after preparation, not complete topicity timings. The one-search design also retains
+43–59% less Rust storage initially and 63–70% less after the fallback on this subset.
+The single Constitution search is selected on this evidence. Its implementation in main and
+the remaining S5b corrections are still pending. The comparison supplies the layout decision;
+no additional timing or tuning run is a prerequisite for the port.
+
+The source identities below preserve the evidence independently of temporary directories.
+The main S5b source snapshot before the ordering change was:
+`9575d751646db8197fda700e58be1354f017364bd921ebdf635cb56f2659ff46`.
+
+| Candidate | Molecule-symmetry source SHA-256 | Optimized executable SHA-256 |
+| --- | --- | --- |
+| two | `635678775ce628b689c1abdf0813fd1c77f2e5d72d781b5987495f800938a2ab` | `24485cc07a3d81bb181f7e386ccdad676909e45875ce30677361a50a9b5d2878` |
+| one | `eef5912e1c408730c7bd143c4cead2df019d5110c64d0b50de56840c22b36d42` | `4ac5b999a4a752c4b2384e3fb46c8484c8e4053298029113a8b31ca5d77fefa9` |
+
+The identical owning test module has SHA-256
+`db7a994d99ac956e1aa3636b6df5a7b6b2d225560952975ec53f1ce6e790f725`.
+The temporary workload-driver hashes are `390bed9c89a4c4a9bec8e4534c34afee6372f1001f9864a4bb06073a143e6bb7`
+for two searches and `31902a5581a47d0add66890793060aa18e2f02e2f6cb58376ec0346874bb3a80`
+for one. They differ only in the field used to report the initial partition.
+
+Build each fixed source version and save the executable identified by Cargo's JSON artifact
+before building the other version. The commands are:
+
+```text
+cargo test --locked -p umol-graph-ir --lib --no-run --message-format=json
+<debug-executable> ir::molecule::symmetry::tests --test-threads=1
+UMOL_LAYOUT_MODE=counts <debug-executable> \
+    ir::molecule::symmetry::tests::test_molecule_graph_symmetry_layout \
+    --exact --nocapture --test-threads=1
+cargo test --locked -p umol-graph-ir --lib --no-run --message-format=json --profile bench
+UMOL_LAYOUT_MODE=time UMOL_LAYOUT_CRITERION=<distinct-output-directory> <saved-executable> \
+    ir::molecule::symmetry::tests::test_molecule_graph_symmetry_layout \
+    --exact --nocapture --test-threads=1
+```
+
+The candidate sources and temporary driver remain in the separate checkout for review. The
+main code changes in this comparison are limited to placing config last, both as a field and
+as the module's final type. The main graph-IR library compiles with its existing unused-import
+warning; the unfinished S5b migration and its previously recorded gate failures remain open.
+
+**Generator-filter comparison and decision, 2026-11-14.** Retaining only preserving generators
+that also fix the focus record and requested target coset is selected for the coset-change
+search. Clearing all generators is the alternative. They have the same query semantics and
+differ in pruning cost and implementation complexity. Both still compute the backend
+generators; clearing discards them before they can prune the search.
+
+This is a defensible accepted tradeoff, not an established best choice. Trading a gain in a
+particular case against slowdowns in common cases is ordinarily disfavored. The reasons for
+accepting it here are the size of the roughly tenfold gain and the expectation that the
+slowdown will be smaller within the entire operation, of which this filter is only one part.
+The latter is an expectation, not an end-to-end measurement. The selected inputs do not
+establish workload frequencies or an overall stereogenicity speedup.
+
+The filter question arises in molecule::symmetry::remapping_exists_for, currently test-only,
+which S5c will use when asking whether another coset changes a stereo entity's description.
+The search requires its final check to be invariant under every retained target generator.
+Preserving the stored molecule does not suffice when the target changes one record's coset.
+For example, exchanging two equivalent records with coset 0 preserves the stored molecule but
+exchanges which record has the requested coset 1. For a square-planar record, a permutation
+can fix coset 0 while exchanging cosets 1 and 2. In either case a generator can relate a
+passing candidate to a failing candidate, making its use for pruning unjustified.
+
+The selected filter first identifies the focus record's kind, ligands and atom or bond site.
+It retains a generator only if the site maps to itself, the stored stereo forms are preserved,
+and the induced permutation of the focus's ligands carries the requested literal coset to
+itself. The unique record at that site is then fixed. An unavailable record or kind clears
+the list; an unavailable image or frame rejects the generator. Coset transport uses the
+existing shallow operation. No normalization or change to the query's final predicate is
+introduced.
+
+**Correctness before the filter change.** The new fixture assertions and timing driver were
+installed before the narrower filter. The initial focused run passed 33 generator-related
+cases, including the following explicit mappings. Each is checked with constraints included
+and excluded. The generator preserves the stored forms; the candidate reaches target coset
+1; composing that generator after the candidate fails the same coset-change check.
+
+- For the two-center input below, the candidate swaps atoms 4 and 5. The generator exchanges
+  the two ends with atom images `[1, 0, 3, 2, 6, 7, 4, 5]`; incident bonds follow those atom
+  images. It moves the record carrying the change.
+- For `{:atoms ["Pt#c-2" "F" "F" "F" "F"] :bonds [[0 1 "1"] [0 2 "1"]
+  [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}`,
+  the candidate has atom images `[0, 1, 3, 2, 4]` and the generator `[0, 3, 2, 1, 4]`.
+  The generator fixes the record and coset 0 but moves the candidate's target coset 1.
+
+These demonstrate failure of the old filter's invariance requirement. They are not a claim
+that the current backend has produced a wrong public answer. Each safe candidate then passes
+all 261 molecule-symmetry cases. The five inputs below supply 30 explicit coset answers, checked
+with both constraint settings for 60 expected-answer checks per candidate, together with input
+preservation. Temporary drivers and counters are excluded from the main implementation.
+
+**Fixed inputs.** Every focus is stereo atom 0, every stored coset is 0, and no atoms are held
+fixed. The complete inputs are retained here so the evidence survives removal of the trial
+directories.
+
+Tetrahedral, with expected answers `[true, true]` for cosets 0 and 1:
+
+```edn
+{:atoms ["C#h" "F" "Cl" "Cl"]
+ :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}
+```
+
+Two centers, with expected answers `[true, true]`:
+
+```edn
+{:atoms ["C" "C" "Cl" "Cl" "H" "H" "H" "H"]
+ :bonds [[0 1 "1"] [0 2 "1"] [1 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 4 5] :attrs "Th0"}
+                {:site 1 :ligands [0 3 6 7] :attrs "Th0"}]}
+```
+
+Square planar, with expected answers `[true, false, true]`:
+
+```edn
+{:atoms ["Pt#c-2" "N#c+#h3" "N#c+#h3" "Cl" "Cl"]
+ :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}
+```
+
+Trigonal bipyramidal, with true for cosets 0–7 and false for cosets 8–19:
+
+```edn
+{:atoms ["P" "Cl" "F" "F" "F" "F"]
+ :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 3 4 5] :attrs "Tb0"}]}
+```
+
+Square planar with explicit remote ammonia hydrogens, with expected answers
+`[true, false, true]`:
+
+```edn
+{:atoms ["Pt#c-2" "N#c+" "N#c+" "Cl" "Cl" "H" "H" "H" "H" "H" "H"]
+ :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]
+         [1 5 "1"] [1 6 "1"] [1 7 "1"] [2 8 "1"] [2 9 "1"] [2 10 "1"]]
+ :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]}
+```
+
+**Timing boundary and method.** Each iteration makes one complete call to
+molecule::symmetry::remapping_exists_for for one focus and one requested coset. It includes
+partition cloning and refinement, backend automorphism computation, generator filtering,
+candidate search, stereo comparisons, and temporary allocation and deallocation. The molecule
+and GraphSymmetry are prepared once outside the timed loop and reused. Their construction,
+incidence graphs, colors and initial refined partition are excluded. This does not time the
+full stereogenicity calculation, which can take early exits or try several cosets.
+
+The eight workloads were fixed before implementing the narrower filter. Each uses Nauty,
+include_constraints=false, 40 Criterion samples, 100 ms warm-up and 400 ms measurement.
+One clear/narrow/narrow/clear sequence was run, taking 5.27, 5.04, 4.97 and 5.20 seconds for
+the respective eight-workload timing runs. No further timing or tuning iterations followed.
+The builds use rustc 1.99.1 (58cf8f9c3, 2026-10-13), aarch64-apple-darwin, LLVM 23.1.1,
+opt-level 3, debuginfo 2, and disabled debug assertions and overflow checks. Debug counters and
+the allocation instrumentation are compiled out of the timed binaries.
+
+Values below are geometric means of the two run medians, in microseconds per query. A positive
+change means the narrower filter is slower. Every paired comparison agrees on the direction.
+
+| Input / target coset | Clear | Narrow | Narrow change | Paired changes |
+| --- | ---: | ---: | ---: | --- |
+| Tetrahedral / 1 | 5.64877 | 5.94425 | +5.23% | +5.27%, +5.19% |
+| Two centers / 1 | 35.71322 | 38.25153 | +7.11% | +7.08%, +7.13% |
+| Square planar / 1 | 15.16459 | 16.20217 | +6.84% | +6.68%, +7.00% |
+| Square planar / 2 | 15.20295 | 16.23231 | +6.77% | +6.56%, +6.98% |
+| Trigonal bipyramidal / 7 | 88.96847 | 94.24794 | +5.93% | +6.98%, +4.90% |
+| Trigonal bipyramidal / 8 | 88.70805 | 94.39726 | +6.41% | +7.46%, +5.38% |
+| Remote ammonia / 1 | 799.05416 | 78.12945 | -90.22% | -90.05%, -90.39% |
+| Remote ammonia / 2 | 799.96942 | 77.76531 | -90.28% | -90.17%, -90.38% |
+
+The raw run medians, also in microseconds, are:
+
+| Input / target coset | Clear 1 | Narrow 1 | Narrow 2 | Clear 2 |
+| --- | ---: | ---: | ---: | ---: |
+| Tetrahedral / 1 | 5.64005 | 5.93749 | 5.95103 | 5.65751 |
+| Two centers / 1 | 35.74306 | 38.27429 | 38.22879 | 35.68341 |
+| Square planar / 1 | 15.20078 | 16.21616 | 16.18818 | 15.12848 |
+| Square planar / 2 | 15.22287 | 16.22192 | 16.24271 | 15.18306 |
+| Trigonal bipyramidal / 7 | 88.77812 | 94.97465 | 93.52678 | 89.15922 |
+| Trigonal bipyramidal / 8 | 88.90993 | 95.54127 | 93.26696 | 88.50664 |
+| Remote ammonia / 1 | 798.00450 | 79.37326 | 76.90512 | 800.10521 |
+| Remote ammonia / 2 | 800.91522 | 78.70946 | 76.83248 | 799.02473 |
+
+**Search work and complexity.** These counts come from separate debug runs. Allocation counts
+are Rust allocation/reallocation calls during the query, excluding preparation and native C
+allocation. Generator totals accumulate across filter invocations rather than counting
+independent generators of one group. Stereo-check counts include the original preservation
+checks made by the filter; the additional direct focus-frame checks are reflected in allocations
+and time.
+
+| Input / target coset | Clear/narrow candidates | Clear/narrow stereo checks | Clear/narrow allocations | Narrow generators seen/kept |
+| --- | ---: | ---: | ---: | ---: |
+| Tetrahedral / 1 | 3/3 | 3/4 | 137/139 | 1/0 |
+| Two centers / 1 | 9/9 | 9/15 | 640/658 | 7/0 |
+| Square planar / 1 | 5/5 | 5/9 | 316/324 | 4/0 |
+| Square planar / 2 | 5/5 | 5/9 | 316/324 | 4/0 |
+| Trigonal bipyramidal / 7 | 25/25 | 25/48 | 1599/1668 | 23/0 |
+| Trigonal bipyramidal / 8 | 25/25 | 25/48 | 1599/1668 | 23/0 |
+| Remote ammonia / 1 | 145/5 | 145/31 | 12779/1033 | 26/16 |
+| Remote ammonia / 2 | 145/5 | 145/31 | 12779/1033 | 26/16 |
+
+The narrower filter retains no generators in the first six queries, so their 5.2–7.1% cost
+buys no search reduction. It reduces the remote queries from 145 to five candidate mappings
+and is 10.23–10.29 times faster. The direct filter bodies are five versus 32 lines in the trial,
+including both atom and bond records. The extra 27 lines repeat focus-record lookup, ligand
+mapping and frame derivation from the common check. A generator reaching the frame test gets
+one temporary ligand vector. There are no new production types, traits, helpers, flags or
+public interfaces. Integration remains pending in main.
+
+**Source identities.** Both candidates use the selected single Constitution layout in a
+separate checkout at `93c1fa476f9eae32fa1ec0852c9d17f8cee077c1`, with the current S5b overlay
+from main HEAD `a02f535b6dab6a2570c76ab0a442d3861c61963d`. They differ only in the generator
+filter for coset-change queries. The source and binary SHA-256 values are retained here:
+
+| Candidate | Molecule-symmetry source | Timed binary |
+| --- | --- | --- |
+| Clear | `0c58cbfe8b925be869660ba7fca413cff29f38afa1ab18fcf93ea71c3268ed78` | `cc71a280adfe0e0b84b9885de573d4f09c6b580bc0784f1c111804f718b46239` |
+| Narrow | `aa8c09d45e5837777ea556e60823db817e4cf4d0ddf1cb29375e7a752f814a54` | `d443e9443452553ed895664494937532c2b5e7a914c7d2bd6cda35c488d54bb2` |
+
+The control build's final metadata snapshot originally picked up the next variant's source
+hash because its copy started before metadata recording finished. That bookkeeping error was
+corrected against the frozen control input before timing. Binary inspection found the narrowed
+filter's StereoLigand mapping-allocation specialization only in the narrower binary; the
+unrelated shared specialization was present in both. The build driver now captures source
+hashes before compilation and verifies that they remain unchanged. Main code and documents
+were unchanged by the trial; no mutating git operation was performed.
 
 #### S5c — Derived stereo-view readings
 
@@ -2042,6 +2819,15 @@ Production behavior and public interfaces are unchanged. S5a ends green.
   assertions in `tests/property/stereo/exhaustive.rs` and `semantics.rs` to exhaustive
   calculations and new readings, preserving each stated law. Show changed topicity expectations
   before editing them; any necessary change to a law is an explicit design decision.
+- **Search layout:** use S5b's selected single Constitution search and verify the derived
+  readings against it. Extend S5b's primitive coset-change cases for a moved focus and for a
+  kind with more than two cosets to the production readings, using the selected narrower
+  generator filter; compare production answers with the explicit expected values. The
+  recorded comparison already includes preparation, the primitive constitutional fallback and
+  repeated reads, with untimed search and allocation counts.
+  Benchmark the new derived methods on the established inputs; repeat the layout comparison
+  only if subsequent changes materially alter its costs. Keep experiment drivers and the
+  unselected candidate in scratch, with no public selector.
 - **Changes:** add `with_symmetry` to the stereo views and the three derived readings without
   a symmetry argument. The caller extracts `GraphSymmetry` from the owning view to attach it.
   Searches read the stereo view's molecule and the shared auxiliary data; they implement the coset,
@@ -2180,13 +2966,13 @@ stage boundary.
 #### S7b — Final performance record
 
 - **Module:** this record and the affected graph-IR and graph benchmarks.
-- **Check:** collect the comparisons from S4e, S5g and S6a, distinguishing canonicalization,
+- **Check:** collect the comparisons from S4e, S4f, S5g and S6a, distinguishing canonicalization,
   setup, fixed query workloads and operation workloads. Reuse valid measurements; rerun only
   groups affected by subsequent implementation changes. Record medians and conclusions here.
   Record source revisions, benchmark IDs, commands, relevant medians and conclusions inline;
   temporary logs are not persistent evidence references. New correct stereo behavior does not
   establish a runtime improvement by itself.
-- **Kind:** verification (green). `[dep: S7a, S4e, S5g, S6a]`
+- **Kind:** verification (green). `[dep: S7a, S4e, S4f, S5g, S6a]`
 
 #### S7c — Closeout
 
@@ -2199,9 +2985,10 @@ stage boundary.
 
 ### Stage gates
 
-S4 ends with the shared-color work green. S5b begins the sustained breaking migration and S5f
-restores the workspace; S5g is its acceptance and performance gate. S6 ends green with keyed and
-Python parity complete. No later stage is used to repair an earlier stage's compilation.
+S4f, S4g and S5b are complete. The sustained breaking migration continues with S5c, and S5f
+restores the workspace; S5g is its acceptance
+and performance gate. S6 ends green with keyed and Python parity complete. No later stage is
+used to repair an earlier stage's compilation.
 
 During implementation, run the tests of the affected crate/subitem, then the stage gate; do not
 repeat unrelated full suites for a documentation-only subitem. Explicit feature-gated targets
@@ -2227,12 +3014,17 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S4 and S5a are complete. The remaining path is:
+S0-S3, S4a-S4e and S5a have implementation records. S4f is integrated and its standalone gate
+passes. The remaining path is:
 
-S5b -> S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S5c -> S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
 
-S4e checks the shared color calculation and shallow application before their graph-symmetry
-consumer is replaced. Baselines precede each affected implementation, and every required test
-is written before the production change in its subitem.
+S4f replaces the selector after S4e's measurements; S4g applies the later approved names and
+the repository-required color-test corrections. The single Constitution search and narrower
+generator filter from the recorded comparisons and the other settled review corrections are
+integrated by S5b. S5c supplies the derived readings. The reviewed SIN
+questions are settled as recorded in Review dispositions.
+The completed trial fixtures and measurements precede the port. New required tests are written
+before their production changes; the existing late-written cases retain their actual history.
 No remaining stage is deferred: the shared colors, migrated consumers, keyed readings and Python
 surface are all part of this work.

@@ -1680,15 +1680,15 @@ pub(crate) struct StereoAtomColor<'a> {
     stereogenicity: &'a StereogenicityForm,
 }
 
-/// The inherent color of [`StereoAtomForm`].
+/// The field color of [`StereoAtomForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentStereoAtomColor {
+pub(crate) struct StereoAtomFieldColor {
     kind: Option<StereoKind>,
 }
 
 impl AsColor for StereoAtomForm {
     type Color<'a> = StereoAtomColor<'a>;
-    type InherentColor<'a> = InherentStereoAtomColor;
+    type FieldColor<'a> = StereoAtomFieldColor;
 
     fn as_color(&self) -> Self::Color<'_> {
         StereoAtomColor {
@@ -1697,8 +1697,8 @@ impl AsColor for StereoAtomForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentStereoAtomColor {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        StereoAtomFieldColor {
             kind: self.configuration.kind(),
         }
     }
@@ -1773,15 +1773,15 @@ pub(crate) struct StereoBondColor<'a> {
     stereogenicity: &'a StereogenicityForm,
 }
 
-/// The inherent color of [`StereoBondForm`].
+/// The field color of [`StereoBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentStereoBondColor {
+pub(crate) struct StereoBondFieldColor {
     kind: Option<StereoKind>,
 }
 
 impl AsColor for StereoBondForm {
     type Color<'a> = StereoBondColor<'a>;
-    type InherentColor<'a> = InherentStereoBondColor;
+    type FieldColor<'a> = StereoBondFieldColor;
 
     fn as_color(&self) -> Self::Color<'_> {
         StereoBondColor {
@@ -1790,8 +1790,8 @@ impl AsColor for StereoBondForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentStereoBondColor {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        StereoBondFieldColor {
             kind: self.configuration.kind(),
         }
     }

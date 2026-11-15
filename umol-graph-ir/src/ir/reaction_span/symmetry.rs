@@ -12,10 +12,8 @@ use super::super::ligand::StereoLigand;
 use super::super::span::EntitySpan;
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::StereoKind;
-use super::super::symmetry::{
-    rank_colors, ColorProjection, FullColorProjection, InherentColorProjection, InitialColors,
-};
-use super::super::traits::{FrameTransport, Normalize};
+use super::super::symmetry::{rank_colors, InitialColors};
+use super::super::traits::{AsColor, FrameTransport, Normalize};
 use super::ReactionSpan;
 
 /// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
@@ -195,18 +193,6 @@ pub(crate) fn initial_colors(
     level: DescriptionLevel,
     include_constraints: bool,
 ) -> Result<InitialColors, Contradiction> {
-    if include_constraints {
-        initial_colors_with::<FullColorProjection>(span, incidence_graph, level)
-    } else {
-        initial_colors_with::<InherentColorProjection>(span, incidence_graph, level)
-    }
-}
-
-fn initial_colors_with<P: ColorProjection>(
-    span: &ReactionSpan,
-    incidence_graph: &IncidenceGraph,
-    level: DescriptionLevel,
-) -> Result<InitialColors, Contradiction> {
     let mut entities = vec![0; incidence_graph.graph().node_count()];
     let position = |entity: Entity| incidence_graph.node_of(entity).index();
 
@@ -214,16 +200,48 @@ fn initial_colors_with<P: ColorProjection>(
         .atoms()
         .iter()
         .enumerate()
-        .map(|(index, atom)| (P::color(atom), position(Entity::Atom(AtomId(index as u32)))))
-        .collect();
-    let mut next = rank_colors(atoms, 0, &mut entities);
+        .map(|(index, atom)| (atom, position(Entity::Atom(AtomId(index as u32)))));
+    let mut next = if include_constraints {
+        rank_colors(
+            atoms
+                .map(|(form, position)| (form.as_color(), position))
+                .collect(),
+            0,
+            &mut entities,
+        )
+    } else {
+        rank_colors(
+            atoms
+                .map(|(form, position)| (form.as_field_color(), position))
+                .collect(),
+            0,
+            &mut entities,
+        )
+    };
+
     let bonds = span
         .bonds()
         .iter()
         .enumerate()
-        .map(|(index, bond)| (P::color(bond), position(Entity::Bond(BondId(index as u32)))))
-        .collect();
-    next = rank_colors(bonds, next, &mut entities);
+        .map(|(index, bond)| (bond, position(Entity::Bond(BondId(index as u32)))));
+    next = if include_constraints {
+        rank_colors(
+            bonds
+                .map(|(form, position)| (form.as_color(), position))
+                .collect(),
+            next,
+            &mut entities,
+        )
+    } else {
+        rank_colors(
+            bonds
+                .map(|(form, position)| (form.as_field_color(), position))
+                .collect(),
+            next,
+            &mut entities,
+        )
+    };
+
     if level == DescriptionLevel::Topology {
         return Ok(InitialColors {
             entities,
@@ -231,60 +249,106 @@ fn initial_colors_with<P: ColorProjection>(
         });
     }
 
-    let dative = span
-        .dative_bonds()
-        .ids()
-        .map(|id| {
-            (
-                P::color(span.dative_bonds().attributes(id)),
-                position(Entity::DativeBond(id)),
-            )
-        })
-        .collect();
-    next = rank_colors(dative, next, &mut entities);
-    let mut aromatic = Vec::with_capacity(span.aromatic_systems().count());
-    for id in span.aromatic_systems().ids() {
-        let attributes = span.aromatic_systems().attributes(id);
-        let atom_count = span.aromatic_systems().atoms(id).len();
-        if [attributes.lhs(), attributes.rhs()]
-            .into_iter()
-            .flatten()
-            .any(|form| matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count))
-        {
-            return Err(Contradiction);
+    let dative = span.dative_bonds().ids().map(|id| {
+        (
+            span.dative_bonds().attributes(id),
+            position(Entity::DativeBond(id)),
+        )
+    });
+    next = if include_constraints {
+        rank_colors(
+            dative
+                .map(|(form, position)| (form.as_color(), position))
+                .collect(),
+            next,
+            &mut entities,
+        )
+    } else {
+        rank_colors(
+            dative
+                .map(|(form, position)| (form.as_field_color(), position))
+                .collect(),
+            next,
+            &mut entities,
+        )
+    };
+
+    let aromatic = span.aromatic_systems().ids().map(|id| {
+            let attributes = span.aromatic_systems().attributes(id);
+            let atom_count = span.aromatic_systems().atoms(id).len();
+            if [attributes.lhs(), attributes.rhs()].into_iter().flatten().any(|form|
+                matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count)) {
+                return Err(Contradiction);
+            }
+            Ok((attributes, position(Entity::AromaticSystem(id))))
+        });
+    next = if include_constraints {
+        let mut colors = Vec::with_capacity(span.aromatic_systems().count());
+        for entry in aromatic {
+            let (form, position) = entry?;
+            colors.push((form.as_color(), position));
         }
-        aromatic.push((P::color(attributes), position(Entity::AromaticSystem(id))));
-    }
-    next = rank_colors(aromatic, next, &mut entities);
-    let mut multicenter = Vec::with_capacity(span.multicenter_bonds().count());
-    for id in span.multicenter_bonds().ids() {
-        let attributes = span.multicenter_bonds().attributes(id);
-        let atom_count = span.multicenter_bonds().atoms(id).len();
-        if [attributes.lhs(), attributes.rhs()]
-            .into_iter()
-            .flatten()
-            .any(|form| matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count))
-        {
-            return Err(Contradiction);
+        rank_colors(colors, next, &mut entities)
+    } else {
+        let mut colors = Vec::with_capacity(span.aromatic_systems().count());
+        for entry in aromatic {
+            let (form, position) = entry?;
+            colors.push((form.as_field_color(), position));
         }
-        multicenter.push((P::color(attributes), position(Entity::MulticenterBond(id))));
-    }
-    next = rank_colors(multicenter, next, &mut entities);
-    let noncovalent = span
-        .noncovalent_bonds()
-        .ids()
-        .map(|id| {
-            (
-                P::color(span.noncovalent_bonds().attributes(id)),
-                position(Entity::NoncovalentBond(id)),
-            )
-        })
-        .collect();
-    next = rank_colors(noncovalent, next, &mut entities);
+        rank_colors(colors, next, &mut entities)
+    };
+
+    let multicenter = span.multicenter_bonds().ids().map(|id| {
+            let attributes = span.multicenter_bonds().attributes(id);
+            let atom_count = span.multicenter_bonds().atoms(id).len();
+            if [attributes.lhs(), attributes.rhs()].into_iter().flatten().any(|form|
+                matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count)) {
+                return Err(Contradiction);
+            }
+            Ok((attributes, position(Entity::MulticenterBond(id))))
+        });
+    next = if include_constraints {
+        let mut colors = Vec::with_capacity(span.multicenter_bonds().count());
+        for entry in multicenter {
+            let (form, position) = entry?;
+            colors.push((form.as_color(), position));
+        }
+        rank_colors(colors, next, &mut entities)
+    } else {
+        let mut colors = Vec::with_capacity(span.multicenter_bonds().count());
+        for entry in multicenter {
+            let (form, position) = entry?;
+            colors.push((form.as_field_color(), position));
+        }
+        rank_colors(colors, next, &mut entities)
+    };
+
+    let noncovalent = span.noncovalent_bonds().ids().map(|id| {
+        (
+            span.noncovalent_bonds().attributes(id),
+            position(Entity::NoncovalentBond(id)),
+        )
+    });
+    next = if include_constraints {
+        rank_colors(
+            noncovalent
+                .map(|(form, position)| (form.as_color(), position))
+                .collect(),
+            next,
+            &mut entities,
+        )
+    } else {
+        rank_colors(
+            noncovalent
+                .map(|(form, position)| (form.as_field_color(), position))
+                .collect(),
+            next,
+            &mut entities,
+        )
+    };
 
     if level >= DescriptionLevel::Structure {
-        let mut stereo_atoms = Vec::with_capacity(span.stereo_atoms().count());
-        for id in span.stereo_atoms().ids() {
+        let stereo_atoms = span.stereo_atoms().ids().map(|id| {
             let attributes = span.stereo_atoms().attributes(id);
             for form in [attributes.lhs(), attributes.rhs()].into_iter().flatten() {
                 if let Some(kind) = form.configuration.kind() {
@@ -293,7 +357,7 @@ fn initial_colors_with<P: ColorProjection>(
                 }
             }
             let action = Permutation::identity(span.stereo_atoms().ligands(id).len());
-            if P::INCLUDE_CONSTRAINTS {
+            if include_constraints {
                 attributes
                     .clone()
                     .reframe_by(&action)
@@ -306,11 +370,25 @@ fn initial_colors_with<P: ColorProjection>(
                         .ok_or(Contradiction)?;
                 }
             }
-            stereo_atoms.push((P::color(attributes), position(Entity::StereoAtom(id))));
-        }
-        next = rank_colors(stereo_atoms, next, &mut entities);
-        let mut stereo_bonds = Vec::with_capacity(span.stereo_bonds().count());
-        for id in span.stereo_bonds().ids() {
+            Ok((attributes, position(Entity::StereoAtom(id))))
+        });
+        next = if include_constraints {
+            let mut colors = Vec::with_capacity(span.stereo_atoms().count());
+            for entry in stereo_atoms {
+                let (form, position) = entry?;
+                colors.push((form.as_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        } else {
+            let mut colors = Vec::with_capacity(span.stereo_atoms().count());
+            for entry in stereo_atoms {
+                let (form, position) = entry?;
+                colors.push((form.as_field_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        };
+
+        let stereo_bonds = span.stereo_bonds().ids().map(|id| {
             let attributes = span.stereo_bonds().attributes(id);
             for form in [attributes.lhs(), attributes.rhs()].into_iter().flatten() {
                 if let Some(kind) = form.configuration.kind() {
@@ -319,7 +397,7 @@ fn initial_colors_with<P: ColorProjection>(
                 }
             }
             let action = Permutation::identity(span.stereo_bonds().ligands(id).len());
-            if P::INCLUDE_CONSTRAINTS {
+            if include_constraints {
                 attributes
                     .clone()
                     .reframe_by(&action)
@@ -335,9 +413,23 @@ fn initial_colors_with<P: ColorProjection>(
                         .ok_or(Contradiction)?;
                 }
             }
-            stereo_bonds.push((P::color(attributes), position(Entity::StereoBond(id))));
-        }
-        next = rank_colors(stereo_bonds, next, &mut entities);
+            Ok((attributes, position(Entity::StereoBond(id))))
+        });
+        next = if include_constraints {
+            let mut colors = Vec::with_capacity(span.stereo_bonds().count());
+            for entry in stereo_bonds {
+                let (form, position) = entry?;
+                colors.push((form.as_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        } else {
+            let mut colors = Vec::with_capacity(span.stereo_bonds().count());
+            for entry in stereo_bonds {
+                let (form, position) = entry?;
+                colors.push((form.as_field_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        };
     }
 
     let incidence_colors = incidence_graph

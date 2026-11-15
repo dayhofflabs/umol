@@ -6,35 +6,6 @@
 //! All three use StereoPerceiver and intersect site, kind, and stereogenicity filters.
 //! A stored stereo entity may be nonstereogenic or prostereogenic; its presence does not assert
 //! stereogenicity. Enumeration retains symmetry-equivalent assignments.
-//!
-//! # Examples
-//!
-//! ```
-//! use umol_graph::ops::model::StereoModel;
-//! use umol_graph::ops::stereo::StereoSite;
-//! use umol_graph::ops::transform::{
-//!     AddStereoConfig, RemoveStereoConfig, StereoEnumerator, Transform,
-//! };
-//! use umol_graph_ir::ir::{AtomId, StereoAtomId, StereoKind};
-//! use umol_graph_ir::mol_dsl_concrete;
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let source = mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
-//!     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#);
-//! let model = StereoModel::default();
-//! let stereo = source.clone().add_stereo(&model, AddStereoConfig::default())?;
-//! let transformer = StereoEnumerator::new(&model, vec![StereoSite::Atom(AtomId(0))]);
-//! let configurations: Vec<_> = transformer.transform_iter(&stereo)
-//!     .map(|molecule| molecule.stereo_atom(StereoAtomId(0)).attributes().configuration.clone())
-//!     .collect();
-//! assert_eq!(configurations, vec![
-//!     (StereoKind::Tetrahedral, 0).into(),
-//!     (StereoKind::Tetrahedral, 1).into(),
-//! ]);
-//! assert_eq!(stereo.remove_stereo(&model, RemoveStereoConfig::default())?, source);
-//! # Ok(())
-//! # }
-//! ```
 
 mod enumeration;
 

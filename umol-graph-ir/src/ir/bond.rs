@@ -173,9 +173,9 @@ impl From<&str> for BondForm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct BondColor<'a>(&'a BondForm);
 
-/// The inherent color of [`BondForm`].
+/// The field color of [`BondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentBondColor<'a> {
+pub(crate) struct BondFieldColor<'a> {
     order: &'a NumForm,
     charge: &'a NumForm,
     unpaired_electrons: &'a UnpairedElectronsForm,
@@ -183,14 +183,14 @@ pub(crate) struct InherentBondColor<'a> {
 
 impl AsColor for BondForm {
     type Color<'a> = BondColor<'a>;
-    type InherentColor<'a> = InherentBondColor<'a>;
+    type FieldColor<'a> = BondFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         BondColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentBondColor {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        BondFieldColor {
             order: &self.order,
             charge: &self.charge,
             unpaired_electrons: &self.unpaired_electrons,
@@ -202,6 +202,7 @@ impl AsColor for BondForm {
 mod tests {
     use std::cmp::Ordering;
     use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::mem::size_of;
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -567,10 +568,14 @@ mod tests {
         BondForm::new(NumForm::lit_set([1])).with_charge(NumForm::lit_set([-1])).with_constraint(BondConstraintForm::aromatic(true)),
         BondForm::new(NumForm::lit_set([1])).with_charge(NumForm::lit_set([-1]))
     )]
-    fn test_bond_form_as_inherent_color(#[case] input: BondForm, #[case] expected: BondForm) {
+    fn test_bond_form_as_field_color(#[case] input: BondForm, #[case] expected: BondForm) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = BondFieldColor {
+            order: &expected.order,
+            charge: &expected.charge,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();
@@ -578,5 +583,10 @@ mod tests {
         expected_color.hash(&mut expected_hash);
         assert_eq!(actual_hash.finish(), expected_hash.finish());
         assert_eq!(input, original);
+    }
+
+    #[rstest]
+    fn test_bond_color_size() {
+        assert_eq!(size_of::<BondColor<'_>>(), size_of::<&BondForm>());
     }
 }

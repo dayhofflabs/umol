@@ -12,7 +12,7 @@ pub use integrity::MoleculeIntegrityError;
 pub use pushout::MoleculePushoutCorrespondence;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use strum::EnumCount;
-pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
+pub use symmetry::{GraphSymmetry, GraphSymmetryConfig};
 pub use transact::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
 use umol_graph_core::{
     Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,

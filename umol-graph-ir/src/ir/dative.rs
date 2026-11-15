@@ -788,22 +788,22 @@ impl From<&str> for DativeBondForm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct DativeBondColor<'a>(&'a DativeBondForm);
 
-/// The inherent color of [`DativeBondForm`].
+/// The field color of [`DativeBondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentDativeBondColor<'a> {
+pub(crate) struct DativeBondFieldColor<'a> {
     order: &'a NumForm,
 }
 
 impl AsColor for DativeBondForm {
     type Color<'a> = DativeBondColor<'a>;
-    type InherentColor<'a> = InherentDativeBondColor<'a>;
+    type FieldColor<'a> = DativeBondFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         DativeBondColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentDativeBondColor { order: &self.order }
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        DativeBondFieldColor { order: &self.order }
     }
 }
 
@@ -811,6 +811,7 @@ impl AsColor for DativeBondForm {
 mod tests {
     use std::cmp::Ordering;
     use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::mem::size_of;
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -2052,13 +2053,15 @@ mod tests {
         DativeBondForm::new(NumForm::lit_set([1])).with_constraint(DativeBondConstraintForm::aromatic(true)),
         DativeBondForm::new(NumForm::lit_set([1]))
     )]
-    fn test_dative_bond_form_as_inherent_color(
+    fn test_dative_bond_form_as_field_color(
         #[case] input: DativeBondForm,
         #[case] expected: DativeBondForm,
     ) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = DativeBondFieldColor {
+            order: &expected.order,
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();
@@ -2066,5 +2069,13 @@ mod tests {
         expected_color.hash(&mut expected_hash);
         assert_eq!(actual_hash.finish(), expected_hash.finish());
         assert_eq!(input, original);
+    }
+
+    #[rstest]
+    fn test_dative_bond_color_size() {
+        assert_eq!(
+            size_of::<DativeBondColor<'_>>(),
+            size_of::<&DativeBondForm>()
+        );
     }
 }

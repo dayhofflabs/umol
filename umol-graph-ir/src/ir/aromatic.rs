@@ -807,16 +807,16 @@ pub(crate) struct AromaticSystemColor<'a> {
     constraints: &'a AromaticSystemConstraintsForm,
 }
 
-/// The inherent color of [`AromaticSystemForm`].
+/// The field color of [`AromaticSystemForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentAromaticSystemColor<'a> {
+pub(crate) struct AromaticSystemFieldColor<'a> {
     charge: &'a NumForm,
     unpaired_electrons: &'a UnpairedElectronsForm,
 }
 
 impl AsColor for AromaticSystemForm {
     type Color<'a> = AromaticSystemColor<'a>;
-    type InherentColor<'a> = InherentAromaticSystemColor<'a>;
+    type FieldColor<'a> = AromaticSystemFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         AromaticSystemColor {
@@ -826,8 +826,8 @@ impl AsColor for AromaticSystemForm {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentAromaticSystemColor {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        AromaticSystemFieldColor {
             charge: &self.charge,
             unpaired_electrons: &self.unpaired_electrons,
         }
@@ -2226,13 +2226,16 @@ mod tests {
         AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([4]))),
         AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8))
     )]
-    fn test_aromatic_system_form_as_inherent_color(
+    fn test_aromatic_system_form_as_field_color(
         #[case] input: AromaticSystemForm,
         #[case] expected: AromaticSystemForm,
     ) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = AromaticSystemFieldColor {
+            charge: &expected.charge,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

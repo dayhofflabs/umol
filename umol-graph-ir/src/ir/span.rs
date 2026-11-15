@@ -124,8 +124,8 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
     where
         Self: 'a;
 
-    type InherentColor<'a>
-        = EntitySpan<T::InherentColor<'a>>
+    type FieldColor<'a>
+        = EntitySpan<T::FieldColor<'a>>
     where
         Self: 'a;
 
@@ -146,20 +146,20 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
         }
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
         match self {
-            Self::Unchanged(value) => EntitySpan::Unchanged(value.as_inherent_color()),
-            Self::Removed(value) => EntitySpan::Removed(value.as_inherent_color()),
+            Self::Unchanged(value) => EntitySpan::Unchanged(value.as_field_color()),
+            Self::Removed(value) => EntitySpan::Removed(value.as_field_color()),
             Self::Modified { lhs, rhs } => {
-                let lhs = lhs.as_inherent_color();
-                let rhs = rhs.as_inherent_color();
+                let lhs = lhs.as_field_color();
+                let rhs = rhs.as_field_color();
                 if lhs == rhs {
                     EntitySpan::Unchanged(lhs)
                 } else {
                     EntitySpan::Modified { lhs, rhs }
                 }
             }
-            Self::Added(value) => EntitySpan::Added(value.as_inherent_color()),
+            Self::Added(value) => EntitySpan::Added(value.as_field_color()),
         }
     }
 }
@@ -518,13 +518,21 @@ mod tests {
             .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([])))),
         EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([0])))
     )]
-    fn test_entity_span_as_inherent_color(
+    fn test_entity_span_as_field_color(
         #[case] input: EntitySpan<AtomForm>,
         #[case] expected: EntitySpan<AtomForm>,
     ) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = match &expected {
+            EntitySpan::Unchanged(value) => EntitySpan::Unchanged(value.as_field_color()),
+            EntitySpan::Removed(value) => EntitySpan::Removed(value.as_field_color()),
+            EntitySpan::Added(value) => EntitySpan::Added(value.as_field_color()),
+            EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
+                lhs: lhs.as_field_color(),
+                rhs: rhs.as_field_color(),
+            },
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();

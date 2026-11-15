@@ -8,14 +8,13 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomForm, AtomId, BondForm, BooleanForm, Canonicalize,
-    CanonicalizeContext, ConstitutionColoring, Contradiction, ElectronCountsForm, EntitySpan,
-    FluxionalityForm, FrameTransport, GraphSymmetryConfig, IncidenceLevel, LigandPermutation,
-    Molecule, MoleculeCanonicalizeError, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
-    NumForm, ReactionSpan, ReactionSpanCanonicalizeError, ReactionSpanEntries,
-    StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm,
-    SubstructureMatchAlgorithm, SubstructureMatchConfig, Topicity, TopicityForm,
-    TopicityRelationForm,
+    CanonicalizeContext, Contradiction, ElectronCountsForm, EntitySpan, FluxionalityForm,
+    FrameTransport, GraphSymmetryConfig, IncidenceLevel, LigandPermutation, Molecule,
+    MoleculeCanonicalizeError, MoleculeEntries, MulticenterBondForm, MulticenterBondId, NumForm,
+    ReactionSpan, ReactionSpanCanonicalizeError, ReactionSpanEntries, StereoAtomConstraintForm,
+    StereoAtomForm, StereoAtomId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, StereoTerm, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig, Topicity, TopicityForm, TopicityRelationForm,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -211,12 +210,7 @@ fn test_molecule_stereo_attributes(#[case] degree: u32, #[case] form: StereoAtom
         );
     }
     // Symmetry is infallible; malformed attributes have no classification guarantee.
-    molecule.graph_symmetry(&GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: true,
-        max_iterations: 2,
-        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-    });
+    molecule.graph_symmetry(&GraphSymmetryConfig::default());
 }
 
 #[rstest]

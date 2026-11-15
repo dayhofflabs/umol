@@ -265,9 +265,9 @@ impl From<&str> for AtomForm {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct AtomColor<'a>(&'a AtomForm);
 
-/// The inherent color of [`AtomForm`].
+/// The field color of [`AtomForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct InherentAtomColor<'a> {
+pub(crate) struct AtomFieldColor<'a> {
     element: &'a ElementForm,
     isotope_mass: &'a IsotopeMassForm,
     charge: &'a NumForm,
@@ -278,14 +278,14 @@ pub(crate) struct InherentAtomColor<'a> {
 
 impl AsColor for AtomForm {
     type Color<'a> = AtomColor<'a>;
-    type InherentColor<'a> = InherentAtomColor<'a>;
+    type FieldColor<'a> = AtomFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         AtomColor(self)
     }
 
-    fn as_inherent_color(&self) -> Self::InherentColor<'_> {
-        InherentAtomColor {
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        AtomFieldColor {
             element: &self.element,
             isotope_mass: &self.isotope_mass,
             charge: &self.charge,
@@ -848,6 +848,7 @@ impl Lattice for IsotopeMassForm {
 mod tests {
     use std::cmp::Ordering;
     use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::mem::size_of;
 
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -1253,10 +1254,17 @@ mod tests {
         AtomForm::from_element(Element::N).with_isotope_mass(15_u32).with_charge(-1).with_implicit_hydrogens(2).with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(AtomConstraintForm::valence(3)),
         AtomForm::from_element(Element::N).with_isotope_mass(15_u32).with_charge(-1).with_implicit_hydrogens(2).with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8))
     )]
-    fn test_atom_form_as_inherent_color(#[case] input: AtomForm, #[case] expected: AtomForm) {
+    fn test_atom_form_as_field_color(#[case] input: AtomForm, #[case] expected: AtomForm) {
         let original = input.clone();
-        let color = input.as_inherent_color();
-        let expected_color = expected.as_inherent_color();
+        let color = input.as_field_color();
+        let expected_color = AtomFieldColor {
+            element: &expected.element,
+            isotope_mass: &expected.isotope_mass,
+            charge: &expected.charge,
+            implicit_hydrogens: &expected.implicit_hydrogens,
+            lone_pairs: &expected.lone_pairs,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
         assert_eq!(color, expected_color);
         let mut actual_hash = DefaultHasher::new();
         let mut expected_hash = DefaultHasher::new();
@@ -1264,6 +1272,11 @@ mod tests {
         expected_color.hash(&mut expected_hash);
         assert_eq!(actual_hash.finish(), expected_hash.finish());
         assert_eq!(input, original);
+    }
+
+    #[rstest]
+    fn test_atom_color_size() {
+        assert_eq!(size_of::<AtomColor<'_>>(), size_of::<&AtomForm>());
     }
 
     #[rustfmt::skip]

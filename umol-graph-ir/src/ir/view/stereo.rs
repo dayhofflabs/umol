@@ -3,14 +3,12 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_perm::{OrientedPermutationGroup, Permutation};
+use umol_perm::Permutation;
 
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::molecule::{Molecule, StereoSymmetry};
-use super::super::stereo::{
-    StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
-};
+use super::super::molecule::Molecule;
+use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind};
 use super::super::traits::{FrameTransport, Lattice};
 use super::atom::AtomView;
 use super::bond::BondView;
@@ -587,67 +585,10 @@ macro_rules! stereo_view_queries {
                 self.attributes().is_ground()
             }
 
-            /// The local oriented ligand-position symmetry group.
-            pub fn ligand_symmetry(&self, symmetry: &StereoSymmetry) -> OrientedPermutationGroup {
-                symmetry.group().clone()
-            }
-
-            /// Stereogenicity classification of this carrier.
-            pub fn stereogenicity(&self, symmetry: &StereoSymmetry) -> Stereogenicity {
-                symmetry.stereogenicity()
-            }
-
-            /// Whether this carrier is a genuine stereocenter.
-            pub fn is_stereogenic(&self, symmetry: &StereoSymmetry) -> bool {
-                symmetry.is_stereogenic()
-            }
-
-            /// Whether this carrier is prostereogenic (some enantiotopic ligand pair).
-            pub fn is_prostereogenic(&self, symmetry: &StereoSymmetry) -> bool {
-                symmetry.stereogenicity() == Stereogenicity::Prostereogenic
-            }
-
             /// Kind-level chirality — whether the geometry can encode handedness.
             /// No symmetry computation.
             pub fn is_chiral(&self) -> bool {
                 self.kind().is_chiral_class()
-            }
-
-            /// Topicity of two ligand positions.
-            pub fn topicity(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> Topicity {
-                symmetry.topicity(a, b)
-            }
-
-            pub fn is_homotopic(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> bool {
-                symmetry.topicity(a, b) == Topicity::Homotopic
-            }
-
-            pub fn is_enantiotopic(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> bool {
-                symmetry.topicity(a, b) == Topicity::Enantiotopic
-            }
-
-            pub fn is_diastereotopic(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> bool {
-                symmetry.topicity(a, b) == Topicity::Diastereotopic
             }
 
             /// The ordered ligand identifiers.
@@ -851,23 +792,19 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::AutomorphismAlgorithm;
 
     use super::super::assert_exact_size_by;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::coloring::ConstitutionColoring;
     use crate::ir::constraint::{
         StereoAtomConstraintForm, StereoBondConstraintForm, StereogenicityForm,
     };
     use crate::ir::entity::Entity;
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{
-        GraphSymmetryConfig, Molecule, MoleculeEntries, MoleculeIntegrityError,
-    };
+    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
     use crate::ir::stereo::{
-        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity, Topicity,
+        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity,
     };
 
     #[fixture]
@@ -1169,6 +1106,11 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_view_is_chiral(molecule: Molecule) {
+        assert_eq!(molecule.stereo_atom(StereoAtomId(0)).is_chiral(), true);
+    }
+
+    #[rstest]
     fn test_stereo_atom_view_ligand_count(molecule: Molecule) {
         assert_eq!(molecule.stereo_atom(StereoAtomId(0)).ligand_count(), 4);
     }
@@ -1202,62 +1144,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_stereo_queries(
-        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
-        coset: StereoCoset,
+    #[case::middle(AtomId(2), Some(StereoLigandPosition(1)))]
+    #[case::unavailable(AtomId(7), None)]
+    fn test_stereo_atom_view_ligand_position(
+        molecule: Molecule,
+        #[case] atom: AtomId,
+        #[case] expected: Option<StereoLigandPosition>,
     ) {
-        // A clean stereocenter: C bonded to four distinct halogens.
-        let mol = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::F),
-                AtomForm::from_element(Element::Cl),
-                AtomForm::from_element(Element::Br),
-                AtomForm::from_element(Element::I),
-            ],
-            bonds: (1..=4)
-                .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
-                .collect(),
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
-            )],
-            ..Default::default()
-        });
-        let gs = mol.graph_symmetry(&GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: true,
-            max_iterations: 16,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-        });
-        let symmetry = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-        let view = mol.stereo_atom(StereoAtomId(0));
-
-        assert!(view.is_chiral()); // tetrahedral kind, no symmetry computation
-        assert!(view.is_stereogenic(&symmetry));
-        assert_eq!(view.stereogenicity(&symmetry), Stereogenicity::Stereogenic);
         assert_eq!(
-            view.topicity(StereoLigandPosition(0), StereoLigandPosition(1), &symmetry),
-            Topicity::Diastereotopic,
+            molecule.stereo_atom(StereoAtomId(0)).ligand_position(atom),
+            expected
         );
-        assert!(view.is_diastereotopic(
-            StereoLigandPosition(0),
-            StereoLigandPosition(1),
-            &symmetry
-        ));
-        assert_eq!(view.ligand_symmetry(&symmetry).order(), 1);
-        assert_eq!(
-            view.ligand_position(AtomId(2)),
-            Some(StereoLigandPosition(1))
-        );
-        assert_eq!(view.ligand_position(AtomId(99)), None);
-        assert_eq!(view.ligand_ids().len(), 4);
     }
 
     #[rstest]

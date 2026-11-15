@@ -5,7 +5,6 @@ pub(crate) mod atom;
 pub(crate) mod bond;
 pub(crate) mod boolean;
 pub(crate) mod canonicalize;
-pub(crate) mod coloring;
 pub(crate) mod compact;
 pub(crate) mod compose;
 pub(crate) mod constraint;
@@ -48,7 +47,6 @@ pub use canonicalize::{
     Canonicalize, CanonicalizeContext, MoleculeCanonicalizeError, ReactionCanonicalizeError,
     ReactionSpanCanonicalizeError,
 };
-pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
 pub use compact::{MoleculeCompaction, UndoCompaction};
 pub use constraint::{
     aromatic_covalence, AromaticSystemConstraintForm, AromaticSystemConstraintKey,
@@ -106,8 +104,8 @@ pub use matching::BondMatching;
 pub use molecule::{
     spec, AtomArg, Fragment, GraphSymmetry, GraphSymmetryConfig, Molecule, MoleculeBuilder,
     MoleculeEditor, MoleculeEntries, MoleculeIntegrityError, MoleculePushoutCorrespondence,
-    MoleculeSpec, MoleculeSpecTerm, Port, PortArg, RollbackMethod, StereoSymmetry,
-    TrackedTransaction, Transaction, TransactionError,
+    MoleculeSpec, MoleculeSpecTerm, Port, PortArg, RollbackMethod, TrackedTransaction, Transaction,
+    TransactionError,
 };
 pub use multicenter::{
     MulticenterBondFieldKind, MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds,
@@ -148,9 +146,9 @@ pub use view::{
     AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomConstraintsView,
     AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondConstraintsView, BondEditorViewMut,
     BondView, BondViewMut, BondViews, DativeBondConstraintsView, DativeBondEditorViewMut,
-    DativeBondView, DativeBondViewMut, DativeBondViews, MulticenterBondConstraintsView,
-    MulticenterBondEditorViewMut, MulticenterBondView, MulticenterBondViewMut,
-    MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView,
+    DativeBondView, DativeBondViewMut, DativeBondViews, GraphSymmetryView,
+    MulticenterBondConstraintsView, MulticenterBondEditorViewMut, MulticenterBondView,
+    MulticenterBondViewMut, MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView,
     NoncovalentBondEditorViewMut, NoncovalentBondView, NoncovalentBondViewMut,
     NoncovalentBondViews, RingAtomView, RingBondView, RingView, RingViews,
     StereoAtomConstraintsView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
