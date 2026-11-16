@@ -47,7 +47,7 @@ use crate::fingerprint::config::{
 use crate::fingerprint::value::{
     BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet,
 };
-use crate::metadata::MoleculeMetadata;
+use crate::metadata::{Entity, MoleculeMetadata};
 use crate::model::aromaticity::{AromaticityConfig, AromaticityModel};
 use crate::model::stereo::StereoModel;
 use crate::model::ChemistryModel;
@@ -59,8 +59,10 @@ use crate::ring::{RingConfig, RingModel, RingViews};
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{
     StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand, StereoSite,
+    StereogenicSiteKind,
 };
 use crate::substructure::SubstructureSearchConfig;
+use crate::symmetry::{GraphSymmetry, GraphSymmetryConfig, GraphSymmetryView};
 use crate::transaction::{MoleculeEditor, RollbackMethod};
 use crate::transform::{
     AddStereoConfig, EnumerateStereoConfig, EnumerateStereoIter, KekulizeConfig, RemoveStereoConfig,
@@ -1047,6 +1049,74 @@ impl Molecule {
             .rings(model.to_rust(), config.to_rust())
             .into_ring_set();
         RingViews::from_rust(py, rings, slf)
+    }
+
+    /// Compute graph-symmetry data from the supplied forms, retaining this molecule.
+    fn graph_symmetry(
+        slf: Py<Self>,
+        py: Python<'_>,
+        config: GraphSymmetryConfig,
+    ) -> PyResult<GraphSymmetryView> {
+        let symmetry = slf
+            .try_borrow(py)?
+            .to_rust()
+            .graph_symmetry(&config.to_rust())
+            .into_graph_symmetry();
+        GraphSymmetryView::from_rust(py, symmetry, slf)
+    }
+
+    /// Whether this molecule has no remapping to its mirror image.
+    /// The supplied data must describe its unchanged molecular representation.
+    fn is_chiral(&self, symmetry: &GraphSymmetry) -> bool {
+        self.to_rust().is_chiral(symmetry.to_rust())
+    }
+
+    /// Whether a preserving remapping sends a to b; false for unavailable ids.
+    fn same_proper_orbit(&self, symmetry: &GraphSymmetry, a: u32, b: u32) -> bool {
+        self.to_rust()
+            .same_proper_orbit(symmetry.to_rust(), GraphIrAtomId(a), GraphIrAtomId(b))
+    }
+
+    /// Whether a preserving or mirror remapping sends a to b; false for unavailable ids.
+    fn same_star_orbit(&self, symmetry: &GraphSymmetry, a: u32, b: u32) -> bool {
+        self.to_rust()
+            .same_star_orbit(symmetry.to_rust(), GraphIrAtomId(a), GraphIrAtomId(b))
+    }
+
+    /// The proper orbit in atom-id order, empty for an unavailable id.
+    fn proper_orbit_of(&self, symmetry: &GraphSymmetry, a: u32) -> Vec<u32> {
+        self.to_rust()
+            .proper_orbit_of(symmetry.to_rust(), GraphIrAtomId(a))
+            .into_iter()
+            .map(|id| id.0)
+            .collect()
+    }
+
+    /// The proper-or-mirror orbit in atom-id order, empty for an unavailable id.
+    fn star_orbit_of(&self, symmetry: &GraphSymmetry, a: u32) -> Vec<u32> {
+        self.to_rust()
+            .star_orbit_of(symmetry.to_rust(), GraphIrAtomId(a))
+            .into_iter()
+            .map(|id| id.0)
+            .collect()
+    }
+
+    /// Classify all kinded stereo records in stereo-record id order.
+    /// Kindless records are omitted. The returned list belongs to the caller.
+    fn stereogenic_site_kinds(
+        &self,
+        symmetry: &GraphSymmetry,
+    ) -> Vec<(Entity, StereogenicSiteKind)> {
+        self.to_rust()
+            .stereogenic_site_kinds(symmetry.to_rust())
+            .into_iter()
+            .map(|(entity, kind)| {
+                (
+                    Entity::from_rust(entity),
+                    StereogenicSiteKind::from_rust(kind),
+                )
+            })
+            .collect()
     }
 
     /// The atoms, indexed by integer position.

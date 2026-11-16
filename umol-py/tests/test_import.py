@@ -95,6 +95,9 @@ PUBLIC_EXPORTS = frozenset(
     ElementScope
     EnumerateStereoConfig
     Entity
+    GraphSymmetry
+    GraphSymmetryConfig
+    GraphSymmetryView
     HashedFeatureSet
     HashedFingerprintConfig
     InvalidStructureError

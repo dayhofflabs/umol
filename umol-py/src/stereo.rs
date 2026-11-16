@@ -43,6 +43,7 @@ use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
+use crate::symmetry::GraphSymmetry;
 
 /// A permutation of `0..degree` in one-line (image) notation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -757,6 +758,7 @@ impl StereoAtomUpdate {
     fn constraints(slf: Py<Self>) -> StereoAtomConstraintsView {
         StereoAtomConstraintsView {
             storage: StereoAtomConstraintsStorage::Update(slf),
+            symmetry: None,
         }
     }
 }
@@ -833,6 +835,7 @@ impl StereoBondUpdate {
     fn constraints(slf: Py<Self>) -> StereoBondConstraintsView {
         StereoBondConstraintsView {
             storage: StereoBondConstraintsStorage::Update(slf),
+            symmetry: None,
         }
     }
 }
@@ -1191,6 +1194,7 @@ macro_rules! stereo_value {
             fn constraints(slf: Py<Self>) -> $view {
                 $view {
                     storage: $storage::Value(slf),
+                    symmetry: None,
                 }
             }
 
@@ -1296,6 +1300,7 @@ macro_rules! stereo_view {
             owner: Py<Molecule>,
             counter: u64,
             id: $rust_id,
+            symmetry: Option<Py<GraphSymmetry>>,
         }
 
         impl $view {
@@ -1307,10 +1312,84 @@ macro_rules! stereo_view {
                     .get(self.id)
                     .ok_or_else(|| PyIndexError::new_err($id_error))
             }
+
+            fn read_with_symmetry<R>(
+                &self,
+                py: Python<'_>,
+                f: impl FnOnce($rust_view<'_>) -> PyResult<R>,
+            ) -> PyResult<R> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
+                let view = self.view(molecule.to_rust())?;
+                let symmetry = self
+                    .symmetry
+                    .as_ref()
+                    .ok_or_else(|| {
+                        PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        ))
+                    })?
+                    .try_borrow(py)?;
+                if view.attributes().configuration.kind().is_none() {
+                    return Err(PyValueError::new_err(concat!(
+                        stringify!($view),
+                        " requires a stereo kind"
+                    )));
+                }
+                f(view.with_symmetry(symmetry.to_rust()))
+            }
         }
 
         #[pymethods]
         impl $view {
+            /// Attach borrowed symmetry data to a new accessor, retaining the source.
+            /// The data must describe this molecule; that relationship is not validated.
+            fn with_symmetry(&self, py: Python<'_>, symmetry: Py<GraphSymmetry>) -> PyResult<Self> {
+                self.owner
+                    .try_borrow(py)?
+                    .check_access(self.counter, stringify!($view))?;
+                Ok(Self {
+                    owner: self.owner.clone_ref(py),
+                    counter: self.counter,
+                    id: self.id,
+                    symmetry: Some(symmetry),
+                })
+            }
+
+            /// The raw-input stereogenicity of this record.
+            /// Raises ValueError without attached symmetry data or a stereo kind.
+            fn stereogenicity(&self, py: Python<'_>) -> PyResult<Stereogenicity> {
+                self.read_with_symmetry(py, |view| {
+                    Ok(Stereogenicity::from_rust(view.stereogenicity()))
+                })
+            }
+
+            /// The topicity of two ligand positions in this record's frame.
+            /// Raises ValueError without symmetry or a kind, and IndexError for an unavailable position.
+            fn topicity(&self, py: Python<'_>, a: u32, b: u32) -> PyResult<Topicity> {
+                self.read_with_symmetry(py, |view| {
+                    if a as usize >= view.ligand_count() || b as usize >= view.ligand_count() {
+                        return Err(PyIndexError::new_err("stereo ligand position out of range"));
+                    }
+                    Ok(Topicity::from_rust(view.topicity(
+                        GraphIrStereoLigandPosition(a),
+                        GraphIrStereoLigandPosition(b),
+                    )))
+                })
+            }
+
+            /// Whether an oriented ligand permutation is a symmetry of this record.
+            /// Raises ValueError without symmetry or a kind. Incompatible actions return false.
+            fn ligand_symmetry(
+                &self,
+                py: Python<'_>,
+                permutation: &OrientedLigandPermutation,
+            ) -> PyResult<bool> {
+                let permutation = permutation.to_rust();
+                self.read_with_symmetry(py, |view| Ok(view.ligand_symmetry(permutation)))
+            }
+
             #[getter]
             fn id(&self, py: Python<'_>) -> PyResult<u32> {
                 let molecule = self.owner.try_borrow(py)?;
@@ -1406,6 +1485,10 @@ macro_rules! stereo_view {
                         counter: self.counter,
                         id: self.id,
                     },
+                    symmetry: self
+                        .symmetry
+                        .as_ref()
+                        .map(|symmetry| symmetry.clone_ref(py)),
                 })
             }
 
@@ -1523,6 +1606,7 @@ macro_rules! stereo_views {
                     owner: self.owner.clone_ref(py),
                     counter: self.counter,
                     id,
+                    symmetry: None,
                 })
             }
 
@@ -1555,6 +1639,7 @@ macro_rules! stereo_views {
                         owner: self.owner.clone_ref(py),
                         counter: self.counter,
                         id,
+                        symmetry: None,
                     }))
             }
 
@@ -1577,6 +1662,7 @@ macro_rules! stereo_views {
                         owner: self.owner.clone_ref(py),
                         counter: self.counter,
                         id,
+                        symmetry: None,
                     }))
             }
 
@@ -1623,6 +1709,7 @@ macro_rules! stereo_views {
                     owner: self.owner.clone_ref(py),
                     counter: self.counter,
                     id,
+                    symmetry: None,
                 }))
             }
         }
@@ -2573,6 +2660,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -2613,6 +2701,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
             let popped = view.pop(py, key).unwrap();
@@ -2646,6 +2735,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             assert_eq!(view.__len__(py).unwrap(), 1);
             let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
@@ -2697,6 +2787,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let keys: Vec<GraphIrStereoAtomConstraintKey> = view
                 .keys(py)
@@ -2732,6 +2823,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let entry = into_py_variant(
                 py,
@@ -2782,6 +2874,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             assert_eq!(
                 view.stereogenicity(py).unwrap().to_rust(),
@@ -2879,6 +2972,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let own = StereoAtomForm::constraints(value.clone_ref(py));
             view.update(
@@ -2903,6 +2997,7 @@ mod tests {
             .unwrap();
             let view = StereoBondConstraintsView {
                 storage: StereoBondConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -3385,6 +3480,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.__repr__(py).unwrap(), "StereoAtomView(id=0)");
@@ -3398,6 +3494,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(view.site_id(py).unwrap(), 0);
         });
@@ -3410,6 +3507,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(
                 view.ligands(py)
@@ -3434,6 +3532,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(view.kind(py).unwrap(), StereoKind::Tetrahedral);
         });
@@ -3446,6 +3545,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(
                 view.coset(py).unwrap().to_rust(py),
@@ -3461,6 +3561,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
@@ -3496,6 +3597,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             view.set_configuration(py, configuration).unwrap();
             assert_eq!(view.configuration(py).unwrap().to_rust(py), expected);
@@ -3509,6 +3611,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -3544,6 +3647,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             let mut rust_constraints = GraphIrStereoAtomConstraintsForm::new();
             rust_constraints.extend([GraphIrStereoAtomConstraintForm::Stereogenicity(
@@ -3571,6 +3675,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             let dict = view.asdict(py).unwrap();
             let configuration = dict.get_item("configuration").unwrap().unwrap();
@@ -3605,6 +3710,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(5),
+                symmetry: None,
             };
             assert!(view.site_id(py).is_err());
         });
@@ -3617,6 +3723,7 @@ mod tests {
                 owner: stereo_bond_molecule(py),
                 counter: 0,
                 id: GraphIrStereoBondId(0),
+                symmetry: None,
             };
             assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.site_id(py).unwrap(), 0);

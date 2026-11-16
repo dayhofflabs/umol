@@ -31,6 +31,7 @@ use crate::stereo::{
     OrientedLigandPermutation, StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate,
     StereoLigandPair, Stereogenicity, Topicity,
 };
+use crate::symmetry::GraphSymmetry;
 
 /// A topicity relation constraint value: the undetermined wildcard, a single topicity, a set
 /// of admissible topicities, or the complement of a set. A finite-domain subset lattice over
@@ -902,18 +903,21 @@ macro_rules! stereo_constraints {
         /// molecule-backed views.
         /// Semantic readings return independent normal values; None is bottom.
         /// Kindless assertions are vacuous; raw access and mutation retain their payload.
-        /// Derivation, evidence, and comparisons require molecule context.
+        /// Derivation, evidence, and comparisons require molecule context. Kinded derivation
+        /// also requires attached symmetry data; kindless keyed readings remain vacuous.
         /// Views obtained from an Update are read-only; writes raise TypeError.
         #[pyclass]
         pub struct $view {
             pub(crate) storage: $storage,
+            pub(crate) symmetry: Option<Py<GraphSymmetry>>,
         }
 
         impl $view {
             fn read_view<R>(
                 &self,
                 py: Python<'_>,
-                f: impl FnOnce($rust_view<'_>) -> PyResult<R>,
+                keys: impl IntoIterator<Item = $rust_key>,
+                f: impl FnOnce($rust_view<'_>, bool) -> PyResult<R>,
             ) -> PyResult<R> {
                 let $storage::Molecule { owner, counter, id } = &self.storage else {
                     return Err(PyValueError::new_err(concat!(
@@ -928,7 +932,27 @@ macro_rules! stereo_constraints {
                     .$namespace()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err($id_error))?;
-                f(entity.constraints())
+                let kinded = entity.attributes().configuration.kind().is_some();
+                if kinded {
+                    for key in keys {
+                        if let $rust_key::Topicity(pair) = key {
+                            if pair.first().0 as usize >= entity.ligand_count()
+                                || pair.second().0 as usize >= entity.ligand_count()
+                            {
+                                return Err(PyIndexError::new_err(
+                                    "stereo ligand position out of range",
+                                ));
+                            }
+                        }
+                    }
+                }
+                let view = entity.constraints();
+                if let Some(symmetry) = &self.symmetry {
+                    let symmetry = symmetry.try_borrow(py)?;
+                    f(view.with_symmetry(symmetry.to_rust()), kinded)
+                } else {
+                    f(view, kinded)
+                }
             }
 
             /// Borrow the backing entity's constraints and read through `f` — no clone.
@@ -981,6 +1005,28 @@ macro_rules! stereo_constraints {
 
         #[pymethods]
         impl $view {
+            /// Attach borrowed symmetry data to a new molecule-backed constraints accessor.
+            /// The source is unchanged; the data/molecule relationship is not validated.
+            fn with_symmetry(&self, py: Python<'_>, symmetry: Py<GraphSymmetry>) -> PyResult<Self> {
+                let $storage::Molecule { owner, counter, id } = &self.storage else {
+                    return Err(PyValueError::new_err(concat!(
+                        stringify!($view),
+                        " requires molecule context"
+                    )));
+                };
+                owner
+                    .try_borrow(py)?
+                    .check_access(*counter, stringify!($view))?;
+                Ok(Self {
+                    storage: $storage::Molecule {
+                        owner: owner.clone_ref(py),
+                        counter: *counter,
+                        id: *id,
+                    },
+                    symmetry: Some(symmetry),
+                })
+            }
+
             /// Read the normalized own assertion; absence is top and None is bottom.
             /// Stored constraints are vacuous when the owning entity has no stereo kind.
             fn asserted(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
@@ -1006,26 +1052,38 @@ macro_rules! stereo_constraints {
                 self.asserted(py, key)
             }
 
-            /// Read the relation projection; None is bottom and undetermined is top.
-            /// Raises ValueError without molecule context.
+            /// Read the derived stereo value as a literal form; kindless records are vacuous.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn derived(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.derived(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
                 })
             }
 
-            /// Read the relation projection with closure; None remains bottom.
-            /// Raises ValueError without molecule context.
+            /// Read derived with closure; stereo completion agrees with derived.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn derived_complete(
                 &self,
                 py: Python<'_>,
                 key: &$key,
             ) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.derived_complete(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
@@ -1033,10 +1091,16 @@ macro_rules! stereo_constraints {
             }
 
             /// Meet the own assertion with derived and additional evidence; None is bottom.
-            /// Raises ValueError without molecule context.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn evidenced(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() && view.asserted(key).is_some() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.evidenced(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
@@ -1044,14 +1108,20 @@ macro_rules! stereo_constraints {
             }
 
             /// Read combined evidence with relation closure; None remains bottom.
-            /// Raises ValueError without molecule context.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn evidenced_complete(
                 &self,
                 py: Python<'_>,
                 key: &$key,
             ) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() && view.asserted(key).is_some() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.evidenced_complete(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
@@ -1059,15 +1129,53 @@ macro_rules! stereo_constraints {
             }
 
             /// Whether complete evidence satisfies every pattern entry.
-            /// Raises ValueError without molecule context, including for empty inputs.
+            /// Requires molecule context. Empty patterns succeed without symmetry data.
             fn satisfies(&self, py: Python<'_>, pattern: &$constraints) -> PyResult<bool> {
-                self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+                self.read_view(
+                    py,
+                    pattern.0.iter().map(|entry| entry.key()),
+                    |view, kinded| {
+                        if kinded
+                            && self.symmetry.is_none()
+                            && pattern
+                                .0
+                                .iter()
+                                .next()
+                                .is_some_and(|entry| view.asserted(entry.key()).is_some())
+                        {
+                            return Err(PyValueError::new_err(concat!(
+                                stringify!($view),
+                                " requires symmetry context; use with_symmetry"
+                            )));
+                        }
+                        Ok(view.satisfies(&pattern.0))
+                    },
+                )
             }
 
             /// Whether open evidence is compatible with every entry of other.
-            /// Raises ValueError without molecule context, including for empty inputs.
+            /// Requires molecule context. Empty patterns succeed without symmetry data.
             fn is_compatible(&self, py: Python<'_>, other: &$constraints) -> PyResult<bool> {
-                self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+                self.read_view(
+                    py,
+                    other.0.iter().map(|entry| entry.key()),
+                    |view, kinded| {
+                        if kinded
+                            && self.symmetry.is_none()
+                            && other
+                                .0
+                                .iter()
+                                .next()
+                                .is_some_and(|entry| view.asserted(entry.key()).is_some())
+                        {
+                            return Err(PyValueError::new_err(concat!(
+                                stringify!($view),
+                                " requires symmetry context; use with_symmetry"
+                            )));
+                        }
+                        Ok(view.is_compatible(&other.0))
+                    },
+                )
             }
 
             pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

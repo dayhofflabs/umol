@@ -23,13 +23,14 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g, S5a-S5g and S6a-S6b are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g, S5a-S5g and S6a-S6c are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
 generator filter, FieldColor names, the three derived stereo-view readings and the batch
 stereogenic-site classification and its Rust/Python operation consumers. S5g's acceptance and
 performance gate is complete with the accepted algorithm and tradeoffs recorded below.
 S6a removes fluxionality across Rust, DSL and Python. S6b adds the attached-data stereo
-constraint views and literal keyed derivation. S6c's Python symmetry and context surface is next.
+constraint views and literal keyed derivation. S6c supplies the Python symmetry and context
+surface. S7a guide and interface reconciliation is next.
 
 ## Starting state
 
@@ -4118,7 +4119,12 @@ cargo +nightly fmt --all -- --check
 git diff --check
 ```
 
-#### S6c — Python symmetry data, view and readings
+**Benchmark reporting status, 2026-11-15.** The user rejected the aggregate benchmark
+summary and did not approve the measurements or their presentation. Continuing with S6c does
+not constitute acceptance of that reporting or establish a performance conclusion.
+Optimization remains closed.
+
+#### S6c — Python symmetry data, view and readings **Done**
 
 - **Module:** `umol-py` molecule, stereo and constraint views, the corresponding tests and the
   existing ring bindings as the ownership/lifecycle reference.
@@ -4143,6 +4149,60 @@ git diff --check
   S5b-S5d and S6b. Compare the public symbols, names, semantics and lifecycle against Rust.
 - **Kind:** additive surface plus keyed behavior change, green at completion.
   `[dep: S6b, S5f]`
+
+**Implementation and interface reconciliation, 2026-11-15.** Python exports GraphSymmetry,
+GraphSymmetryConfig and GraphSymmetryView. Molecule.graph_symmetry(config) returns the view.
+The molecule and the view expose the five graph-wide queries and stereogenic_site_kinds;
+the two stereo views expose with_symmetry, stereogenicity, topicity and ligand_symmetry.
+Stereo constraint views expose with_symmetry and inherit attachment from their stereo view.
+All graph and stereo calculations remain Rust operations over the supplied representation.
+
+| Rust surface or obligation | Python counterpart and adaptation |
+| --- | --- |
+| Producer-issued GraphSymmetry; Clone | Opaque immutable owner with no public constructor or molecule. copy explicitly clones the Rust data. Binding conversions are from_rust/to_rust. |
+| GraphSymmetryConfig public fields and Default | Keyword constructor and default() preserve Nauty, 4096 trials and excluded constraints. All three fields are writable, matching Rust; copy is independent and the mutable value is unhashable. |
+| Molecule.graph_symmetry and GraphSymmetryView | The Python view retains the molecule and its existing mutation counter. GraphSymmetryStorage uses Owned Rust data or Borrowed Py<GraphSymmetry>, directly following RingStorage. No molecule is copied. |
+| from_graph_symmetry | Retains the supplied data and molecule without copying or recomputation. Their semantic relationship remains a caller obligation. |
+| into_graph_symmetry | Moves owned data or clones borrowed data. Consumes all aliases of the view; later queries raise ConsumedError. An invalidated view raises InvalidatedViewError before extraction. The molecule and any source data remain usable. |
+| Five graph-wide queries and their view methods | Same names and arguments; AtomId is represented by a u32 Python integer. Unavailable IDs retain Rust's false/empty results. Orbit vectors become caller-owned lists in atom-ID order. |
+| stereogenic_site_kinds on molecule and view | Returns a caller-owned list of (Entity, StereogenicSiteKind), preserving Rust order, omission of kindless records and both empty-result cases. No final classifications are retained internally. |
+| Stereo with_symmetry and constraints propagation | New accessors retain the same molecule and supplied data through Python references. The source accessor is unchanged. Both direct constraints attachment and propagation retain one data reference. |
+| Asserted-domain failures | Missing required symmetry or stereo kind raises ValueError. An unavailable topicity position raises IndexError instead of reaching a Rust indexing assertion. |
+| Keyed readings | Literal derivation, evidence, completion and comparisons delegate to Rust. Missing-context guards preserve kindless vacuity, bottom-assertion short circuits and empty-pattern success. Standalone form/update views still require molecule context for derivation and comparisons. |
+| Lifecycle and representation | Structural molecule mutation invalidates retained accessors through the existing counter. Ordinary attribute edits leave accessors live; meaningful symmetry readings require appropriate auxiliary data. Computation and queries preserve raw forms without normalization. |
+
+The initial Python surface and keyed-reading cases were written before the bindings and failed
+on the absent exports; Rust conversion/copy cases were also prepared before implementation.
+The export inventory, positive chirality and orbit-identity assertions were completed during
+review after implementation. The final tests cover mutable config fields and defaults,
+constraint participation, owned and borrowed reuse/extraction, consumption, lifetime,
+invalidation, raw-input distinctions, all queries, three derived stereo readings and each
+keyed reading under both constraints settings. Batch tests cover all three kinds, mixed atom
+and bond ordering, caller-owned results and omitted kindless entries.
+
+| Existing Python coverage | Disposition |
+| --- | --- |
+| Stereo own assertions, raw containers/getters, kindless readings and bottom assertions | Preserved. |
+| Kinded vacuous derivation/evidence rows in the generic entity tables | Replaced by explicit stereo literal/meet/comparison tables with attached data, both constraints settings and both attachment paths. |
+| Stereo invalidation and source-preserving edit/apply cases | Retained in the attached-data tables, including every keyed reader and the two comparisons. |
+| Unrelated entity readings, errors, ring-context behavior and normalization | Unchanged. |
+| Public-export inventory | Includes exactly the three added graph-symmetry classes. |
+
+The extension was rebuilt with CPython 3.13.18 in umol-py/.venv. Rust binding tests passed
+1,791 cases with 2 ignored; the full Python suite passed 3,577 tests with 2 skipped. Formatting
+and diff checks passed. The full diff, including new files, was reviewed against the Rust
+public symbols, contextual errors, ownership and lifecycle. No Rust graph algorithm or
+benchmark was changed for S6c. Current guide reconciliation remains S7a.
+
+```text
+source umol-py/.venv/bin/activate && CARGO_TARGET_DIR=/Users/dr/.cargo-target \
+  cargo test --locked -p umol-py --lib
+source umol-py/.venv/bin/activate && CARGO_TARGET_DIR=/Users/dr/.cargo-target \
+  maturin develop --locked --manifest-path umol-py/Cargo.toml
+source umol-py/.venv/bin/activate && pytest -q umol-py/tests
+cargo +nightly fmt --all -- --check
+git diff --check
+```
 
 ### S7 — Guides, final comparisons and closeout
 

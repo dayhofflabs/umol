@@ -133,6 +133,7 @@ use crate::{
         TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
+    symmetry::{GraphSymmetry, GraphSymmetryConfig, GraphSymmetryView},
     transaction::{MoleculeEditor, RollbackMethod},
     transform::{
         AddStereoConfig, EnumerateStereoConfig, KekulizeConfig, RemoveStereoConfig,
@@ -213,6 +214,8 @@ mod spin;
 mod stereo;
 #[cfg(feature = "graph")]
 mod substructure;
+#[cfg(feature = "graph")]
+mod symmetry;
 #[cfg(feature = "graph")]
 mod transaction;
 #[cfg(feature = "graph")]
@@ -355,6 +358,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RingView>()?;
         module.add_class::<RingAtomView>()?;
         module.add_class::<RingBondView>()?;
+        module.add_class::<GraphSymmetry>()?;
+        module.add_class::<GraphSymmetryConfig>()?;
+        module.add_class::<GraphSymmetryView>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;
         module.add_class::<RefinementRounds>()?;
