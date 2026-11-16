@@ -1,6 +1,6 @@
 # 246 — Derived stereo readings
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-12
 Relates: [245](245-canonical-eq-cost-2026-11-12.md)
 
@@ -13,7 +13,7 @@ further property, which this document separates from stereogenicity: whether a s
 stereogenic unit of the compound.
 
 Issue 43 reports a CH₂ carbon beside an assigned stereocenter that is classified as `Stereogenic`.
-The review of that report found that the present derivation gives wrong results for molecules with
+The review of that report found that the original derivation gave wrong results for molecules with
 two or more assigned stereo entities, in all five readings.
 
 This document records
@@ -30,7 +30,8 @@ stereogenic-site classification and its Rust/Python operation consumers. S5g's a
 performance gate is complete with the accepted algorithm and tradeoffs recorded below.
 S6a removes fluxionality across Rust, DSL and Python. S6b adds the attached-data stereo
 constraint views and literal keyed derivation. S6c supplies the Python symmetry and context
-surface. S7a guide and interface reconciliation is next.
+surface. S7a reconciled the guides and interfaces; S7c completed closeout. S7b was removed
+at the user's request; no further benchmark work is part of closeout.
 
 ## Starting state
 
@@ -1199,15 +1200,14 @@ timings. The implementation tests and measurements below precede those changes.
 
 ## Review dispositions: S4 and unfinished S5
 
-The supplied review is evidence for discussion, not a blanket approval of its findings or
-proposed corrections. The identifiers below refer to that review. This record distinguishes
-changes verified in main, behavior checked only in the trial, remaining implementation work,
-and design questions that still need a decision. S4f completes the selector replacement; it
+The supplied review was evidence for discussion, not a blanket approval of its findings or
+proposed corrections. The identifiers below refer to that review. The table preserves the
+findings, decisions and work assignments at that point in implementation. S4f completes the selector replacement; it
 does not close every S4 finding. Selecting one Constitution search likewise does not complete
 S5b or approve all of its private machinery. The table records the findings and work assigned
 before implementation: the requirements assigned to S4g and S5b are now complete, as recorded
 in the completion checkpoint under S5b. Coverage and consumers assigned to S5c and later
-subitems remain pending.
+subitems were completed by their implementation records. No S4/S5 work remains pending.
 
 | Review items | Current finding and disposition | Remaining work |
 | --- | --- | --- |
@@ -1244,10 +1244,10 @@ retained in production or tests solely because it was used during this developme
 
 ## Staged implementation plan
 
-S0-S3, S4a-S4f and S5a have implementation records. S4g applies the settled naming and test
-corrections before the unfinished S5b port of the selected single Constitution search.
-The remaining work uses one color definition through AsColor and
-shared search-color construction. Each subitem carries its own tests under the test-writing
+S0-S6, S7a and S7c have implementation records. S4g applied the naming and test corrections
+before S5b integrated the selected single Constitution search. The implementation uses one
+color definition through AsColor and shared search-color construction. S7a reconciled the guides and S7c closed
+out the completed scope; S7b was removed at the user's request. Each subitem carries its own tests under the test-writing
 skill. Required tests, independent expected values and benchmark harnesses are
 written before the implementation they exercise. An intended initial test failure
 belongs inside that subitem; it does not justify leaving a nonbreaking subitem red. Where an
@@ -4177,8 +4177,9 @@ The export inventory, positive chirality and orbit-identity assertions were comp
 review after implementation. The final tests cover mutable config fields and defaults,
 constraint participation, owned and borrowed reuse/extraction, consumption, lifetime,
 invalidation, raw-input distinctions, all queries, three derived stereo readings and each
-keyed reading under both constraints settings. Batch tests cover all three kinds, mixed atom
-and bond ordering, caller-owned results and omitted kindless entries.
+keyed reading under both constraints settings. Python batch fixtures cover Constitutional,
+Prostereogenic and Nonstereogenic sites, mixed atom and bond ordering, caller-owned results
+and omitted kindless entries.
 
 | Existing Python coverage | Disposition |
 | --- | --- |
@@ -4204,9 +4205,9 @@ cargo +nightly fmt --all -- --check
 git diff --check
 ```
 
-### S7 — Guides, final comparisons and closeout
+### S7 — Guides and closeout
 
-#### S7a — Guides and interface reconciliation
+#### S7a — Guides and interface reconciliation **Done**
 
 - **Module:** `docs/development/nomenclature.md`, `data-types.md`, `operations.md`,
   `python-api.md`, `property-tests.md`, `docs/chemistry/representation.md`, `README.md` and
@@ -4222,30 +4223,61 @@ git diff --check
   rustdoc states the operational domain and comparison relation of each relevant law.
 - **Kind:** documentation (green). `[dep: S6c]`
 
-#### S7b — Final performance record
+**Implementation record, 2026-11-15.** The guides now distinguish raw color readings from
+canonicalization's caller-owned normalization, entity selection from constraint participation,
+and current-configuration readings from the caller-owned site-kind batch. They describe the
+molecule/data/view ownership, attached stereo and keyed readings, operation selectors and limits,
+and Rust/Python lifecycle. Obsolete coloring-feature and fluxionality descriptions were removed.
+The existing FrameTransport semantic properties retain their original wording.
 
-- **Module:** this record and the affected graph-IR and graph benchmarks.
-- **Check:** collect the comparisons from S4e, S4f, S5g and S6b, distinguishing canonicalization,
-  setup, fixed query workloads and operation workloads. Reuse valid measurements; rerun only
-  groups affected by subsequent implementation changes. Record medians and conclusions here.
-  Record source revisions, benchmark IDs, commands, relevant medians and conclusions inline;
-  temporary logs are not persistent evidence references. New correct stereo behavior does not
-  establish a runtime improvement by itself.
-- **Kind:** verification (green). `[dep: S7a, S4e, S4f, S5g, S6b]`
+The interface audit covered all eight entity-form color implementations and EntitySpan,
+GraphSymmetry and its view, molecule and stereo queries, batch ordering and omissions,
+perceiver and transformer consumers, Rust/Python exports and the remaining DSL predicates.
+The changed README and Python-guide examples execute against the rebuilt extension; the four
+added local links and their Markdown anchors resolve. The full S7 diff was checked against
+the agreed scope, including internal names and the boundaries of the documented laws.
 
-#### S7c — Closeout
+**Scope change, 2026-11-15.** S7b was dropped at the user's request. Closeout runs no
+benchmarks and adds no performance comparison or acceptance conclusion. Earlier measurements
+retain their stated scope and the S6b reporting dispute above remains explicit.
+
+#### S7c — Closeout **Done**
 
 - **Module:** the complete affected workspace surface and this discussion's status record.
 - **Check:** review the complete implementation diff against the settled public-symbol and
   ownership contracts, confirm that `ir::coloring` and stale copy/normalize paths are gone,
   and check the discussion's status language. Run the final gates below. Record the results
   and set the document and index status only when the agreed implementation scope is complete.
-- **Kind:** verification and documentation (green). `[dep: S7a, S7b]`
+- **Kind:** verification and documentation (green). `[dep: S7a]`
+
+**Closeout record, 2026-11-15.** The storage discussion settled boxing the optional
+automorphism output inside GraphSymmetry. The field is `Option<Box<AutomorphismOutput>>`;
+allocation occurs only when the output is retained. In the local arm64 build, this reduces
+the field from 128 to 8 bytes and GraphSymmetry from 320 to 192 bytes, including its changed
+alignment padding. The Python owned variant continues to contain GraphSymmetry directly,
+and its storage enum passes Clippy without a large-enum suppression. The ring binding's
+private enum was renamed RingSetStorage to identify the value both variants store.
+
+Final verification used CPython 3.13.18 from umol-py/.venv and the shared Cargo target directory.
+The final results after these corrections are:
+
+| Check | Result |
+| --- | --- |
+| All-features workspace tests, including feature-gated property and conformance suites | 46,594 passed; 10 ignored; no failures. |
+| All-features workspace Clippy, all targets, warnings denied | Passed. |
+| Native Python extension rebuild | Passed. |
+| Full Python suite | 3,577 passed; 2 skipped. |
+| Changed Python documentation examples | Both passed. |
+| Formatting and diff checks | Passed. |
+
+S7a and S7c are complete. S7b is removed; no benchmarks were run during closeout.
+The S6b reporting dispute remains explicit and this closeout grants no performance acceptance.
 
 ### Stage gates
 
-S4f, S4g, S5b-S5g and S6a are complete. S5g's acceptance and performance gate passes with the
-accepted tradeoffs recorded above. S6 ends green with keyed and Python parity complete.
+S0-S6, S7a and S7c are complete. S5g's acceptance and performance gate passes with its
+accepted tradeoffs recorded above. S6 is green with keyed and Python parity complete; its
+benchmark reporting is not approved. S7b is outside the closeout scope.
 No later stage is used to repair an earlier stage's compilation.
 
 During implementation, run the tests of the affected crate/subitem, then the stage gate; do not
@@ -4272,9 +4304,7 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S5 and S6a are complete. The remaining path is:
-
-S6b -> S6c -> S7a -> S7b -> S7c.
+S0-S6, S7a and S7c are complete; S7b is removed.
 
 S4f replaces the selector after S4e's measurements; S4g applies the later approved names and
 the repository-required color-test corrections. The single Constitution search and narrower

@@ -255,13 +255,13 @@ These methods return independent molecules and preserve their receivers. Their
 `_into` counterparts modify the receiver in place. Molecules also provide
 `aromatize`, `kekulize`, and `delocalize_charge`, with corresponding `_into` methods.
 
-Stereo addition creates missing tetrahedral and cis/trans entities, selecting only stereogenic
-sites by default. Removal defaults to all stored stereo and clears corresponding `#T`/`#C`
+Stereo addition creates missing tetrahedral and cis/trans entities, selecting Constitutional
+and Configurational sites by default. Removal defaults to all stored stereo and clears corresponding `#T`/`#C`
 assertions. Enumeration determines existing configurations in the supplied sequence of sites,
 preserving symmetry-equivalent assignments:
 
 ```python
-from umol import Molecule, MoleculeDefaults, StereoModel, StereoSite
+from umol import GraphSymmetryConfig, Molecule, MoleculeDefaults, StereoModel, StereoSite, Stereogenicity
 
 source = Molecule.parse(
     '{:atoms ["C" "F" "Cl" "Br" "I"] '
@@ -273,12 +273,20 @@ stereo = source.add_stereo(model)
 isomers = list(stereo.enumerate_stereo(model, sites=[StereoSite.Atom(0)]))
 assert len(isomers) == 2
 assert stereo.remove_stereo(model) == source
+
+symmetry = stereo.graph_symmetry(GraphSymmetryConfig()).into_graph_symmetry()
+record = stereo.stereo_atoms[0].with_symmetry(symmetry)
+assert record.stereogenicity() == Stereogenicity.Stereogenic
+site_kinds = stereo.stereogenic_site_kinds(symmetry)
 ```
 
-Site, kind, and stereogenicity filters are shared across the three operations. A stereo entity
-may be symmetric or prochiral; its presence does not assert stereogenicity. The
-[Python API guide](docs/development/python-api.md#stereo-values-and-perception) describes
-selectors, undetermined-coset removal, and iterator ownership.
+The shared selection filters topology sites, geometries and stereogenic_site_kinds. This batch
+classification differs from stereogenicity in the current assignment. Nonstereogenic and
+prostereogenic arrangements are representable; their presence asserts no classification.
+Graph-symmetry readings preserve supplied forms and use auxiliary data appropriate to the
+unchanged molecule. The [Python API guide](docs/development/python-api.md#stereo-values-and-operation-configurations)
+describes selectors, undetermined-coset removal, iterator ownership and
+[attached readings](docs/development/python-api.md#graph-symmetry-and-attached-stereo-readings).
 
 ## Applying reactions
 

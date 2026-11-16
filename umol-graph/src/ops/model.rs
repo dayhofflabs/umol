@@ -281,8 +281,7 @@ impl StereoModel {
 impl Default for StereoModel {
     /// Perceive the two realized binary kinds — tetrahedral atoms and cis/trans
     /// bonds — for any element; the higher geometries (square-planar,
-    /// trigonal-bipyramidal, octahedral, axial) are staged off. No para-stereo
-    /// fixpoint by default.
+    /// trigonal-bipyramidal, octahedral, axial) are not recognized by this default.
     fn default() -> Self {
         let mut kind_models: [Option<StereoKindModel>; StereoKind::COUNT] =
             array::from_fn(|_| None);

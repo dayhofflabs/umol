@@ -335,10 +335,20 @@ series, its key order and canonical representatives may change between releases.
 is therefore not a persistent identifier unless a future API supplies an explicitly versioned
 canonicalization profile.
 
-A **color** is the frame-independent part of a normal form, read by `AsColor::as_color`.
-Canonicalization ranks the colors of each entity kind into integers and supplies the integers to
-the graph algorithm as equality labels; the integer is also called a color. Colors are distinct
-from the cells or equivalence classes of a refined partition and from a stereo class.
+A **color** is the frame-independent reading of a stored form. The internal AsColor trait
+supplies as_color, including frame-independent entity constraints, and as_field_color, omitting
+constraints. Its associated Color and FieldColor types have ordered comparisons and hashing.
+The eight entity forms and EntitySpan share this definition; a modified span whose selected
+side colors agree reads as unchanged. Stereo field colors contain the kind; full stereo colors
+also contain the stereogenicity assertion. Frame-relative cosets and constraints are checked
+under the remapping rather than included in the color.
+
+The readings do not normalize their inputs. Canonicalization supplies normalized forms and uses
+full colors; graph symmetry reads the supplied representation and selects constraint participation
+with include_constraints. A literal and a singleton set can have different raw colors.
+The common ranker orders colors within each entity kind and assigns integer equality labels,
+also called colors. Incidence labels preserve participant roles and aligned electron counts.
+Colors are distinct from refined partition cells and stereo classifications.
 
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
@@ -474,7 +484,7 @@ when a proper rotation relates them, so the observable descriptor is the coset r
 which umol does not represent.
 **In code:** `StereoConfigurationForm`; the `configuration` attribute of stereo atoms and bonds.
 
-An explicit stereo description does not assert stereogenicity. Symmetric and prochiral
+An explicit stereo description does not assert stereogenicity. Nonstereogenic and prostereogenic
 arrangements remain representable. TetrahedralStereoForm and CisTransStereoForm instead express
 frame-independent kind constraints: Undetermined, NotStereo, or Stereo, with bool literals for
 the two determined values. They carry neither a configuration nor a coset.
@@ -646,12 +656,13 @@ would be the one to rename if either were.
 ### Derived and asserted
 
 A derivable constraint has an **asserted side**, read from its own stored assertion,
-and a **derived side**, projected from the relations the entity takes part in.
+and a **derived side**, computed from its molecular relations or attached auxiliary data.
 The six keyed readings return normalized owned forms with meet's result semantics:
 `None` is bottom; `Some(undetermined(key))` is top, including absent evidence.
 Typed storage getters and iterators retain the stored forms and borrow them.
 
-`asserted(key)` reads the own assertion; `derived(key)` reads present relations.
+`asserted(key)` reads the own assertion; `derived(key)` reads present relations or the
+symmetry-derived stereo value.
 `evidenced(key)` meets those readings with applicable additional evidence: an
 incident bond's positive aromatic assertion contributes aromatic atom evidence.
 Contradictory contributing evidence yields bottom.
@@ -670,8 +681,15 @@ is top; it preserves non-vacuous evidence and bottom. Host-side `satisfies` read
 Pattern entries are own assertions; resolution admission and matching hosts use
 complete evidence, while aromatization uses open evidence.
 
-These readings do not rewrite storage or change mutation fallibility. Successfully
-normalizing a molecule preserves its readings in the same context.
+Stereo keys derive Stereogenicity, Topicity and ligand symmetry as literal forms with attached
+GraphSymmetry data. Kindless stereo records have vacuous own and derived readings; raw storage
+getters retain their payloads. Kinded derivation requires symmetry data. Bottom own assertions
+and empty patterns retain their short circuits, and stereo completion agrees with the open reading.
+
+These readings do not rewrite storage or change mutation fallibility. Successful molecule
+normalization preserves own assertions and non-symmetry projections in the same context.
+Symmetry-derived stereo readings use the supplied representation and have no general
+normalization-invariance law.
 
 **Not:** `projected` for the reading — *projection* names the operation yielding the derived
 side; not a mode parameter or stored molecule state — the closure choice is per call.
@@ -684,15 +702,16 @@ side; not a mode parameter or stored molecule state — the closure choice is pe
 A **description level** is one member of the cumulative graph-IR description hierarchy:
 `Topology`, `Constitution`, `Structure`, and `Full`. Each level includes every lower level.
 
-The hierarchy is private canonicalization machinery. It selects the least search prefix containing
-the complete input so empty higher domains need not enlarge the incidence graph. It is not a public
-projection, a molecule property, or a reduced canonicalization surface: public canonicalization
-always includes every present entity and constraint.
+The hierarchy is internal graph-search machinery. Canonicalization selects the least prefix
+containing the complete input so empty higher domains need not enlarge the incidence graph.
+Public canonicalization always includes every present entity and constraint. Graph-symmetry
+searches also use these internal levels; no public level selector or molecule property is exposed.
 
 `Topology` contains the topology domain. `Constitution = Topology + NonStereo`, and
-`Structure = Constitution + Stereo`. `Full` adds molecule-level constraints; an inline constraint
-belongs to the level of its entity. The domains are disjoint groups of entity kinds; the levels are
-their cumulative prefixes.
+`Structure = Constitution + Stereo`. The domains are disjoint groups of entity kinds; the levels
+are their cumulative prefixes. Levels select entity kinds, independently of whether their
+constraints are compared. Canonicalization includes entity constraints; graph symmetry uses
+include_constraints. `Full` adds molecule-level constraints, which graph symmetry never compares.
 
 **Not:** *model*, which decides semantic acceptance; *features*, which are independently combinable
 switches; *domain*, which names a compositional entity group; *scope*, which does not express the
@@ -862,12 +881,12 @@ resolver policy semantics.
 A **features** type is a bitflag set of independently combinable switches. Callers may select any
 meaningful subset; the values do not represent steps in a single hierarchy.
 
-Use a domain-qualified name when the switches describe one operation's inputs. The molecule-coloring
-flags are therefore `MoleculeColoringFeatures`, not `ConstitutionFeatures`: the set also contains a
-stereo-kind switch and is not limited to constitution.
+Use a domain-qualified name when the switches describe one operation's inputs. SmilesSyntaxFlags
+selects accepted and emitted syntax with independently combinable bits. Graph-symmetry constraint
+participation is a single bool in GraphSymmetryConfig.
 
 **Not:** *level*, whose alternatives are mutually exclusive nested layers.
-**In code:** `MoleculeColoringFeatures`.
+**In code:** SmilesSyntaxFlags.
 
 ### Form
 
@@ -896,6 +915,20 @@ to `DescriptionLevel::Structure`, not `DescriptionLevel::Full`.
 represented assertion; it does not validate it.
 **In code:** private `DescriptionLevel::Full`; public `IncidenceLevel::Full` in its
 carrier-specific sense.
+
+### Graph symmetry
+
+GraphSymmetry is auxiliary search data computed for a molecular representation. It contains no
+molecule and retains no final query answers. Molecule and GraphSymmetryView provide chirality,
+proper and proper-or-mirror atom orbits, and batch stereogenic-site kinds. GraphSymmetryView
+borrows the molecule and owns or borrows the auxiliary data, following RingViews.
+
+The operations read supplied forms without normalization. include_constraints chooses entity
+constraint participation, independently of entity-kind selection. Meaningful readings require
+matching molecule/data context; pairing does not validate that relationship. Recompute the data
+after relevant molecular changes.
+
+**In code:** GraphSymmetry, GraphSymmetryConfig, GraphSymmetryView.
 
 ### Ground term
 
@@ -1720,6 +1753,32 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 **Not:** a partition by any other criterion.
 **In code:** `split`.
 
+### Stereogenicity
+
+Stereogenicity classifies one stereo atom or bond in its current molecular context. Stereogenic
+means another coset gives a different molecule. Prostereogenic means the record is not
+stereogenic but becomes so after one ligand is replaced by a distinct ligand. Nonstereogenic
+is the remainder. The own stored coset does not decide this classification; other records are
+read as supplied.
+
+**In code:** Stereogenicity; the stereogenicity reading on stereo views.
+
+### Stereogenic site kind
+
+StereogenicSiteKind classifies a kinded stereo record's role in distinguishing stereoisomers
+among the molecule's candidate records. Constitutional sites have constitutionally different
+ligands; Configurational sites have constitutionally equal ligands but can distinguish an isomer
+for some assignment of the other sites. Prostereogenic sites become stereogenic after one
+ligand replacement; Nonstereogenic is the remainder. The classification is independent of
+stored coset assignments and differs from Stereogenicity in the current assignment.
+
+The literature calls a participating site a stereogenic unit. The repository uses Site for the
+focus and Kind for this closed enum. The classifications are computed together and returned in
+an owned vector of stereo-record Entity keys; they are not retained query results in GraphSymmetry.
+StereoSelection filters by stereogenic_site_kinds.
+
+**In code:** StereogenicSiteKind, stereogenic_site_kinds.
+
 ### Structural domain
 
 A **structural domain** is one of three disjoint groups of entity kinds: topology (AB), non-stereo
@@ -1773,6 +1832,15 @@ including the inherent values carried by those entities. It does not include ove
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
 **In code:** private `DescriptionLevel::Topology`; public `IncidenceLevel::Topology`.
+
+### Topicity
+
+Topicity relates two ligand positions of one stereo record under remappings fixing that record.
+Homotopic ligands are related by a preserving remapping; Enantiotopic ligands require a mirror
+remapping. Diastereotopic ligands have the same constitution but neither remapping exists in the
+supplied stereo context. Distinct ligands differ constitutionally. Virtual positions remain fixed.
+
+**In code:** Topicity; the topicity reading on stereo views.
 
 ### Tracked operation
 

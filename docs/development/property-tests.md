@@ -431,6 +431,32 @@ composition checks the mapped `framed_eq_under` relation on a restricted atom-re
 The coherent pipeline property stage systematizes the remaining `framed_eq` and cross-quotient
 laws.
 
+### Graph symmetry and stereo readings
+
+Graph-symmetry properties state the input representation directly. Preparation and queries
+preserve raw storage; a literal and a singleton set may have different colors. There is no
+normalization-invariance law for the symmetry-derived stereo keys. Canonicalization has its
+own normalized-input laws and always includes constraints; graph symmetry tests both settings
+of include_constraints independently.
+
+Exact fixtures cover chirality, proper and star orbits, stereogenicity, topicity and ligand
+symmetry. Bounded exhaustive atom-remapping calculations check the production readings, with
+explicit frame actions and scope. Relabeling and compatible-frame properties state their
+configuration domain, rather than extending a literal/finite-domain result to arbitrary
+symbolic forms.
+
+Keyed stereo properties require literal derived values at the requested keys, kindless vacuity,
+completion agreement, evidence as the meet of assertion and derivation, normalized output forms
+and preservation of the supplied molecule. Missing context, bottom assertions and empty patterns
+have separate contract cases. Own-assertion and unrelated projection normalization properties
+remain in place.
+
+Site-kind properties concern the batch over the complete candidate context. They cover
+independence from valid stored coset assignments, record-ID ordering, omission of kindless
+records, both empty-result cases, frame/relabeling behavior in the stated domain and caller-owned
+results. Classification budgets are part of the operational domain, including conservative
+retention when confirmation reaches its limit.
+
 ### Frame transport and reframing
 
 For each of the six overlay kinds, test the local action and its aggregate carrier. Cover forms,

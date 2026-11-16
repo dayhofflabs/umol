@@ -43,17 +43,61 @@ bond creation, while stored entities are checked independently of those cutoffs.
 | AromaticityPerceiver::derive | Combines atom assertions, incident bond evidence, and stored systems. Absent evidence excludes an atom; nonliteral contributions leave derivation unresolved. Positive requirements must be covered; stored systems must reappear with equal members and frame-aligned compatible attributes. |
 | StereoPerceiver::derive | Positive #T/#C request missing entities with open cosets. Identifies Virtual as H/LP only when unique, preserving frame positions and attributes. Incomplete ligand evidence yields Underdetermined with established findings and unresolved stored rows; a missing unresolved frame supplies no row. An open coset does not itself cause underdetermination. |
 | StereoPerceiver::recognize | Returns selected missing tetrahedral/CisTrans entities with open cosets. Positive assertions request the kind, negatives exclude it, and unasserted sites use automatic chemistry rules. Required nonliteral input or unsupported queries produce StereoPerceptionError; evidence failures remain in StereoDerivation. |
-| StereoPerceiver::classify | Returns one Symmetric/Prochiral/Stereogenic classification per requested existing site, including an empty map for no sites. Supports literal, open, or nonempty finite coset domains without choosing a coset. Invalid sites, missing entities, unsupported kind/configuration, or wrong arity produce StereoPerceptionError. |
+| StereoPerceiver::classify | Takes a site slice and supplied GraphSymmetry, coalesces duplicate requests and returns one StereogenicSiteKind per distinct requested existing site in topology-site order, including an empty vector for no requests. Supports every kind admitted by the graph-IR batch without interpreting stored cosets. Invalid sites, missing entities, incompatible kind/frame or wrong arity produce StereoPerceptionError. |
 | AromaticityPerceiver::recognize | Takes ground AromaticValence values: NotAromatic excludes, Aromatic(0) permits participation. Returns disjoint systems with sorted members and aligned contributions; an empty result is valid. Negative bond assertions exclude systems containing both endpoints. Positive requirements and stored-system checks belong to derive. |
 
-Stereo selectors intersect: None is unrestricted; an empty set selects nothing. Classification
-uses whole-molecule symmetry, the selected automorphism algorithm, para-stereo setting, and iteration
-limit; recognition includes prospective additions when filtering by stereogenicity. Graph-derived
-ligand actions fix virtual ligands, so distinguishable H positions require explicit atoms.
+Stereo selectors intersect sites, geometry kinds and stereogenic_site_kinds: None is
+unrestricted; an empty set selects nothing. The adder defaults to Constitutional and
+Configurational sites. Classification uses the supplied whole-molecule auxiliary data and
+returns a sorted vector keyed by StereoSite, distinct from the graph-IR batch's stereo-record
+Entity keys. The method retains its perceiver receiver and model-bearing operation interface.
+
+When site-kind filtering is active, recognition first collects all eligible prospective sites
+with the existing records, classifies that context in a temporary molecule and then applies the
+output selectors. Required recognition fields outside the selected output sites can therefore
+cause underdetermination. Without that filter, recognition processes the selected sites and
+geometries. Graph-derived ligand actions fix virtual positions, so distinguishable H positions
+require explicit atoms.
 
 Hückel counting needs contributions, not element identities: ElementScope::Any permits unknown
 elements, while AllowList currently requires literal permitted elements. HMO needs known supported
 elements; Clar requires carbon. Rule rejection uses Contradictory and missing parameters use Err.
+
+### Graph symmetry and stereo readings
+
+Molecule::graph_symmetry prepares GraphSymmetry and returns GraphSymmetryView. Queries on the
+molecule take the auxiliary data explicitly; view methods use their retained data and borrowed
+molecule. GraphSymmetryConfig selects the automorphism algorithm, include_constraints and
+max_classification_trials. Defaults are Nauty, false and 4096. All colors and checks read the
+supplied forms; they do not copy or normalize the molecule. Entity constraints are included
+only when selected, and molecule constraints are excluded. Encoding-incompatible fields use
+singleton entity colors; this fallback does not diagnose or validate those fields.
+
+is_chiral tests for a remapping to the mirror image. The proper-orbit queries use preserving
+remappings; star-orbit queries also admit mirror remappings. Stereo views attach data with
+with_symmetry and expose stereogenicity, topicity and ligand_symmetry. Stereogenicity is
+Nonstereogenic, Prostereogenic or Stereogenic in the supplied stereo context. Topicity is
+Homotopic, Enantiotopic, Diastereotopic or Distinct, with the focus record fixed. Other stereo
+records are read as supplied. Stereo constraint views derive these keys as literal forms and
+meet them with their own assertions for evidence. Kindless keyed readings remain vacuous;
+kinded derivation requires auxiliary data.
+
+stereogenic_site_kinds computes all kinded records together and returns the final classifications
+in an owned vector, ordered by stereo-record ID. It omits kindless records and is independent of
+stored coset assignments. Constitutional and Configurational sites are the literature's two
+kinds of stereogenic unit; Prostereogenic and Nonstereogenic complete the classification.
+The caller retains any results it wants to reuse. max_classification_trials bounds assignment
+trials confirming one site's kind; exhaustion conservatively keeps the candidate as a unit,
+so a bounded result can retain an unconfirmed site. It does not limit output length or the
+number of enumerated stereoisomers.
+
+AddStereoConfig, RemoveStereoConfig and EnumerateStereoConfig carry that classification limit.
+The validator reads the three current-configuration stereo predicates and does not run the
+site-kind batch, so StereoValidateConfig has only automorphism_algorithm and ring_config.
+Validation establishes an asserted predicate when the required inputs suffice, even if an
+unneeded coset is nonliteral; required unresolved evidence remains Underdetermined. This does
+not promise general symbolic analysis. Kind support, element scope and ring limits belong
+to the chemistry model rather than to the graph-symmetry config.
 
 ## Resolution
 
@@ -198,7 +242,7 @@ failures independently of model rejection.
 | ConnectivityConformanceValidator::validate | Connectivity conditions enabled by ConnectivityModel. Components use localized bonds only; other relations do not join them. Overall connectivity and enabled relation/constraint containment use topology/references, so unresolved attributes do not prevent a verdict. Zero or one component is connected. |
 | ValenceConformanceValidator::validate | Each atom is accepted by the selected registry/counts table. The classifier needs its ground atom state and literal complete contribution readings; unresolved required input contributes uncertainty. Other entities need not be concrete. |
 | AromaticityConformanceValidator::validate | Aromaticity derivation has no classified failure or mismatch, including unrealized assertions and unreproduced stored systems. Missing model parameters use Err. |
-| StereoConformanceValidator::validate | Kind agreement, realizability, arity/coset ranges, model ring limits, and asserted stereogenicity/topicity/ligand symmetry. Frame positions and permutation degrees are checked even with open cosets. Ring-relative E uses ring-continuation ligands, not a raw coset. Algorithms/iterations come from config; chemistry limits and para-stereo acceptance come from the model. |
+| StereoConformanceValidator::validate | Kind agreement, realizability, arity/coset ranges, model ring limits, and asserted stereogenicity/topicity/ligand symmetry. Frame positions and permutation degrees are checked even with open cosets. Ring-relative E uses ring-continuation ligands, not a raw coset. Algorithms come from config; element scope, supported kinds and ring limits come from the model. This validator does not compute the site-kind batch. |
 
 ### Constraints and explicit entities
 

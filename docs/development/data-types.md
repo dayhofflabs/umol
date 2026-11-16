@@ -229,7 +229,7 @@ that supplies an explicit repeated ligand or a frame exceeding `umol_perm::MAX_D
 during raise; it must not normalize, deduplicate, or choose an arbitrary coset for malformed input.
 
 An existing stereo atom or bond records an arrangement, without asserting stereogenicity.
-Symmetric and prochiral arrangements remain representable. Graph-derived ligand actions fix
+Nonstereogenic and prostereogenic arrangements remain representable. Graph-derived ligand actions fix
 virtual ligands; distinguishable hydrogen positions require explicit atoms. Construction and
 ordinary conversion preserve supplied stereo information without implicitly running the stereo
 transformations below.
@@ -663,6 +663,36 @@ correspondence for another molecule pair is likewise an ordinary public-input ca
 consuming API accepts the correspondence and pair independently; it is not treated as tampering
 with an opaque operation result.
 
+### Graph-symmetry data and result ownership
+
+GraphSymmetry is operation-issued auxiliary data with no public arbitrary-parts constructor.
+It stores the Constitution incidence graph, colored adapter, partition and cell index,
+constitutional automorphism data and operational config. It owns no molecule and retains no
+final query answers. Molecule::graph_symmetry borrows the unchanged molecular representation
+and returns GraphSymmetryView owning the computed data. from_graph_symmetry borrows existing
+data and a molecule without copying or recomputation; into_graph_symmetry consumes the view,
+moving owned data or cloning borrowed data.
+
+The molecule supplies every chirality, orbit and stereo query's molecular context. Compatible
+data must describe the selected representation. Pairing does not validate that relationship;
+mismatched data must not panic but has no specified semantic result. Build new data after
+relevant molecular changes. The builder and queries read raw forms without normalization.
+Entity constraints participate only when include_constraints is true; molecule constraints
+never participate. Canonicalization separately normalizes its inputs and always includes
+constraints in its complete comparison.
+
+Stereo entity and constraint views borrow auxiliary data through with_symmetry. Required data
+absence is a caller error. A kindless record's keyed readings remain vacuous; asserted bottom
+and empty comparison patterns retain their short circuits. Own assertions are normalized
+lattice readings, while raw getters retain stored payloads. Symmetry-derived keys have no
+general normalization-invariance guarantee.
+
+Molecule::stereogenic_site_kinds returns the completed owned Vec<(Entity, StereogenicSiteKind)>.
+Entries are strictly ordered by stereo-atom ID, then stereo-bond ID, each ascending; these are
+record IDs rather than topology site IDs. Kindless records are omitted without renumbering.
+No stereo records or only kindless records yields an empty vector. The caller can retain the
+batch for iteration or binary search. The operation does not introduce an internal result cache.
+
 ### Containing fallibility
 
 Fallibility is not propagated merely because an implementation calls another fallible operation.
@@ -1025,7 +1055,7 @@ Comparing two entries therefore has three independent parts, and a site chooses 
   distinct complete participant values, so equal structured incidence determines one action in the
   entity kind's group. `DynPermutation::between` or `Permutation::between` derives that action, and
   `FrameTransport::reframe_by` transports the payload.
-- **the value relation** — `normalized_eq`, `matches`, or `meet`, the caller's own.
+- **the value relation** — stored `==`, `normalized_eq`, `matches`, or `meet`, the caller's own.
 
 `FrameTransport::reframe_by` returning `Some` does not establish identity: a frame-invariant payload
 reads neither frame, and an undetermined electron-count vector has nothing to reorder. A site that
@@ -1041,6 +1071,15 @@ The six overlay kinds select and transport frames as follows:
 | Noncovalent bond | endpoints sorted by atom id | degree-two `DynPermutation` | ordered predicate pairs in `NoncovalentBondEndsSatisfy`; the entity form is invariant |
 | Stereo atom | complete ligands sorted | bounded `Permutation` in the full ligand symmetric group | configuration, ligand-symmetry permutations, topicity positions, and stereo constraints |
 | Stereo bond | sort each two-ligand endpoint block, then order the blocks | bounded `Permutation` in `S_2 wr S_2` | configuration and every frame-relative stereo-bond constraint |
+
+The internal coset_apply_permutation helper used by graph-symmetry checks applies the
+permutation at the outer coset form only. It carries literals
+and set members while preserving their variants, leaves Undetermined unchanged, and wraps a
+symbolic term in Apply when the action is nontrivial on cosets. Existing nested operators and
+variable domains are retained. An action trivial on every coset leaves the term unchanged.
+This transport does not normalize the molecule or the existing term; operations that require
+normal forms perform their own normalization. Incompatible actions and out-of-range outer
+literal/set members return None.
 
 The stereo-bond group may permute within each endpoint block and exchange the two complete blocks;
 it cannot move one ligand across the block boundary. Dative-bond order, noncovalent-bond kind,
