@@ -19,6 +19,8 @@ rule changes and carry neither dates nor implementation status.
   value contracts for the Python bindings.
 - [Property tests](property-tests.md) defines executable-specification, evidence, documentation,
   and property-suite organization policy.
+- [Releases](releases.md) defines release scope, whitepaper and README review, version updates,
+  verification and publication.
 
 Dated documents under `discussion/` retain design rationale, alternatives, implementation plans,
 and historical snapshots. They may record the provenance of a settled rule but are not normative.
