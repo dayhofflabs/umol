@@ -597,7 +597,7 @@ fn test_stereo_perceiver_recognize_nitrogen(
 
 #[rstest]
 #[case::disabled(None)]
-#[case::excluded(Some(StereoKindModel { scope: ElementScope::AllowList(vec![Element::N]), fluxionality: false }))]
+#[case::excluded(Some(StereoKindModel { scope: ElementScope::AllowList(vec![Element::N]) }))]
 fn test_stereo_perceiver_recognize_model(
     mixed_sites: Molecule,
     #[case] kind_model: Option<StereoKindModel>,
@@ -746,20 +746,12 @@ fn test_stereo_perceiver_recognize_bond_order(
 }
 
 #[rstest]
-#[case::tetrahedral(StereoKind::Tetrahedral)]
-#[case::cis_trans(StereoKind::CisTrans)]
 #[case::square_planar(StereoKind::SquarePlanar)]
 fn test_stereo_perceiver_recognize_unsupported(mixed_sites: Molecule, #[case] kind: StereoKind) {
     let mut model = StereoModel::default();
     model.kind_models[kind as usize] = Some(StereoKindModel {
         scope: ElementScope::Any,
-        fluxionality: true,
     });
-    let expected = if kind == StereoKind::SquarePlanar {
-        StereoPerceptionError::UnsupportedKind { kind }
-    } else {
-        StereoPerceptionError::UnsupportedFluxionality { kind }
-    };
     assert_eq!(
         StereoPerceiver::new(&model).recognize(
             &mixed_sites,
@@ -768,7 +760,7 @@ fn test_stereo_perceiver_recognize_unsupported(mixed_sites: Molecule, #[case] ki
             RingConfig::default(),
             16
         ),
-        Err(expected)
+        Err(StereoPerceptionError::UnsupportedKind { kind })
     );
 }
 
@@ -1137,7 +1129,6 @@ fn test_stereo_perceiver_classify_readings(
     };
     model.kind_models[kind as usize] = Some(StereoKindModel {
         scope: ElementScope::Any,
-        fluxionality: true,
     });
     let symmetry = molecule
         .graph_symmetry(&GraphSymmetryConfig::default())

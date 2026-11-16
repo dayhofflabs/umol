@@ -1567,7 +1567,7 @@ an action on the participant frame of that entity. An `Independent` value does n
 frame, and an action leaves it unchanged. A `Positional` value has one component per participant,
 and an action permutes its components with the participants, as for electron counts. A `Relative`
 value is stated relative to the frame, and an action restates it, as for a stereo configuration and
-for the ligand-symmetry, fluxionality, and topicity constraints of a stereo entity.
+for the ligand-symmetry and topicity constraints of a stereo entity.
 
 A delta that modifies a field or a constraint has the kind of that field or constraint. A delta
 that adds or removes an entity carries its participant list and is `Positional`; for a stereo

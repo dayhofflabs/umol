@@ -23,11 +23,12 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g and S5a-S5g are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g, S5a-S5g and S6a are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
 generator filter, FieldColor names, the three derived stereo-view readings and the batch
 stereogenic-site classification and its Rust/Python operation consumers. S5g's acceptance and
-performance gate is complete with the accepted algorithm and tradeoffs recorded below. S6a is next.
+performance gate is complete with the accepted algorithm and tradeoffs recorded below.
+S6a removes fluxionality across Rust, DSL and Python; S6b is next.
 
 ## Starting state
 
@@ -530,8 +531,7 @@ pub fn ligand_symmetry(&self, permutation: OrientedLigandPermutation) -> bool;
 - The constraints view reached from a stereo view carries the attached value.
   `StereoAtomConstraintsView` and `StereoBondConstraintsView` also have `with_symmetry`.
 - `derived(key)` returns the derived value as a literal form for the stereogenicity key, a
-  topicity key and a ligand-symmetry key. For the fluxionality key and for an entity without a
-  kind it stays vacuous.
+  topicity key and a ligand-symmetry key. For an entity without a kind it stays vacuous.
 - `evidenced`, `satisfies` and `is_compatible` include the derivation through the keyed reading.
 
 **Keyed-reading contract, agreed 2026-11-15.** These symmetry-derived keys use the specified
@@ -540,6 +540,13 @@ behavior, context requirements, and preservation of the supplied molecule direct
 Normalization invariance is not a law of these readings. The keyed results retain their
 existing lattice semantics; adding the symmetry derivation does not impose normalization
 on its inputs.
+
+**Fluxionality removal, agreed 2026-11-15.** Fluxionality concerns dynamics across multiple
+structures, closer to tautomer equilibria than to a property derived from one molecular graph.
+It belongs above umol-graph-ir and umol-graph. The absence of a derived fluxionality reading
+reflects that boundary. Remove the stereo-atom and stereo-bond constraint, its keys and value
+form, all handling in these crates, and its DSL and Python surfaces. S6a performs this removal
+before the keyed-reading work. This work adds no model for dynamics or equilibria.
 
 The validator and the enumerator read the derived values from the stereo views and keep their own
 comparison with the assertion, which reports the derived value in a contradiction.
@@ -687,9 +694,9 @@ retain StereoPerceptionError; the input slice and result vector require no tree 
 Classification accepts existing records of every geometry supported by the graph-IR batch.
 It does not reject a record solely because its coset is symbolic. Stored-coset interpretation
 and conformance checks belong to operations that require them, including enumeration and
-conformance validation. Classification does not use the model's geometry-recognition or
-fluxionality restrictions. Recognition and enumeration retain their existing supported
-geometries and fluxionality policies; this adds no recognition or enumeration algorithm.
+conformance validation. Classification does not use the model's geometry-recognition
+restrictions. Recognition and enumeration retain their existing supported geometries; this
+adds no recognition or enumeration algorithm. S6a removes the fluxionality model setting.
 
 The kind calculation is model-independent, but that does not require changing the perceiver's
 ownership or model-bearing operation interfaces. Keep &self on classify, the existing model
@@ -3002,7 +3009,7 @@ molecule::symmetry::remapping_exists_at and molecule::symmetry::remapping_exists
 Those functions and GraphSymmetry::cell are crate-visible for the view consumers. The
 coset-change check now has its production caller. The auxiliary fields, generator filter,
 canonicalization checks, color calculation and generic search algorithm are unchanged.
-Constraint-view propagation remains S6a; the batch site-kind calculation remains S5d.
+Constraint-view propagation remains S6b; the batch site-kind calculation remains S5d.
 
 The first 80 view cases and all 15 benchmark workloads were written before production changes.
 Their initial library build failed only on the missing with_symmetry methods. They check the
@@ -3373,7 +3380,7 @@ to optimize the discarded artificial input family.
   remove para_stereo, and use max_classification_trials in AddStereoConfig, RemoveStereoConfig
   and EnumerateStereoConfig. Retain the model-taking removal methods and migrate the existing
   operation bindings and tests to the settled Rust contracts. The new graph-symmetry/view surface
-  is added in S6b.
+  is added in S6c.
   StereoValidateConfig has no Python binding to migrate; its field removal belongs to S5e.
 - **Gate:** rebuild the extension in `umol-py/.venv`, then run the affected Python tests and
   Rust binding tests. Restore the workspace build and tests before S5g.
@@ -3395,7 +3402,7 @@ The binding changes preserve the existing Python adaptations: keyword-only confi
 immutable configuration snapshots, frozenset observations of Rust sets, and the established
 copy-producing/in-place molecule operations and owned enumeration iterator. Domain calculations
 remain in Rust. The existing Python surface has no StereoPerceiver class; this subitem adds
-none. GraphSymmetry and attached-data Python interfaces remain S6b.
+none. GraphSymmetry and attached-data Python interfaces remain S6c.
 
 Tests cover the new enum's exact variants and conversion, ordering, hashing and immutability;
 typed selector inputs, positional/keyword matches calls, defaults, u32 budget boundaries,
@@ -3893,7 +3900,7 @@ graph-IR/graph property features and graph conformance feature explicitly enable
 and 4,219 graph conformance cases. Python was rebuilt in umol-py/.venv with CPython 3.13.18;
 all 3,431 Python tests passed with 2 skipped. The four source/test hashes still match the
 frozen implementation used for the final measurements. The full change was reviewed against
-the accepted scope; formatting and diff checks pass. S5g is complete; S6a remains unimplemented.
+the accepted scope; formatting and diff checks pass. S5g is complete.
 
 ```text
 source umol-py/.venv/bin/activate && cargo test --locked --workspace \
@@ -3904,19 +3911,88 @@ cargo +nightly fmt --all -- --check
 git diff --check
 ```
 
-### S6 — Keyed readings and the Python symmetry surface
+### S6 — Stereo constraints, keyed readings and the Python symmetry surface
 
-S6a changes the Rust keyed behavior and can leave its Python consumers red until S6b supplies
+S6a removes fluxionality across Rust, DSL and Python and ends green.
+S6b changes the Rust keyed behavior and can leave its Python consumers red until S6c supplies
 the attached-data surface and migrates their assertions. Both Rust and Python are green at the
 stage boundary.
 
-#### S6a — Stereo constraint views and keyed readings
+#### S6a — Remove fluxionality **Done**
+
+- **Module:** graph-IR stereo constraint keys, forms and containers, stereo integrity and frame
+  transport, constraint views, exports, and the constraint/stereo/edit DSLs;
+  umol-graph model, recognition and enumeration consumers; Python constraint/model bindings,
+  views, errors and exports; their tests, generators, saved cases, fuzz seeds and descriptions.
+- **Tests first:** state the remaining stereo constraint keys and keyed behavior before removing
+  the variants. Keep the general constraint-value and edit-key error coverage through both
+  tree and streaming DSL entries; add no removal-specific rejection tests. Identify which tests
+  solely express the removed constraint and retire those requirements. Where fluxionality is only a
+  fixture for frame transport, integrity, edits, reactions, lattice laws or hydrogen transforms,
+  retain the law and exercise it with a remaining frame-relative constraint. Update generators
+  and saved inputs together; replay the affected property cases and accepted fuzz seeds.
+  Prepare the corresponding Python constraint, model, constructor and export expectations
+  before removing their bindings.
+- **Changes:** remove FluxionalityForm, both Fluxionality constraint/key variants, their
+  constructors, queries, transformations, integrity checks and exports. Remove their DSL
+  parsing and rendering, including edit-key handling; the removed syntax is rejected through
+  the normal unknown-key errors. Remove enumeration's fluxionality branches. Remove
+  StereoKindModel.fluxionality, its defaults, the UnsupportedFluxionality error and its
+  recognition/enumeration rejection paths and Python mapping. StereoKindModel retains its
+  element scope. Remove the Python value, variants, accessors, constructor argument, exports
+  and descriptions, and update the owning Rust documentation, DSL specification and current
+  development guides. Leave the other stereo constraints and their semantics intact.
+- **Sequencing:** migrate Rust, DSL, graph consumers and Python within this subitem so both
+  languages are green before S6b. S6b takes its keyed-reading baseline after this removal and
+  before changing derivation. This removal needs no separate algorithm trial or new benchmark.
+- **Gate:** run the affected Rust/DSL tests and properties, replay the updated fuzz inputs,
+  rebuild Python with Python 3.13 and run the affected Python constraint, model, edit and export
+  tests. Check the supported Rust/Python/DSL symbols and current descriptions for remaining
+  fluxionality handling.
+- **Kind:** breaking across Rust, DSL and Python; green after consumer migration. `[dep: S5g]`
+
+**Implementation and gate, 2026-11-15.** Both stereo constraint families now contain only
+LigandSymmetry, Topicity and Stereogenicity. FluxionalityForm, its keys, container/view queries,
+frame transport and integrity handling, DSL forms and edit keys, Python bindings and exports
+are removed. StereoKindModel retains scope alone; its Python constructor is
+StereoKindModel(*, scope). The unused fluxionality model switch, rejection paths and
+UnsupportedFluxionality error are removed. The DSL specification and current development
+guides describe the remaining surface.
+
+The scope-only Python model expectations were prepared before changing the binding and failed
+against the old required constructor argument. No fluxionality-specific rejection tests remain;
+the existing generic unknown-key tests cover parser errors. Test dispositions are:
+
+| Coverage | Disposition |
+| --- | --- |
+| Fluxionality value lattice, keys, queries, DSL predicates and unsupported-model cases | Retired with the removed requirement. |
+| Constraint arity, frame transport, transactional edits, reaction transport and hydrogen transformations | Preserved with ligand-symmetry constraints; the existing laws and assertions remain. |
+| Mixed constraint and keyed-reading tables | Retain the three supported constraint families. |
+| Accepted DSL seeds | Migrated batch and inline fixtures; removed the dedicated fluxionality molecule seed. Existing seed-validity tests replay the corpora. |
+| Property generators and saved seeds | Removed the fluxionality branch and its dedicated lattice law. Retained saved random seeds and removed obsolete shrink annotations containing the deleted type. |
+
+The workspace gate passed 32,453 tests/doctests with 10 ignored, including 801 graph-IR/graph
+property cases and 4,219 graph conformance cases. The extension was rebuilt in umol-py/.venv
+with CPython 3.13.18; Python passed 3,409 tests with 2 skipped. The full diff was reviewed for
+scope, public symbols and preserved test laws. Current source, tests, seeds, specifications and
+guides contain no fluxionality handling or compact #f predicates. No benchmark was needed.
+
+```text
+source umol-py/.venv/bin/activate && cargo test --locked --workspace \
+  --features umol-graph-ir/proptest,umol-graph/proptest,umol-graph/conformance -- --quiet
+source umol-py/.venv/bin/activate && maturin develop --locked --manifest-path umol-py/Cargo.toml
+source umol-py/.venv/bin/activate && pytest -q umol-py/tests
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
+#### S6b — Stereo constraint views and keyed readings
 
 - **Module:** `ir::view::constraints`, `ir::view::stereo`, their tests and
   `umol-graph-ir/benches/constraint_readings.rs`.
 - **Tests and benches first:** state exact results for each derived key with attached data and
-  the missing-context failure before changing the keyed methods. Keep fluxionality and
-  kindless cases vacuous. Cover `derived_complete`, `evidenced`, `evidenced_complete`,
+  the missing-context failure before changing the keyed methods. Keep kindless cases
+  vacuous. Cover `derived_complete`, `evidenced`, `evidenced_complete`,
   `satisfies` and `is_compatible`, both constraints settings, and preservation of the supplied
   molecule. Assert the specified raw-input behaviors directly. Migrate the affected stereo
   keyed-reading properties to those contracts instead of requiring invariance under molecule
@@ -3932,9 +4008,9 @@ stage boundary.
   guarantee for the symmetry-derived keys.
 - **Gate:** run the affected tests and property cases, build the benchmark and measure the new
   keyed workloads. Recheck graph consumers if the shared view plumbing changes.
-- **Kind:** breaking; Rust green, Python keyed consumers migrate in S6b. `[dep: S5g]`
+- **Kind:** breaking; Rust green, Python keyed consumers migrate in S6c. `[dep: S6a]`
 
-#### S6b — Python symmetry data, view and readings
+#### S6c — Python symmetry data, view and readings
 
 - **Module:** `umol-py` molecule, stereo and constraint views, the corresponding tests and the
   existing ring bindings as the ownership/lifecycle reference.
@@ -3946,7 +4022,7 @@ stage boundary.
   Cover missing context, consumed views and molecule mutation using the existing error vocabulary.
   Map the old vacuous expectations in
   `tests/test_constraint_readings.py` to attached-data readings and missing-context failures,
-  preserving the kindless cases. Use S6a's specified behaviors for the Python keyed-reading
+  preserving the kindless cases. Use S6b's specified behaviors for the Python keyed-reading
   assertions. Tests are written before the bindings.
 - **Changes:** bind `GraphSymmetry`, `GraphSymmetryConfig` and `GraphSymmetryView` with the
   settled Rust surface, including stereogenic_site_kinds on the molecule and symmetry view.
@@ -3956,9 +4032,9 @@ stage boundary.
   without attached data raises `ValueError`; kindless keyed readings retain their vacuous
   behavior. Use `from_rust` and `to_rust` where Rust/Python conversions are needed.
 - **Gate:** rebuild with Python 3.13 and run Rust binding tests and the Python counterparts of
-  S5b-S5d and S6a. Compare the public symbols, names, semantics and lifecycle against Rust.
+  S5b-S5d and S6b. Compare the public symbols, names, semantics and lifecycle against Rust.
 - **Kind:** additive surface plus keyed behavior change, green at completion.
-  `[dep: S6a, S5f]`
+  `[dep: S6b, S5f]`
 
 ### S7 — Guides, final comparisons and closeout
 
@@ -3976,18 +4052,18 @@ stage boundary.
   obsolete coloring-features examples. Check the eight form and span implementations, Rust
   and Python exports, consumers, examples and DSL names against the agreed surface. Public
   rustdoc states the operational domain and comparison relation of each relevant law.
-- **Kind:** documentation (green). `[dep: S6b]`
+- **Kind:** documentation (green). `[dep: S6c]`
 
 #### S7b — Final performance record
 
 - **Module:** this record and the affected graph-IR and graph benchmarks.
-- **Check:** collect the comparisons from S4e, S4f, S5g and S6a, distinguishing canonicalization,
+- **Check:** collect the comparisons from S4e, S4f, S5g and S6b, distinguishing canonicalization,
   setup, fixed query workloads and operation workloads. Reuse valid measurements; rerun only
   groups affected by subsequent implementation changes. Record medians and conclusions here.
   Record source revisions, benchmark IDs, commands, relevant medians and conclusions inline;
   temporary logs are not persistent evidence references. New correct stereo behavior does not
   establish a runtime improvement by itself.
-- **Kind:** verification (green). `[dep: S7a, S4e, S4f, S5g, S6a]`
+- **Kind:** verification (green). `[dep: S7a, S4e, S4f, S5g, S6b]`
 
 #### S7c — Closeout
 
@@ -4000,7 +4076,7 @@ stage boundary.
 
 ### Stage gates
 
-S4f, S4g and S5b-S5g are complete. S5g's acceptance and performance gate passes with the
+S4f, S4g, S5b-S5g and S6a are complete. S5g's acceptance and performance gate passes with the
 accepted tradeoffs recorded above. S6 ends green with keyed and Python parity complete.
 No later stage is used to repair an earlier stage's compilation.
 
@@ -4028,9 +4104,9 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S5 are complete. The remaining path is:
+S0-S5 and S6a are complete. The remaining path is:
 
-S6a -> S6b -> S7a -> S7b -> S7c.
+S6b -> S6c -> S7a -> S7b -> S7c.
 
 S4f replaces the selector after S4e's measurements; S4g applies the later approved names and
 the repository-required color-test corrections. The single Constitution search and narrower
@@ -4039,5 +4115,5 @@ integrated by S5b. S5c supplies the implemented derived readings and property mi
 questions are settled as recorded in Review dispositions.
 The completed trial fixtures and measurements precede the port. New required tests are written
 before their production changes; the existing late-written cases retain their actual history.
-No remaining stage is deferred: the shared colors, migrated consumers, keyed readings and Python
-surface are all part of this work.
+No remaining stage is deferred: the shared colors, migrated consumers, fluxionality removal,
+keyed readings and Python surface are all part of this work.

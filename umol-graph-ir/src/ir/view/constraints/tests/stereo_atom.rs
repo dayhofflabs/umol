@@ -112,10 +112,6 @@ fn test_stereo_atom_constraints_view_asserted() {
         invariant: BooleanForm::Lit(true),
     })),
 )]
-#[case::fluxionality(
-    StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }),
-    Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) })),
-)]
 #[case::topicity(
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::lit_set([Topicity::Homotopic]) }),
     Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })),
@@ -189,18 +185,15 @@ fn test_stereo_atom_constraints_view_asserted_constraints(
 #[case::stored(
     vec![
         StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }),
         StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }),
         StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
     ],
     BooleanForm::Lit(true),
-    BooleanForm::Lit(false),
     TopicityRelationForm::Lit(Topicity::Homotopic),
     StereogenicityForm::Lit(Stereogenicity::Stereogenic),
 )]
 #[case::absent(
     vec![],
-    BooleanForm::Undetermined,
     BooleanForm::Undetermined,
     TopicityRelationForm::Undetermined,
     StereogenicityForm::Undetermined,
@@ -208,7 +201,6 @@ fn test_stereo_atom_constraints_view_asserted_constraints(
 fn test_stereo_atom_constraints_view_container_methods(
     #[case] constraints: Vec<StereoAtomConstraintForm>,
     #[case] ligand_symmetry: BooleanForm,
-    #[case] fluxionality: BooleanForm,
     #[case] topicity: TopicityRelationForm,
     #[case] stereogenicity: StereogenicityForm,
 ) {
@@ -243,7 +235,6 @@ fn test_stereo_atom_constraints_view_container_methods(
         }),
         &ligand_symmetry
     );
-    assert_eq!(view.fluxionality(permutation), &fluxionality);
     assert_eq!(
         view.topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
         &topicity

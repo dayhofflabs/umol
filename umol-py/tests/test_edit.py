@@ -13,7 +13,6 @@ from umol import (
     AtomFieldChange,
     AtomUpdate,
     BooleanForm,
-    FluxionalityForm,
     LigandPermutation,
     LigandSymmetryForm,
     OrientedLigandPermutation,
@@ -1564,7 +1563,6 @@ def test_edits_relation_field_batches_new(method, add_method, field, old, new, f
 @pytest.mark.parametrize("constraint", [
     StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prostereogenic)),
     StereoAtomConstraintForm.Topicity(TopicityForm(StereoLigandPair(0, 2), TopicityRelationForm.Lit(Topicity.Homotopic))),
-    StereoAtomConstraintForm.Fluxionality(FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False)),
     StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Improper), True)),
 ])
 @pytest.mark.parametrize("kind", [None, StereoKind.Tetrahedral])
@@ -1608,7 +1606,7 @@ def test_edits_stereo_atom_constraints_kindless():
     value = StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.LitSet(set()))
     omitted = Edit.ModifyStereoAtomConstraints(None, StereoAtomConstraintKey.Stereogenicity(), [(0, value, None)])
     configuration = Edit.ModifyStereoAtomConfigurations([(0, StereoConfigurationForm.Undetermined(), StereoConfigurationForm.Kinded(StereoKind.Tetrahedral, StereoCoset.Lit(0)))])
-    first = Edit.ModifyStereoAtomConstraints(StereoKind.Tetrahedral, StereoAtomConstraintKey.Fluxionality(LigandPermutation(Permutation([0, 1, 2, 3]))), [])
+    first = Edit.ModifyStereoAtomConstraints(StereoKind.Tetrahedral, StereoAtomConstraintKey.LigandSymmetry(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Proper)), [])
     second = Edit.ModifyStereoAtomConstraints(StereoKind.SquarePlanar, first.key, [])
     edits = Edits([omitted, configuration, first, omitted, second])
     assert list(Edits.parse(edits.render())) == [configuration, first, second]
@@ -1666,7 +1664,6 @@ def test_edits_stereo_bond_configurations(stereo_bond_ligands, count):
 @pytest.mark.parametrize("constraint", [
     StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prostereogenic)),
     StereoBondConstraintForm.Topicity(TopicityForm(StereoLigandPair(0, 2), TopicityRelationForm.Lit(Topicity.Homotopic))),
-    StereoBondConstraintForm.Fluxionality(FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False)),
     StereoBondConstraintForm.LigandSymmetry(LigandSymmetryForm(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Improper), True)),
 ])
 @pytest.mark.parametrize("kind", [None, StereoKind.CisTrans])
@@ -1712,7 +1709,7 @@ def test_edits_stereo_bond_constraints_kindless():
     value = StereoBondConstraintForm.Stereogenicity(StereogenicityForm.LitSet(set()))
     omitted = Edit.ModifyStereoBondConstraints(None, StereoBondConstraintKey.Stereogenicity(), [(0, value, None)])
     configuration = Edit.ModifyStereoBondConfigurations([(0, StereoConfigurationForm.Undetermined(), StereoConfigurationForm.Kinded(StereoKind.CisTrans, StereoCoset.Lit(0)))])
-    first = Edit.ModifyStereoBondConstraints(StereoKind.CisTrans, StereoBondConstraintKey.Fluxionality(LigandPermutation(Permutation([0, 1, 2, 3]))), [])
+    first = Edit.ModifyStereoBondConstraints(StereoKind.CisTrans, StereoBondConstraintKey.LigandSymmetry(OrientedLigandPermutation(LigandPermutation(Permutation([0, 1, 2, 3])), Orientation.Proper)), [])
     second = Edit.ModifyStereoBondConstraints(StereoKind.Axial, first.key, [])
     edits = Edits([omitted, configuration, first, omitted, second])
     assert list(Edits.parse(edits.render())) == [configuration, first, second]

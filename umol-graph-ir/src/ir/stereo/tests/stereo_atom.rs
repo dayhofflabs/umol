@@ -68,10 +68,6 @@ fn test_stereo_atom_form_normalize(
         invariant: BooleanForm::Lit(true),
     })),
 )]
-#[case::fluxionality(
-    StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }),
-    Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) })),
-)]
 #[case::topicity(
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::lit_set([Topicity::Homotopic]) }),
     Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })),
@@ -287,15 +283,21 @@ fn test_stereo_atom_form_mirror(#[case] input: StereoAtomForm, #[case] expected:
 fn test_stereo_atom_form_reframe_by_constraints() {
     let action = Permutation::from_image(&[1, 0, 2, 3]);
     let input = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
         }),
     );
     let expected = StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])),
-            active: BooleanForm::Lit(true),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
         }),
     );
 
@@ -510,16 +512,6 @@ fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomForm) {
     StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
     true
 )]
-#[case::fluxionality(
-    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
-        })
-    ),
-    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-    true
-)]
 #[case::topicity(
     StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
         StereoAtomConstraintForm::Topicity(TopicityForm {
@@ -535,18 +527,12 @@ fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomForm) {
         .with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
             Stereogenicity::Stereogenic
         )))
-        .with_constraint(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
-        })),
+        .with_constraint(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })),
     StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32)
         .with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
             Stereogenicity::Stereogenic
         )))
-        .with_constraint(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
-        }))
+        .with_constraint(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))
         .reframe_by(&Permutation::from_image(&[1, 0, 2, 3]))
         .expect("case action is an action of the kind"),
     true

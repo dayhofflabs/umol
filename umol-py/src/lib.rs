@@ -53,10 +53,10 @@ use crate::{
         },
         ring::{RingMembershipForm, RingScope},
         stereo::{
-            FluxionalityForm, LigandSymmetryForm, StereoAtomConstraintForm,
-            StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoAtomConstraintsView,
-            StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm,
-            StereoBondConstraintsView, StereogenicityForm, TopicityForm, TopicityRelationForm,
+            LigandSymmetryForm, StereoAtomConstraintForm, StereoAtomConstraintKey,
+            StereoAtomConstraintsForm, StereoAtomConstraintsView, StereoBondConstraintForm,
+            StereoBondConstraintKey, StereoBondConstraintsForm, StereoBondConstraintsView,
+            StereogenicityForm, TopicityForm, TopicityRelationForm,
         },
     },
     correspondence::{Correspondence, MoleculeCorrespondence},
@@ -483,7 +483,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<TopicityRelationForm>()?;
         module.add_class::<StereogenicityForm>()?;
         module.add_class::<LigandSymmetryForm>()?;
-        module.add_class::<FluxionalityForm>()?;
         module.add_class::<TopicityForm>()?;
         module.add_class::<StereoAtomConstraintKey>()?;
         module.add_class::<StereoAtomConstraintForm>()?;

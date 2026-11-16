@@ -448,7 +448,7 @@ description.
 Constraints restrict the states admitted by an entity or molecule, and canonicalization includes
 them. An inline constraint contributes as an inherent field does: to the color of its entity, and
 through it to the search partition and to the key of a leaf. A constraint that is relative to the
-participant frame of a stereo entity (ligand symmetry, fluxionality, and topicity) enters the key
+participant frame of a stereo entity (ligand symmetry and topicity) enters the key
 with the form transported into the frame of the leaf, as the configuration does. A molecule-level
 constraint selects the complete search. Remapping transports every reference a constraint
 contains. The canonical form of a constrained aggregate is not required to extend the canonical
@@ -1039,7 +1039,7 @@ The six overlay kinds select and transport frames as follows:
 | Aromatic system | participants sorted by atom id | `DynPermutation` | participant electron counts |
 | Multicenter bond | participants sorted by atom id | `DynPermutation` | participant electron counts |
 | Noncovalent bond | endpoints sorted by atom id | degree-two `DynPermutation` | ordered predicate pairs in `NoncovalentBondEndsSatisfy`; the entity form is invariant |
-| Stereo atom | complete ligands sorted | bounded `Permutation` in the full ligand symmetric group | configuration, ligand-symmetry and fluxionality permutations, topicity positions, and stereo constraints |
+| Stereo atom | complete ligands sorted | bounded `Permutation` in the full ligand symmetric group | configuration, ligand-symmetry permutations, topicity positions, and stereo constraints |
 | Stereo bond | sort each two-ligand endpoint block, then order the blocks | bounded `Permutation` in `S_2 wr S_2` | configuration and every frame-relative stereo-bond constraint |
 
 The stereo-bond group may permute within each endpoint block and exchange the two complete blocks;

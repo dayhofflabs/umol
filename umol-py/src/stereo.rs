@@ -1098,8 +1098,8 @@ impl StereoLigandPair {
 
 #[cfg(test)]
 use crate::constraint::stereo::{
-    FluxionalityForm, LigandSymmetryForm, StereoAtomConstraintKey, StereoAtomConstraintsUpdate,
-    StereogenicityForm, TopicityForm, TopicityRelationForm, TopicityRelationLike,
+    LigandSymmetryForm, StereoAtomConstraintKey, StereoAtomConstraintsUpdate, StereogenicityForm,
+    TopicityForm, TopicityRelationForm, TopicityRelationLike,
 };
 use crate::constraint::stereo::{
     StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoAtomConstraintsLike,
@@ -1644,8 +1644,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomForm as GraphIrAtomForm, BondForm as GraphIrBondForm,
-        FluxionalityForm as GraphIrFluxionalityForm, Lattice,
+        AtomForm as GraphIrAtomForm, BondForm as GraphIrBondForm, Lattice,
         LigandSymmetryForm as GraphIrLigandSymmetryForm, MoleculeEntries, Normalize,
         StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
         StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
@@ -2209,76 +2208,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fluxionality_form_new() {
-        Python::attach(|py| {
-            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
-            let value = FluxionalityForm::new(py, permutation, BooleanLike::Lit(false)).unwrap();
-            assert!(value.permutation() == permutation);
-            assert_eq!(
-                value.active.bind(py).borrow().to_rust(),
-                GraphIrBooleanForm::Lit(false)
-            );
-            assert_eq!(
-                value.__repr__(py).unwrap(),
-                "FluxionalityForm(LigandPermutation([1, 0, 2, 3]), BooleanForm.Lit(False))"
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_fluxionality_form_matches() {
-        Python::attach(|py| {
-            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
-            let other_permutation =
-                LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]).unwrap());
-            let wildcard = FluxionalityForm {
-                permutation,
-                active: into_py_variant(py, BooleanForm::Undetermined()).unwrap(),
-            };
-            let active_true = FluxionalityForm {
-                permutation,
-                active: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
-            };
-            let active_false = FluxionalityForm {
-                permutation,
-                active: into_py_variant(py, BooleanForm::Lit(false)).unwrap(),
-            };
-            let other = FluxionalityForm {
-                permutation: other_permutation,
-                active: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
-            };
-            assert!(wildcard.matches(py, &active_true).unwrap());
-            assert!(!active_true.matches(py, &active_false).unwrap());
-            assert!(!active_true.matches(py, &other).unwrap());
-        });
-    }
-
-    #[rstest]
-    fn test_fluxionality_form_roundtrip() {
-        Python::attach(|py| {
-            for ir_value in [
-                GraphIrFluxionalityForm {
-                    permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[
-                        1, 0, 2, 3,
-                    ])),
-                    active: GraphIrBooleanForm::Lit(false),
-                },
-                GraphIrFluxionalityForm {
-                    permutation: GraphIrLigandPermutation(PermPermutation::identity(4)),
-                    active: GraphIrBooleanForm::Undetermined,
-                },
-            ] {
-                assert_eq!(
-                    FluxionalityForm::from_rust(py, &ir_value)
-                        .unwrap()
-                        .to_rust(py),
-                    ir_value
-                );
-            }
-        });
-    }
-
-    #[rstest]
     fn test_topicity_form_new() {
         Python::attach(|py| {
             let pair = StereoLigandPair::new(0, 2);
@@ -2356,7 +2285,6 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case(GraphIrStereoAtomConstraintForm::LigandSymmetry(GraphIrLigandSymmetryForm { permutation: GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: GraphIrBooleanForm::Lit(true) }))]
-    #[case(GraphIrStereoAtomConstraintForm::Fluxionality(GraphIrFluxionalityForm { permutation: GraphIrLigandPermutation(PermPermutation::identity(4)), active: GraphIrBooleanForm::Lit(false) }))]
     #[case(GraphIrStereoAtomConstraintForm::Topicity(GraphIrTopicityForm { pair: GraphIrStereoLigandPair::new(GraphIrStereoLigandPosition(0), GraphIrStereoLigandPosition(1)), relation: GraphIrTopicityRelationForm::Lit(GraphIrTopicity::Homotopic) }))]
     #[case(GraphIrStereoAtomConstraintForm::Stereogenicity(GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)))]
     fn test_stereo_atom_constraint_form_roundtrip(#[case] ir_value: GraphIrStereoAtomConstraintForm) {

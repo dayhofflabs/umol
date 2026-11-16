@@ -25,7 +25,6 @@ from umol import (
     Edits,
     Element,
     ElementForm,
-    FluxionalityForm,
     InvalidatedViewError,
     LigandPermutation,
     LigandSymmetryForm,
@@ -439,10 +438,6 @@ def test_entity_constraints_view_derived_frame(source, namespace, expected, meth
              LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Proper), True),
          LigandSymmetryForm(OrientedLigandPermutation(
              LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Proper), BooleanForm.Undetermined())),
-        ("Fluxionality",
-         FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False),
-         FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False),
-         FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), BooleanForm.Undetermined())),
         ("Topicity",
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.LitSet({Topicity.Homotopic})),
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Lit(Topicity.Homotopic)),

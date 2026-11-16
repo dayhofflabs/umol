@@ -3,13 +3,13 @@ use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm, BondId, BooleanForm,
-    Constraint, ElementForm, Entity, FluxionalityForm, LigandPermutation, Molecule,
-    MoleculeConstraint, MoleculeEntries, NumForm, StereoAtomConstraintForm, StereoAtomId,
-    StereoBondConstraintForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
-    StereoTerm,
+    Constraint, ElementForm, Entity, LigandPermutation, LigandSymmetryForm, Molecule,
+    MoleculeConstraint, MoleculeEntries, NumForm, OrientedLigandPermutation,
+    StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
 };
 use umol_graph_ir::mol_dsl_concrete;
-use umol_perm::Permutation;
+use umol_perm::{Orientation, Permutation};
 
 use crate::ops::transform::{FoldHydrogensError, HydrogenFolder, Transformer};
 
@@ -382,9 +382,12 @@ fn test_hydrogen_folder_transform_stereo_attributes(
         :stereo-bonds [{:site 0 :ligands [[:h 0] 1 3 [:h 2]] :attrs "Ct0"}]
     }"#
     );
-    let fluxionality = FluxionalityForm {
-        permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-        active: BooleanForm::Lit(true),
+    let ligand_symmetry = LigandSymmetryForm {
+        permutation: OrientedLigandPermutation {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            orientation: Orientation::Proper,
+        },
+        invariant: BooleanForm::Lit(true),
     };
     for molecule in [&mut input, &mut expected] {
         let mut stereo = molecule.stereo_atom_mut(StereoAtomId(0));
@@ -392,13 +395,13 @@ fn test_hydrogen_folder_transform_stereo_attributes(
         stereo
             .attributes_mut()
             .constraints
-            .set(StereoAtomConstraintForm::Fluxionality(fluxionality));
+            .set(StereoAtomConstraintForm::LigandSymmetry(ligand_symmetry));
         let mut stereo = molecule.stereo_bond_mut(StereoBondId(0));
         stereo.attributes_mut().configuration = bond_configuration.clone();
         stereo
             .attributes_mut()
             .constraints
-            .set(StereoBondConstraintForm::Fluxionality(fluxionality));
+            .set(StereoBondConstraintForm::LigandSymmetry(ligand_symmetry));
     }
     assert_eq!(HydrogenFolder.transform(input), Ok(expected));
 }

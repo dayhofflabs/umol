@@ -165,7 +165,7 @@ fn test_stereo_enumerator_with_config(
 
 #[rstest]
 fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
-    let mut model = StereoModel {
+    let model = StereoModel {
         kind_models: [None, None, None, None, None, None],
         ..Default::default()
     };
@@ -181,11 +181,6 @@ fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
         },
         vec![StereoSite::Atom(AtomId(0))],
     );
-    model = StereoModel::default();
-    model.kind_models[StereoKind::Tetrahedral as usize]
-        .as_mut()
-        .unwrap()
-        .fluxionality = true;
     mixed_stereo.atom_mut(AtomId(1)).attributes_mut().charge = NumForm::Undetermined;
     let expected: Vec<_> = [0, 1]
         .into_iter()
@@ -207,25 +202,6 @@ fn test_stereo_enumerator_with_config_model(mut mixed_stereo: Molecule) {
     assert_eq!(
         transformer.transform(mixed_stereo.clone()),
         Ok(expected[0].clone())
-    );
-    let other = StereoEnumerator::with_config(
-        &model,
-        EnumerateStereoConfig {
-            selection: StereoSelection {
-                kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        vec![StereoSite::Atom(AtomId(0))],
-    );
-    assert_eq!(
-        other.transform(mixed_stereo),
-        Err(EnumerateStereoError::Perception(
-            StereoPerceptionError::UnsupportedFluxionality {
-                kind: StereoKind::Tetrahedral
-            }
-        ))
     );
 }
 

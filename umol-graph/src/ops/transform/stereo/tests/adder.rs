@@ -34,8 +34,8 @@ fn mixed_sites() -> Molecule {
 #[rstest]
 #[case::atom_disabled(StereoKind::Tetrahedral, None, StereoSite::Bond(BondId(4)))]
 #[case::bond_disabled(StereoKind::CisTrans, None, StereoSite::Atom(AtomId(0)))]
-#[case::atom_scope(StereoKind::Tetrahedral, Some(StereoKindModel { scope: ElementScope::AllowList(vec![]), fluxionality: false }), StereoSite::Bond(BondId(4)))]
-#[case::bond_scope(StereoKind::CisTrans, Some(StereoKindModel { scope: ElementScope::AllowList(vec![]), fluxionality: false }), StereoSite::Atom(AtomId(0)))]
+#[case::atom_scope(StereoKind::Tetrahedral, Some(StereoKindModel { scope: ElementScope::AllowList(vec![]) }), StereoSite::Bond(BondId(4)))]
+#[case::bond_scope(StereoKind::CisTrans, Some(StereoKindModel { scope: ElementScope::AllowList(vec![]) }), StereoSite::Atom(AtomId(0)))]
 fn test_stereo_adder_new(
     mixed_sites: Molecule,
     #[case] kind: StereoKind,
@@ -528,7 +528,7 @@ fn test_stereo_adder_transform_resolution(
 #[case::small_ring_entity(mol_dsl_concrete!(r#"{
     :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
     :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-    :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+    :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!"}]
 }"#))]
 #[case::small_ring_assertion(mol_dsl_concrete!(r#"{
     :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
@@ -839,32 +839,6 @@ fn test_stereo_adder_transform_order(mut mixed_sites: Molecule) {
     );
     assert_eq!(transformer.transform(mixed_sites.clone()), Err(error));
     assert_eq!(mixed_sites, original);
-}
-
-#[rstest]
-#[case::atom(StereoKind::Tetrahedral)]
-#[case::bond(StereoKind::CisTrans)]
-fn test_stereo_adder_transform_model(mixed_sites: Molecule, #[case] kind: StereoKind) {
-    let mut model = StereoModel::default();
-    model.kind_models[kind as usize]
-        .as_mut()
-        .unwrap()
-        .fluxionality = true;
-    let error = AddStereoError::Perception(StereoPerceptionError::UnsupportedFluxionality { kind });
-    let transformer = StereoAdder::new(&model);
-    let original = mixed_sites.clone();
-    let mut in_place = mixed_sites.clone();
-    assert_eq!(
-        transformer.transform_into(&mut in_place),
-        Err(error.clone())
-    );
-    assert_eq!(in_place, original);
-    assert_eq!(
-        transformer.transform_iter(&mixed_sites).collect::<Vec<_>>(),
-        Vec::<Molecule>::new()
-    );
-    assert_eq!(mixed_sites, original);
-    assert_eq!(transformer.transform(mixed_sites), Err(error));
 }
 
 #[rstest]

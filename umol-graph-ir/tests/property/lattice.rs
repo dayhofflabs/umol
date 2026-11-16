@@ -826,15 +826,7 @@ proptest! {
         assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
-    #[test]
-    fn test_fluxionality_form_lattice_laws(
-        a in fluxionality_strategy(4),
-        b in fluxionality_strategy(4),
-        c in fluxionality_strategy(4),
-    ) {
-        assert_lattice_laws(&a, &b, &c)?;
-        assert_normalized_lattice_laws(&a, &b, &c)?;
-    }
+
 
     #[test]
     fn test_topicity_form_lattice_laws(

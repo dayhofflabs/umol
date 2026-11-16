@@ -323,8 +323,7 @@ pub(crate) fn stereo_perception_error(py: Python<'_>, error: GraphStereoPercepti
             InvalidStructureError::new_err(message)
         }
         GraphStereoPerceptionError::UnsupportedKind { .. }
-        | GraphStereoPerceptionError::UnsupportedConfiguration { .. }
-        | GraphStereoPerceptionError::UnsupportedFluxionality { .. } => {
+        | GraphStereoPerceptionError::UnsupportedConfiguration { .. } => {
             ModelConversionError::new_err(message)
         }
         GraphStereoPerceptionError::UnderdeterminedAtomField { .. }
@@ -341,8 +340,7 @@ pub(crate) fn stereo_perception_error(py: Python<'_>, error: GraphStereoPercepti
             | GraphStereoPerceptionError::UnsupportedConfiguration { site } => {
                 value.setattr("site", StereoSite::from_rust(site))?;
             }
-            GraphStereoPerceptionError::UnsupportedKind { kind }
-            | GraphStereoPerceptionError::UnsupportedFluxionality { kind } => {
+            GraphStereoPerceptionError::UnsupportedKind { kind } => {
                 value.setattr("kind", StereoKind::from_rust(kind))?;
             }
             GraphStereoPerceptionError::UnderdeterminedAtomField { atom, attributes } => {
@@ -934,7 +932,6 @@ mod tests {
     #[case::missing(GraphStereoPerceptionError::MissingStereoEntity { site: GraphStereoSite::Atom(AtomId(1)) }, "InvalidStructureError")]
     #[case::kind(GraphStereoPerceptionError::UnsupportedKind { kind: GraphIrStereoKind::SquarePlanar }, "ModelConversionError")]
     #[case::configuration(GraphStereoPerceptionError::UnsupportedConfiguration { site: GraphStereoSite::Bond(BondId(1)) }, "ModelConversionError")]
-    #[case::fluxionality(GraphStereoPerceptionError::UnsupportedFluxionality { kind: GraphIrStereoKind::Tetrahedral }, "ModelConversionError")]
     #[case::field(GraphStereoPerceptionError::UnderdeterminedAtomField { atom: AtomId(2), attributes: Box::new(GraphIrAtomForm::default()) }, "UnderdeterminedError")]
     #[case::order(GraphStereoPerceptionError::UnderdeterminedBondOrder { bond: BondId(2) }, "UnderdeterminedError")]
     #[case::inconsistency(GraphStereoPerceptionError::Inconsistency(GraphStereoInconsistency::TetrahedralStereoMismatch { atom: AtomId(1), stereo_atom: StereoAtomId(0) }), "ContradictionError")]
@@ -964,8 +961,7 @@ mod tests {
                         site
                     );
                 }
-                GraphStereoPerceptionError::UnsupportedKind { kind }
-                | GraphStereoPerceptionError::UnsupportedFluxionality { kind } => {
+                GraphStereoPerceptionError::UnsupportedKind { kind } => {
                     assert_eq!(
                         value
                             .getattr("kind")

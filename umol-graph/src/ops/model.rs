@@ -265,12 +265,10 @@ pub struct StereoModel {
     pub stereo_bond_e_min_ring_size: u32,
 }
 
-/// Per-kind perception settings: the elements eligible to bear this kind and
-/// whether the kind's sites are treated as fluxional.
+/// Per-kind perception settings: the elements eligible to bear this kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StereoKindModel {
     pub scope: ElementScope,
-    pub fluxionality: bool,
 }
 
 impl StereoModel {
@@ -290,11 +288,9 @@ impl Default for StereoModel {
             array::from_fn(|_| None);
         kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
             scope: ElementScope::Any,
-            fluxionality: false,
         });
         kind_models[StereoKind::CisTrans as usize] = Some(StereoKindModel {
             scope: ElementScope::Any,
-            fluxionality: false,
         });
         Self {
             kind_models,
@@ -626,11 +622,9 @@ mod tests {
         let mut kind_models = array::from_fn(|_| None);
         kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
             scope: ElementScope::Any,
-            fluxionality: false,
         });
         kind_models[StereoKind::CisTrans as usize] = Some(StereoKindModel {
             scope: ElementScope::Any,
-            fluxionality: false,
         });
 
         assert_eq!(
@@ -645,8 +639,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::tetrahedral(StereoKind::Tetrahedral, Some(StereoKindModel { scope: ElementScope::Any, fluxionality: false }))]
-    #[case::cis_trans(StereoKind::CisTrans, Some(StereoKindModel { scope: ElementScope::Any, fluxionality: false }))]
+    #[case::tetrahedral(StereoKind::Tetrahedral, Some(StereoKindModel { scope: ElementScope::Any }))]
+    #[case::cis_trans(StereoKind::CisTrans, Some(StereoKindModel { scope: ElementScope::Any }))]
     #[case::axial(StereoKind::Axial, None)]
     #[case::square_planar(StereoKind::SquarePlanar, None)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, None)]

@@ -528,7 +528,7 @@ classes while retaining the Rust message:
 | --- | --- | --- |
 | InvalidSite | IndexError | site: StereoSite |
 | MissingStereoEntity | InvalidStructureError | site: StereoSite |
-| UnsupportedKind, UnsupportedFluxionality | ModelConversionError | kind: StereoKind |
+| UnsupportedKind | ModelConversionError | kind: StereoKind |
 | UnsupportedConfiguration | ModelConversionError | site: StereoSite |
 | UnderdeterminedAtomField | UnderdeterminedError | atom: int, attributes: AtomForm |
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |

@@ -1069,7 +1069,7 @@ mod tests {
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [[:virt 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+            :stereo-atoms [{:site 0 :ligands [[:virt 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!"}]
         }"#),
         StereoDerivation {
             stereo_atoms: vec![(AtomId(0), vec![
@@ -1077,7 +1077,7 @@ mod tests {
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            ], "Th1#g/#o(0,1)/#p(0,1)!#f(0,1)".parse::<StereoAtomDsl>().unwrap().0)],
+            ], "Th1#g/#o(0,1)/#p(0,1)!".parse::<StereoAtomDsl>().unwrap().0)],
             ..StereoDerivation::default()
         },
     )]
@@ -1720,7 +1720,7 @@ mod tests {
             let mut model = StereoModel::default();
             model.kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
                 scope: ElementScope::AllowList(vec![Element::C]),
-                fluxionality: false,
+
             });
             model
         },
@@ -1912,7 +1912,7 @@ mod tests {
             let mut model = StereoModel::default();
             model.kind_models[StereoKind::CisTrans as usize] = Some(StereoKindModel {
                 scope: ElementScope::AllowList(vec![Element::C]),
-                fluxionality: false,
+
             });
             model
         },

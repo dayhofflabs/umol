@@ -95,7 +95,6 @@ PUBLIC_EXPORTS = frozenset(
     ElementScope
     EnumerateStereoConfig
     Entity
-    FluxionalityForm
     HashedFeatureSet
     HashedFingerprintConfig
     InvalidStructureError

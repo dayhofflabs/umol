@@ -771,7 +771,6 @@ class ::= 'Th' | 'Ct' | 'Ax' | 'Sp' | 'Tb' | 'Oh'
 
 stereo-predicate ::=
     '#p' ( '~' | ['\''] cycles ) boolean  (* ligand symmetry: ' improper, ~ kind involution; boolean trailing *)
-  | '#f' ( '~' | cycles ) boolean         (* fluxionality (proper move); ~ kind involution; boolean trailing  *)
   | '#o' ligand-pair relation             (* topicity: ligand pair, then relation                             *)
   | '#g' relation                         (* stereogenicity classification                                    *)
 
@@ -784,7 +783,6 @@ ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-fra
 **Inline predicates (`#p` / `#f` / `#o` / `#g`).** After the leading **`class coset`**, a **`stereo-string`** carries **zero or more** stereo predicates — the inline form of the per-element stereo constraints (the molecule-scope structured peers are **§7.12**). Each predicate's permutation degree is the **`class`** degree (number of ligand positions). The four predicates are:
 
 - **`#p`** — **ligand symmetry**: asserts whether a ligand permutation **is** (`boolean` **`+`** or omitted), **is not** (**`!`**), or is **undetermined** (**`*`**) a symmetry of the element. Payload **`(['`''] cycles | '~') boolean`**: **`'`** marks the permutation **improper** (orientation-reversing; default proper); **`cycles`** is the permutation in **disjoint-cycle notation** (below); the **trailing** **`boolean`** is the assertion's truth value — a scalar polarity written **after** the permutation (**`+`** / omitted true, **`!`** false, **`*`** undetermined). The **`~`** sugar denotes the **class involution** (the orientation-reversing generator for chiral classes, the configuration-swapping ligand permutation for achiral classes) and already carries the class-appropriate orientation, so it is not combined with **`'`**.
-- **`#f`** — **fluxionality**: whether a proper ligand permutation is realized by dynamics. Payload **`(cycles | '~') boolean`**; the permutation carries no **`'`** (it is a bare proper move), the **trailing** **`boolean`** its truth value. **`~`** is the class involution.
 - **`#o`** — **topicity** of a ligand pair. Payload **`ligand-pair relation`** — the **`(i,j)`** pair (two 0-indexed positions in the **`:ligands`** frame) **first**, then the **`relation`**. Its negation is **not** a trailing polarity like **`#p`** / **`#f`**: the relation's set-complement is a **leading** **`!`** on the glyph (**`!/`** = not diastereotopic; **Relation completeness** below). The glyphs are **`=`** homotopic, **`'`** enantiotopic, **`/`** diastereotopic, **`%`** distinct.
 - **`#g`** — **stereogenicity** classification. Payload **`relation`**: **`=`** nonstereogenic, **`'`** prostereogenic, **`/`** stereogenic.
 
@@ -916,7 +914,6 @@ stereo-bond-constraint-form ::= [ stereo-kind stereo-predicate-map ]
 
 stereo-predicate-map ::=
     { :ligand-symmetry ligand-symmetry-form }
-  | { :fluxionality    fluxionality-form }
   | { :topicity        topicity-form }
   | { :stereogenicity  stereogenicity-form }
 
@@ -927,7 +924,6 @@ cycle                ::= [ nat+ ]                    (* p0→p1→…→p0, 0-in
 bool                 ::= true | false | :undetermined   (* the #p / #f trailing boolean, §7.11 *)
 ligand-symmetry-form ::= { :permutation permutation-form [:orientation (:proper | :improper)]
                                                          [:invariant bool] }
-fluxionality-form    ::= { :permutation permutation-form [:active bool] }
 ligand-pair          ::= [ nat nat ]                (* two ligand-frame positions *)
 topicity-form        ::= { :pair ligand-pair :relation topicity-relation }
 stereogenicity-form  ::= { :relation stereogenicity-relation }
@@ -971,7 +967,7 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 - **Aromatic system** (**§7.8**): the single `aromatic-system-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Multicenter bond** (**§7.9**): the single `multicenter-bond-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Noncovalent bond** (**§7.10**): the single `noncovalent-bond-constraint-form` predicate (`:intramolecular`) has an inline form (`#I` on the `:attrs` string).
-- **Stereo atom / stereo bond** (**§7.11**): all four `stereo-atom-constraint-form` / `stereo-bond-constraint-form` predicates (`:ligand-symmetry`, `:fluxionality`, `:topicity`, `:stereogenicity`) have inline forms (`#p`, `#f`, `#o`, `#g` on the `:attrs` string). On **inline** the kind is omitted (the `:attrs` `class` supplies it); on **lift** the element's kind is written as the **first element** of the molecule-scope form's 2-vector (**§7.12**). The atom/bond `:tetrahedral-stereo` / `:cis-trans-stereo` predicates (`#T` / `#C`) are separate atom/bond inline constraints; the `:stereo-atom-…` / `:stereo-bond-…` predicates are relational leaves with no inline form.
+- **Stereo atom / stereo bond** (**§7.11**): all three `stereo-atom-constraint-form` / `stereo-bond-constraint-form` predicates (`:ligand-symmetry`, `:topicity`, `:stereogenicity`) have inline forms (`#p`, `#o`, `#g` on the `:attrs` string). On **inline** the kind is omitted (the `:attrs` `class` supplies it); on **lift** the element's kind is written as the **first element** of the molecule-scope form's 2-vector (**§7.12**). The atom/bond `:tetrahedral-stereo` / `:cis-trans-stereo` predicates (`#T` / `#C`) are separate atom/bond inline constraints; the `:stereo-atom-…` / `:stereo-bond-…` predicates are relational leaves with no inline form.
 
 **Relational leaves** (**§7.12** `relational-constraint`) and **molecule-scope leaves** (`molecule-constraint`) have **no** inline form regardless of which entity they reference.
 

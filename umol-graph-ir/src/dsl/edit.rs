@@ -1369,10 +1369,6 @@ impl ToEdn for EditInput {
                         );
                         single_key_map("topicity", single_key_map("pair", pair))
                     }
-                    StereoAtomConstraintKey::Fluxionality(permutation) => single_key_map(
-                        "fluxionality",
-                        single_key_map("permutation", render_permutation(permutation.0)),
-                    ),
                     StereoAtomConstraintKey::LigandSymmetry(permutation) => {
                         let mut fields = EdnMap::with_capacity(2);
                         fields.insert(
@@ -1491,10 +1487,6 @@ impl ToEdn for EditInput {
                         );
                         single_key_map("topicity", single_key_map("pair", pair))
                     }
-                    StereoBondConstraintKey::Fluxionality(permutation) => single_key_map(
-                        "fluxionality",
-                        single_key_map("permutation", render_permutation(permutation.0)),
-                    ),
                     StereoBondConstraintKey::LigandSymmetry(permutation) => {
                         let mut fields = EdnMap::with_capacity(2);
                         fields.insert(
@@ -3620,36 +3612,29 @@ fn parse_stereo_atom_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                                 StereoLigandPosition(b),
                             ))
                         }
-                        "fluxionality" | "ligand-symmetry" => {
+                        "ligand-symmetry" => {
                             let value: Edn<'_> = helper.required("permutation")?;
                             let permutation =
                                 LigandPermutation(read_edn_permutation(&value, kind.degree())?);
-                            if name == "fluxionality" {
-                                StereoAtomConstraintKey::Fluxionality(permutation)
-                            } else {
-                                let orientation: Option<Edn<'_>> =
-                                    helper.optional("orientation")?;
-                                let orientation = match orientation {
-                                    None => Orientation::Proper,
-                                    Some(Edn::Keyword(keyword)) if keyword.as_str() == "proper" => {
-                                        Orientation::Proper
-                                    }
-                                    Some(Edn::Keyword(keyword))
-                                        if keyword.as_str() == "improper" =>
-                                    {
-                                        Orientation::Improper
-                                    }
-                                    _ => {
-                                        return Err(DeError::Custom(
-                                            "expected :proper or :improper orientation".into(),
-                                        ))
-                                    }
-                                };
-                                StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
-                                    permutation,
-                                    orientation,
-                                })
-                            }
+                            let orientation: Option<Edn<'_>> = helper.optional("orientation")?;
+                            let orientation = match orientation {
+                                None => Orientation::Proper,
+                                Some(Edn::Keyword(keyword)) if keyword.as_str() == "proper" => {
+                                    Orientation::Proper
+                                }
+                                Some(Edn::Keyword(keyword)) if keyword.as_str() == "improper" => {
+                                    Orientation::Improper
+                                }
+                                _ => {
+                                    return Err(DeError::Custom(
+                                        "expected :proper or :improper orientation".into(),
+                                    ))
+                                }
+                            };
+                            StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                                permutation,
+                                orientation,
+                            })
                         }
                         _ => {
                             return Err(DeError::Custom(format!(
@@ -3785,36 +3770,29 @@ fn parse_stereo_bond_edit(edn: &Edn<'_>) -> Result<EditInput, DeError> {
                                 StereoLigandPosition(b),
                             ))
                         }
-                        "fluxionality" | "ligand-symmetry" => {
+                        "ligand-symmetry" => {
                             let value: Edn<'_> = helper.required("permutation")?;
                             let permutation =
                                 LigandPermutation(read_edn_permutation(&value, kind.degree())?);
-                            if name == "fluxionality" {
-                                StereoBondConstraintKey::Fluxionality(permutation)
-                            } else {
-                                let orientation: Option<Edn<'_>> =
-                                    helper.optional("orientation")?;
-                                let orientation = match orientation {
-                                    None => Orientation::Proper,
-                                    Some(Edn::Keyword(keyword)) if keyword.as_str() == "proper" => {
-                                        Orientation::Proper
-                                    }
-                                    Some(Edn::Keyword(keyword))
-                                        if keyword.as_str() == "improper" =>
-                                    {
-                                        Orientation::Improper
-                                    }
-                                    _ => {
-                                        return Err(DeError::Custom(
-                                            "expected :proper or :improper orientation".into(),
-                                        ))
-                                    }
-                                };
-                                StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation {
-                                    permutation,
-                                    orientation,
-                                })
-                            }
+                            let orientation: Option<Edn<'_>> = helper.optional("orientation")?;
+                            let orientation = match orientation {
+                                None => Orientation::Proper,
+                                Some(Edn::Keyword(keyword)) if keyword.as_str() == "proper" => {
+                                    Orientation::Proper
+                                }
+                                Some(Edn::Keyword(keyword)) if keyword.as_str() == "improper" => {
+                                    Orientation::Improper
+                                }
+                                _ => {
+                                    return Err(DeError::Custom(
+                                        "expected :proper or :improper orientation".into(),
+                                    ))
+                                }
+                            };
+                            StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                                permutation,
+                                orientation,
+                            })
                         }
                         _ => {
                             return Err(DeError::Custom(format!(
@@ -6884,8 +6862,8 @@ mod tests {
         StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, Stereogenicity,
     };
     use crate::ir::{
-        FluxionalityForm, LigandSymmetryForm, StereoCoset, StereoLigand, StereoTerm, Topicity,
-        TopicityForm, TopicityRelationForm, TransactionError,
+        LigandSymmetryForm, StereoCoset, StereoLigand, StereoTerm, Topicity, TopicityForm,
+        TopicityRelationForm, TransactionError,
     };
     use crate::mol_dsl;
 
@@ -8178,9 +8156,9 @@ mod tests {
     #[case::bond_removal(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None })]
     #[case::bond_contradiction(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) })]
     #[case::bond_empty(Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(0)), kind: None, old: None, new: None })]
-    #[case::atom_batch_empty(Edit::ModifyStereoAtomConstraints { kind: None, key: StereoAtomConstraintKey::Fluxionality(LigandPermutation(umol_perm::Permutation::identity(6))), changes: vec![] })]
+    #[case::atom_batch_empty(Edit::ModifyStereoAtomConstraints { kind: None, key: StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(umol_perm::Permutation::identity(6)), orientation: Orientation::Proper }), changes: vec![] })]
     #[case::atom_batch_payload(Edit::ModifyStereoAtomConstraints { kind: None, key: StereoAtomConstraintKey::Stereogenicity, changes: vec![(StereoAtomHandle::Id(StereoAtomId(0)), None, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))), (StereoAtomHandle::New(0), Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), None)] })]
-    #[case::bond_batch_empty(Edit::ModifyStereoBondConstraints { kind: None, key: StereoBondConstraintKey::Fluxionality(LigandPermutation(umol_perm::Permutation::identity(6))), changes: vec![] })]
+    #[case::bond_batch_empty(Edit::ModifyStereoBondConstraints { kind: None, key: StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation { permutation: LigandPermutation(umol_perm::Permutation::identity(6)), orientation: Orientation::Proper }), changes: vec![] })]
     #[case::bond_batch_payload(Edit::ModifyStereoBondConstraints { kind: None, key: StereoBondConstraintKey::Stereogenicity, changes: vec![(StereoBondHandle::Id(StereoBondId(0)), None, Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))), (StereoBondHandle::New(0), Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), None)] })]
     fn test_edits_dsl_from_ir_kindless(#[case] edit: Edit) {
         let defaults = MoleculeDefaults::new();
@@ -8560,14 +8538,14 @@ mod tests {
     #[case(r#"{:stereo-atom {:modify-configuration [[0 {:expect "*" :update "Th0" :extra 1}]]}}"#, DeError::Custom("stereo-atom batch row requires exactly :expect and :update".into()))]
     #[case("{:stereo-atom {:modify-constraints {:key :stereogenicity :changes []}}}", DeError::MissingField { key: "kind".into(), path: vec![] })]
     #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key :stereogenicity :changes [] :degree 4}}}", DeError::UnknownField { key: "degree".into(), path: vec![] })]
-    #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key :fluxionality :changes []}}}", DeError::Custom("expected stereo-atom constraint key".into()))]
+    #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key :ligand-symmetry :changes []}}}", DeError::Custom("expected stereo-atom constraint key".into()))]
     #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:topicity {:pair [0 1] :degree 4}} :changes []}}}", DeError::UnknownField { key: "degree".into(), path: vec![] })]
     #[case("{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:ligand-symmetry {:permutation [] :orientation :unknown}} :changes []}}}", DeError::Custom("expected :proper or :improper orientation".into()))]
     #[case(r#"{:stereo-bond {:modify-configuration [[0 {:expect "*" :update :ccw}]]}}"#, DeError::TypeMismatch { expected: "complete stereo configuration string", got: "keyword", path: vec![] })]
     #[case(r#"{:stereo-bond {:modify-configuration [[0 {:expect "*" :update "Th0" :extra 1}]]}}"#, DeError::Custom("stereo-bond batch row requires exactly :expect and :update".into()))]
     #[case("{:stereo-bond {:modify-constraints {:key :stereogenicity :changes []}}}", DeError::MissingField { key: "kind".into(), path: vec![] })]
     #[case("{:stereo-bond {:modify-constraints {:kind :tetrahedral :key :stereogenicity :changes [] :degree 4}}}", DeError::UnknownField { key: "degree".into(), path: vec![] })]
-    #[case("{:stereo-bond {:modify-constraints {:kind :tetrahedral :key :fluxionality :changes []}}}", DeError::Custom("expected stereo-bond constraint key".into()))]
+    #[case("{:stereo-bond {:modify-constraints {:kind :tetrahedral :key :ligand-symmetry :changes []}}}", DeError::Custom("expected stereo-bond constraint key".into()))]
     #[case("{:stereo-bond {:modify-constraints {:kind :tetrahedral :key {:topicity {:pair [0 1] :degree 4}} :changes []}}}", DeError::UnknownField { key: "degree".into(), path: vec![] })]
     #[case("{:stereo-bond {:modify-constraints {:kind :tetrahedral :key {:ligand-symmetry {:permutation [] :orientation :unknown}} :changes []}}}", DeError::Custom("expected :proper or :improper orientation".into()))]
     fn test_edit_input_batches_error(#[case] input: &str, #[case] error: DeError) {
@@ -8582,7 +8560,6 @@ mod tests {
         ))
     )]
     #[case::topicity("{:topicity {:pair [0 2]}}", "{:topicity {:pair [0 2] :relation :homotopic}}", StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
-    #[case::fluxionality("{:fluxionality {:permutation [[0 1]]}}", "{:fluxionality {:permutation [[0 1]] :active false}}", StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }))]
     #[case::symmetry("{:ligand-symmetry {:permutation [[0 1]] :orientation :improper}}", "{:ligand-symmetry {:permutation [[0 1]] :orientation :improper}}", StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper }, invariant: BooleanForm::Lit(true) }))]
     fn test_edits_dsl_stereo_atom_constraints(
         #[case] key: &str,
@@ -8633,12 +8610,6 @@ mod tests {
                     StereoLigandPosition(0),
                     StereoLigandPosition(1),
                 )),
-            ),
-            (
-                "{:fluxionality {:permutation []}}",
-                StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(
-                    kind.degree(),
-                ))),
             ),
             (
                 "{:ligand-symmetry {:permutation []}}",
@@ -8753,7 +8724,7 @@ mod tests {
 
     #[rstest]
     fn test_edits_dsl_stereo_atom_constraints_error() {
-        let text = "[{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:fluxionality {:permutation [[0 1]]}} :changes [[0 {:expect nil :update {:fluxionality {:permutation [[0 2]]}}}]]}}}]";
+        let text = "[{:stereo-atom {:modify-constraints {:kind :tetrahedral :key {:ligand-symmetry {:permutation [[0 1]]}} :changes [[0 {:expect nil :update {:ligand-symmetry {:permutation [[0 2]]}}}]]}}}]";
         let defaults = MoleculeDefaults::new();
         let edits = EditsDsl::from_edn_str(text).unwrap().into_ir(&defaults);
         assert_eq!(
@@ -8774,12 +8745,18 @@ mod tests {
     fn test_edits_dsl_stereo_atom_constraints_sequence() {
         let first = Edit::ModifyStereoAtomConstraints {
             kind: Some(StereoKind::Tetrahedral),
-            key: StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+            key: StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(4)),
+                orientation: Orientation::Proper,
+            }),
             changes: vec![],
         };
         let second = Edit::ModifyStereoAtomConstraints {
             kind: Some(StereoKind::SquarePlanar),
-            key: StereoAtomConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+            key: StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(4)),
+                orientation: Orientation::Proper,
+            }),
             changes: vec![],
         };
         let configuration = Edit::ModifyStereoAtomConfigurations {
@@ -8873,7 +8850,6 @@ mod tests {
         ))
     )]
     #[case::topicity("{:topicity {:pair [0 2]}}", "{:topicity {:pair [0 2] :relation :homotopic}}", StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
-    #[case::fluxionality("{:fluxionality {:permutation [[0 1]]}}", "{:fluxionality {:permutation [[0 1]] :active false}}", StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) }))]
     #[case::symmetry("{:ligand-symmetry {:permutation [[0 1]] :orientation :improper}}", "{:ligand-symmetry {:permutation [[0 1]] :orientation :improper}}", StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), orientation: Orientation::Improper }, invariant: BooleanForm::Lit(true) }))]
     fn test_edits_dsl_stereo_bond_constraints(
         #[case] key: &str,
@@ -8924,12 +8900,6 @@ mod tests {
                     StereoLigandPosition(0),
                     StereoLigandPosition(1),
                 )),
-            ),
-            (
-                "{:fluxionality {:permutation []}}",
-                StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(
-                    kind.degree(),
-                ))),
             ),
             (
                 "{:ligand-symmetry {:permutation []}}",
@@ -8998,7 +8968,7 @@ mod tests {
 
     #[rstest]
     fn test_edits_dsl_stereo_bond_constraints_error() {
-        let text = "[{:stereo-bond {:modify-constraints {:kind :tetrahedral :key {:fluxionality {:permutation [[0 1]]}} :changes [[0 {:expect nil :update {:fluxionality {:permutation [[0 2]]}}}]]}}}]";
+        let text = "[{:stereo-bond {:modify-constraints {:kind :tetrahedral :key {:ligand-symmetry {:permutation [[0 1]]}} :changes [[0 {:expect nil :update {:ligand-symmetry {:permutation [[0 2]]}}}]]}}}]";
         let defaults = MoleculeDefaults::new();
         let edits = EditsDsl::from_edn_str(text).unwrap().into_ir(&defaults);
         assert_eq!(
@@ -9030,12 +9000,18 @@ mod tests {
     fn test_edits_dsl_stereo_bond_constraints_sequence() {
         let first = Edit::ModifyStereoBondConstraints {
             kind: Some(StereoKind::Tetrahedral),
-            key: StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+            key: StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(4)),
+                orientation: Orientation::Proper,
+            }),
             changes: vec![],
         };
         let second = Edit::ModifyStereoBondConstraints {
             kind: Some(StereoKind::SquarePlanar),
-            key: StereoBondConstraintKey::Fluxionality(LigandPermutation(Permutation::identity(4))),
+            key: StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(4)),
+                orientation: Orientation::Proper,
+            }),
             changes: vec![],
         };
         let configuration = Edit::ModifyStereoBondConfigurations {

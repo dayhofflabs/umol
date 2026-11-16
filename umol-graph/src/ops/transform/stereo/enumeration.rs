@@ -392,7 +392,6 @@ impl StereoAssignmentEvaluation<'_> {
                                 stereo.ligand_symmetry(asserted.permutation),
                             )),
                     ),
-                    StereoAtomConstraintForm::Fluxionality(_) => None,
                 }
             }
             Constraint::StereoBond(id, kind, constraint) => {
@@ -431,7 +430,6 @@ impl StereoAssignmentEvaluation<'_> {
                                 stereo.ligand_symmetry(asserted.permutation),
                             )),
                     ),
-                    StereoBondConstraintForm::Fluxionality(_) => None,
                 }
             }
             Constraint::And(children) | Constraint::Or(children) => {

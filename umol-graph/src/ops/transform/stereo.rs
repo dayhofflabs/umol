@@ -661,17 +661,7 @@ impl StereoEnumerator {
                 duplicates,
             });
         }
-        for configuration in configurations.values() {
-            if let Some(kind) = configuration.kind() {
-                if self
-                    .model
-                    .kind_model(kind)
-                    .is_some_and(|model| model.fluxionality)
-                {
-                    return Err(StereoPerceptionError::UnsupportedFluxionality { kind }.into());
-                }
-            }
-        }
+
         let assignments = AbsoluteStereoAssignments::new(ordered.into_iter().map(|site| {
             (
                 site,

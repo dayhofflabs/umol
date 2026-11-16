@@ -68,10 +68,6 @@ fn test_stereo_bond_form_normalize(
         invariant: BooleanForm::Lit(true),
     })),
 )]
-#[case::fluxionality(
-    StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }),
-    Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) })),
-)]
 #[case::topicity(
     StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::lit_set([Topicity::Homotopic]) }),
     Some(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })),
@@ -399,16 +395,6 @@ fn test_stereo_bond_form_difference_to_identity(#[case] bond: StereoBondForm) {
                 orientation: Orientation::Proper,
             },
             invariant: BooleanForm::Lit(true),
-        })
-    ),
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32),
-    true
-)]
-#[case::fluxionality(
-    StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
-        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-            active: BooleanForm::Lit(true),
         })
     ),
     StereoBondForm::new(StereoKind::CisTrans, 0_u32),

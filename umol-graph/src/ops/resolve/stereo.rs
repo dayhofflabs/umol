@@ -1059,7 +1059,7 @@ mod tests {
     #[case::small_ring_bond(mol_dsl_concrete!(r#"{
         :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
         :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-        :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+        :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!"}]
     }"#))]
     fn test_stereo_resolver_plan_resolve_identity(
         stereo_model: StereoModel,
@@ -1098,12 +1098,12 @@ mod tests {
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
             :bonds [[0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :stereo-bonds [{:site 0 :ligands [[:virt 1] 2 5 [:virt 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+            :stereo-bonds [{:site 0 :ligands [[:virt 1] 2 5 [:virt 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!"}]
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h2" "C#h2" "C#h2" "C#h2"]
             :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+            :stereo-bonds [{:site 0 :ligands [[:h 1] 2 5 [:h 0]] :attrs "Ct1#g/#o(0,1)/#p(0,1)!"}]
         }"#),
     )]
     #[case::lone_pair(
@@ -1547,12 +1547,12 @@ mod tests {
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [[:virt 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+            :stereo-atoms [{:site 0 :ligands [[:virt 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!"}]
         }"#),
         mol_dsl_concrete!(r#"{
             :atoms ["C#h" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [[:h 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!#f(0,1)"}]
+            :stereo-atoms [{:site 0 :ligands [[:h 0] 3 2 1] :attrs "Th1#g/#o(0,1)/#p(0,1)!"}]
         }"#),
     )]
     #[case::virtual_tetrahedral_lone_pair(
@@ -2143,7 +2143,7 @@ mod tests {
         mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
     #[case::entity_constraints(
         mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/#o(0,1)/#p(0,1)!#f(0,1)"}]}"#),
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0#g/#o(0,1)/#p(0,1)!"}]}"#),
         mol_dsl_concrete!(r#"{:atoms ["C#T+" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#))]
     fn test_stereo_resolver_project(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
         assert_eq!(

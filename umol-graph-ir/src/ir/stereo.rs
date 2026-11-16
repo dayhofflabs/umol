@@ -21,9 +21,9 @@ use umol_graph_core::{
 use umol_perm::{ClassKey, Permutation, MAX_DEGREE};
 
 use super::constraint::{
-    FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
-    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+    LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation, StereoAtomConstraintForm,
+    StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintsForm,
+    StereoLigandPair, StereogenicityForm, TopicityForm,
 };
 use super::error::{Contradiction, NoJoinError};
 use super::frame::{StereoAtomsFrameAction, StereoBondsFrameAction};
@@ -1383,10 +1383,6 @@ macro_rules! stereo_element {
                             orientation: symmetry.permutation.orientation,
                         },
                         invariant: symmetry.invariant,
-                    }),
-                    Self::Fluxionality(fluxionality) => Self::Fluxionality(FluxionalityForm {
-                        permutation: reframe_permutation(fluxionality.permutation)?,
-                        active: fluxionality.active,
                     }),
                     Self::Topicity(topicity) => {
                         let first = topicity.pair.first().index();
@@ -5459,11 +5455,6 @@ mod tests {
             invariant: BooleanForm::Lit(true),
         }),
     )]
-    #[case::fluxionality(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), active: BooleanForm::Lit(false) }),
-        Permutation::from_image(&[1, 0, 2, 3]),
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])), active: BooleanForm::Lit(false) }),
-    )]
     #[case::topicity(
         StereoAtomConstraintForm::Topicity(TopicityForm {
             pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
@@ -5490,10 +5481,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::permutation_degree(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-        permutation: LigandPermutation(Permutation::identity(4)),
-        active: BooleanForm::Lit(true),
-    }))]
+    #[case::permutation_degree(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))]
     #[case::topicity_position(StereoAtomConstraintForm::Topicity(TopicityForm {
         pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(3)),
         relation: TopicityRelationForm::Lit(Topicity::Homotopic),

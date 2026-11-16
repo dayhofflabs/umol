@@ -22,10 +22,9 @@ use super::error::{PResult, ParseError};
 use super::num::variable_name;
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
-    FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
-    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
-    TopicityRelationForm,
+    LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation, StereoAtomConstraintForm,
+    StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintsForm,
+    StereoLigandPair, StereogenicityForm, TopicityForm, TopicityRelationForm,
 };
 use crate::ir::id::StereoLigandPosition;
 use crate::ir::stereo::{
@@ -585,15 +584,6 @@ fn perm_cycles(i: &mut &str, degree: usize) -> PResult<Permutation> {
         .map_err(|error| ErrMode::Cut(ParseError::InvalidValue(error.to_string())))
 }
 
-/// `~` (the kind involution, eager) or an explicit permutation in cycle notation.
-fn stereo_permutation(i: &mut &str, kind: StereoKind) -> PResult<Permutation> {
-    if opt('~').parse_next(i)?.is_some() {
-        Ok(kind.involution())
-    } else {
-        perm_cycles(i, kind.degree())
-    }
-}
-
 fn ligand_pair(i: &mut &str) -> PResult<StereoLigandPair> {
     let (a, b) =
         delimited('(', separated_pair(cycle_point, ',', cycle_point), ')').parse_next(i)?;
@@ -713,14 +703,7 @@ macro_rules! stereo_predicate_parser {
                         invariant,
                     }))
                 }
-                'f' => {
-                    let permutation = LigandPermutation(stereo_permutation(i, kind)?);
-                    let active = boolean(i)?.0;
-                    Ok($constraint::Fluxionality(FluxionalityForm {
-                        permutation,
-                        active,
-                    }))
-                }
+
                 'o' => {
                     let pair = ligand_pair(i)?;
                     let relation = topicity_relation_inline(i)?;
@@ -739,20 +722,6 @@ macro_rules! stereo_predicate_parser {
 
 stereo_predicate_parser! { stereo_atom_predicate, StereoAtomConstraintForm }
 stereo_predicate_parser! { stereo_bond_predicate, StereoBondConstraintForm }
-
-/// `~` (when the permutation is the kind involution) or an explicit permutation in
-/// cycle notation (`Permutation`'s `Display`).
-fn fmt_stereo_permutation(
-    f: &mut fmt::Formatter<'_>,
-    permutation: Permutation,
-    kind: StereoKind,
-) -> fmt::Result {
-    if permutation == kind.involution() {
-        f.write_str("~")
-    } else {
-        write!(f, "{permutation}")
-    }
-}
 
 fn write_topicity_char(t: Topicity) -> char {
     match t {
@@ -845,11 +814,6 @@ macro_rules! stereo_constraint_fmt {
                         write!(f, "{}", ls.permutation.permutation.0)?;
                     }
                     fmt_boolean(f, &ls.invariant)
-                }
-                $constraint::Fluxionality(fx) => {
-                    f.write_str("#f")?;
-                    fmt_stereo_permutation(f, fx.permutation.0, kind)?;
-                    fmt_boolean(f, &fx.active)
                 }
                 $constraint::Topicity(t) => {
                     f.write_str("#o")?;
@@ -1701,44 +1665,6 @@ fn read_edn_ligand_symmetry(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
     })
 }
 
-fn render_edn_fluxionality(f: &FluxionalityForm) -> Edn<'static> {
-    let mut m = EdnMap::with_capacity(2);
-    m.insert(
-        Edn::keyword("permutation"),
-        render_permutation(f.permutation.0),
-    );
-    if f.active != BooleanForm::Lit(true) {
-        m.insert(Edn::keyword("active"), BooleanDsl(f.active).to_edn());
-    }
-    Edn::Map(m)
-}
-
-fn read_edn_fluxionality(edn: &Edn, kind: StereoKind) -> Result<FluxionalityForm, DeError> {
-    let Edn::Map(m) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "fluxionality map",
-            got: edn.kind(),
-            path: Vec::new(),
-        });
-    };
-    read_edn_map_keys(m, &["permutation", "active"], "fluxionality")?;
-    let permutation_edn = m
-        .get_keyword("permutation")
-        .ok_or_else(|| DeError::MissingField {
-            key: "permutation".into(),
-            path: vec!["fluxionality".into()],
-        })?;
-    let permutation = LigandPermutation(read_edn_permutation(permutation_edn, kind.degree())?);
-    let active = match m.get_keyword("active") {
-        None => BooleanForm::Lit(true),
-        Some(edn) => BooleanDsl::from_edn(edn)?.0,
-    };
-    Ok(FluxionalityForm {
-        permutation,
-        active,
-    })
-}
-
 /// Molecule-scope DSL wrapper for a stereo constraint. It carries the element
 /// kind (the stereo subtype) so the permutation degree is known when parsing.
 /// The EDN is a positional 2-vector `[<kind> {<constraint-key> <value>}]`,
@@ -1756,7 +1682,6 @@ macro_rules! stereo_constraint_dsl {
                     $constraint::LigandSymmetry(ls) => {
                         ("ligand-symmetry", render_edn_ligand_symmetry(ls))
                     }
-                    $constraint::Fluxionality(f) => ("fluxionality", render_edn_fluxionality(f)),
                     $constraint::Topicity(t) => ("topicity", TopicityDsl(t.clone()).to_edn()),
                     $constraint::Stereogenicity(g) => {
                         ("stereogenicity", StereogenicityDsl(g.clone()).to_edn())
@@ -1794,9 +1719,6 @@ macro_rules! stereo_constraint_dsl {
                 let constraint = match key.as_str() {
                     "ligand-symmetry" => {
                         $constraint::LigandSymmetry(read_edn_ligand_symmetry(value, kind)?)
-                    }
-                    "fluxionality" => {
-                        $constraint::Fluxionality(read_edn_fluxionality(value, kind)?)
                     }
                     "topicity" => $constraint::Topicity(TopicityDsl::from_edn(value)?.0),
                     "stereogenicity" => {

@@ -26,14 +26,14 @@ use super::super::constraint::{
     read_atom_assertion, AromaticSystemConstraintForm, AromaticSystemConstraintKey,
     AromaticSystemConstraintsForm, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey,
     AtomConstraintsForm, BondConstraintForm, BondConstraintKey, BondConstraintsForm,
-    DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm, FluxionalityForm,
-    LigandPermutation, LigandSymmetryForm, MulticenterBondConstraintForm,
-    MulticenterBondConstraintKey, MulticenterBondConstraintsForm, MulticenterValenceForm,
-    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm,
-    OrientedLigandPermutation, RingMembershipForm, StereoAtomConstraintForm,
-    StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintKey, StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm,
-    TopicityForm, TopicityRelationForm,
+    DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm,
+    LigandSymmetryForm, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+    MulticenterBondConstraintsForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
+    NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, OrientedLigandPermutation,
+    RingMembershipForm, StereoAtomConstraintForm, StereoAtomConstraintKey,
+    StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintKey,
+    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+    TopicityRelationForm,
 };
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -670,14 +670,6 @@ impl<'a> StereoAtomConstraintsView<'a> {
         stereo_atom_asserted_constraints(self.molecule, self.id).ligand_symmetry(permutation)
     }
 
-    pub fn fluxionalities(&self) -> impl Iterator<Item = &'a FluxionalityForm> {
-        stereo_atom_asserted_constraints(self.molecule, self.id).fluxionalities()
-    }
-
-    pub fn fluxionality(&self, permutation: LigandPermutation) -> &'a BooleanForm {
-        stereo_atom_asserted_constraints(self.molecule, self.id).fluxionality(permutation)
-    }
-
     pub fn topicities(&self) -> impl Iterator<Item = &'a TopicityForm> {
         stereo_atom_asserted_constraints(self.molecule, self.id).topicities()
     }
@@ -698,14 +690,6 @@ impl<'a> StereoBondConstraintsView<'a> {
 
     pub fn ligand_symmetry(&self, permutation: OrientedLigandPermutation) -> &'a BooleanForm {
         stereo_bond_asserted_constraints(self.molecule, self.id).ligand_symmetry(permutation)
-    }
-
-    pub fn fluxionalities(&self) -> impl Iterator<Item = &'a FluxionalityForm> {
-        stereo_bond_asserted_constraints(self.molecule, self.id).fluxionalities()
-    }
-
-    pub fn fluxionality(&self, permutation: LigandPermutation) -> &'a BooleanForm {
-        stereo_bond_asserted_constraints(self.molecule, self.id).fluxionality(permutation)
     }
 
     pub fn topicities(&self) -> impl Iterator<Item = &'a TopicityForm> {
@@ -740,8 +724,8 @@ mod tests {
         AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemConstraintsForm,
         AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
         BondConstraintForm, BondConstraintKey, BondConstraintsForm, DativeBondConstraintForm,
-        DativeBondConstraintKey, DativeBondConstraintsForm, FluxionalityForm, LigandPermutation,
-        LigandSymmetryForm, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+        DativeBondConstraintKey, DativeBondConstraintsForm, LigandPermutation, LigandSymmetryForm,
+        MulticenterBondConstraintForm, MulticenterBondConstraintKey,
         MulticenterBondConstraintsForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
         NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, OrientedLigandPermutation,
         RingMembershipForm, RingScope, StereoAtomConstraintForm, StereoAtomConstraintKey,

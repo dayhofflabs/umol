@@ -25,8 +25,6 @@ pub enum StereoPerceptionError {
     UnsupportedKind { kind: StereoKind },
     #[error("stereo configuration at {site:?} is not supported")]
     UnsupportedConfiguration { site: StereoSite },
-    #[error("fluxional stereo processing is not implemented for {kind:?}")]
-    UnsupportedFluxionality { kind: StereoKind },
     #[error("stereo recognition requires literal fields at atom {atom:?}: {attributes}")]
     UnderdeterminedAtomField {
         atom: AtomId,
@@ -58,8 +56,8 @@ impl StereoPerceiver {
     ///
     /// # Errors
     ///
-    /// Reports unavailable selected sites, unsupported requested kinds or
-    /// fluxionality, required non-literal input, and unsupported configurations
+    /// Reports unavailable selected sites, unsupported requested kinds,
+    /// required non-literal input, and unsupported configurations
     /// when classification is requested. Evidence failures use the returned
     /// StereoDerivation's existing StereoInconsistency diagnostics.
     ///
@@ -104,7 +102,7 @@ impl StereoPerceiver {
                 None => self.model.kind_model(kind).is_some(),
             };
             if requested {
-                check_kind(self, kind)?;
+                check_kind(kind)?;
             }
         }
 
@@ -353,7 +351,7 @@ impl StereoPerceiver {
     ///
     /// Input order is unrestricted and duplicate requests are coalesced. The result is sorted
     /// by atom site IDs followed by bond site IDs. Classification uses one complete kind batch,
-    /// independently of the model's recognition scopes, fluxionality and stored coset values.
+    /// independently of the model's recognition scopes and stored coset values.
     /// An empty request returns an empty vector. The supplied data must describe this molecule.
     ///
     /// # Errors
@@ -578,17 +576,11 @@ fn check_site(molecule: &Molecule, site: StereoSite) -> Result<(), StereoPercept
     }
 }
 
-fn check_kind(perception: &StereoPerceiver, kind: StereoKind) -> Result<(), StereoPerceptionError> {
+fn check_kind(kind: StereoKind) -> Result<(), StereoPerceptionError> {
     if !matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans) {
         return Err(StereoPerceptionError::UnsupportedKind { kind });
     }
-    if perception
-        .model
-        .kind_model(kind)
-        .is_some_and(|model| model.fluxionality)
-    {
-        return Err(StereoPerceptionError::UnsupportedFluxionality { kind });
-    }
+
     Ok(())
 }
 

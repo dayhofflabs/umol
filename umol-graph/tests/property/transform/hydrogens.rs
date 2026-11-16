@@ -19,13 +19,14 @@ use umol_graph::ops::transform::{
 use umol_graph_core::{GraphRemapping, NodeId, Remapping};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AsLit, AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm,
-    BondId, BooleanForm, CisTransStereoForm, Constraint, DativeBondForm, Entity, FluxionalityForm,
-    IsotopeMassForm, LigandPermutation, Molecule, MoleculeEntries, MoleculeRemapping,
-    MulticenterBondForm, NoncovalentBondForm, NumForm, StereoAtomConstraintForm, StereoAtomForm,
-    StereoAtomId, StereoBondConstraintForm, StereoBondForm, StereoBondId, StereoKind, StereoLigand,
-    StereoLigandKind, TetrahedralStereoForm,
+    BondId, BooleanForm, CisTransStereoForm, Constraint, DativeBondForm, Entity, IsotopeMassForm,
+    LigandPermutation, LigandSymmetryForm, Molecule, MoleculeEntries, MoleculeRemapping,
+    MulticenterBondForm, NoncovalentBondForm, NumForm, OrientedLigandPermutation,
+    StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondForm, StereoBondId, StereoKind, StereoLigand, StereoLigandKind,
+    TetrahedralStereoForm,
 };
-use umol_perm::Permutation;
+use umol_perm::{Orientation, Permutation};
 
 #[derive(Clone, Debug)]
 struct HydrogenCase {
@@ -440,9 +441,14 @@ fn stereo_cases() -> impl Strategy<Value = (Molecule, Molecule, Molecule)> {
                             }
                             bonds.extend(hydrogen_bonds);
                         }
-                        let fluxionality = FluxionalityForm {
-                            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-                            active: BooleanForm::Lit(true),
+                        let ligand_symmetry = LigandSymmetryForm {
+                            permutation: OrientedLigandPermutation {
+                                permutation: LigandPermutation(Permutation::from_image(&[
+                                    1, 0, 2, 3,
+                                ])),
+                                orientation: Orientation::Proper,
+                            },
+                            invariant: BooleanForm::Lit(true),
                         };
                         Molecule::from_entries(MoleculeEntries {
                             atoms: atoms.into_iter().map(|(_, atom)| atom).collect(),
@@ -451,16 +457,16 @@ fn stereo_cases() -> impl Strategy<Value = (Molecule, Molecule, Molecule)> {
                                 AtomId::from(images[0]),
                                 atom_ligands,
                                 StereoAtomForm::new(StereoKind::Tetrahedral, atom_coset)
-                                    .with_constraint(StereoAtomConstraintForm::Fluxionality(
-                                        fluxionality,
+                                    .with_constraint(StereoAtomConstraintForm::LigandSymmetry(
+                                        ligand_symmetry,
                                     )),
                             )],
                             stereo_bonds: vec![(
                                 BondId(0),
                                 bond_ligands,
                                 StereoBondForm::new(StereoKind::CisTrans, bond_coset)
-                                    .with_constraint(StereoBondConstraintForm::Fluxionality(
-                                        fluxionality,
+                                    .with_constraint(StereoBondConstraintForm::LigandSymmetry(
+                                        ligand_symmetry,
                                     )),
                             )],
                             ..Default::default()
