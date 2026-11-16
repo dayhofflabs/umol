@@ -8,7 +8,6 @@ from umol import (
     CisTransConfiguration,
     CisTransStereoForm,
     Element,
-    FluxionalityForm,
     LigandPermutation,
     LigandSymmetryForm,
     Molecule,
@@ -33,6 +32,7 @@ from umol import (
     StereoLigandPair,
     StereoTerm,
     Stereogenicity,
+    StereogenicSiteKind,
     StereogenicityForm,
     TetrahedralConfiguration,
     TetrahedralStereoForm,
@@ -43,14 +43,47 @@ from umol import (
 
 
 @pytest.mark.parametrize(
+    "value,name",
+    [
+        (StereogenicSiteKind.Constitutional, "Constitutional"),
+        (StereogenicSiteKind.Configurational, "Configurational"),
+        (StereogenicSiteKind.Prostereogenic, "Prostereogenic"),
+        (StereogenicSiteKind.Nonstereogenic, "Nonstereogenic"),
+    ],
+)
+def test_stereogenic_site_kind(value, name):
+    assert repr(value) == f"StereogenicSiteKind.{name}"
+    assert eval(repr(value), globals()) == value
+    assert {value: name}[eval(repr(value), globals())] == name
+    assert value != Stereogenicity.Prostereogenic
+    with pytest.raises(AttributeError):
+        value.name = name
+
+
+def test_stereogenic_site_kind_order():
+    expected = [
+        StereogenicSiteKind.Constitutional,
+        StereogenicSiteKind.Configurational,
+        StereogenicSiteKind.Prostereogenic,
+        StereogenicSiteKind.Nonstereogenic,
+    ]
+    assert sorted(reversed(expected)) == expected
+    assert expected[0] < expected[1]
+    assert expected[0] <= expected[0]
+    assert expected[3] > expected[2]
+    assert expected[3] >= expected[3]
+
+
+@pytest.mark.parametrize(
     ("variant", "members"),
     [
         (StereoTerm.LitSet, {0, 1}),
         (StereoCoset.LitSet, {0, 1}),
         (TopicityRelationForm.LitSet, {Topicity.Homotopic, Topicity.Enantiotopic}),
         (TopicityRelationForm.NotSet, {Topicity.Homotopic}),
-        (StereogenicityForm.LitSet, {Stereogenicity.Prochiral, Stereogenicity.Symmetric}),
-        (StereogenicityForm.NotSet, {Stereogenicity.Symmetric}),
+        (TopicityRelationForm.NotSet, {Topicity.Distinct}),
+        (StereogenicityForm.LitSet, {Stereogenicity.Prostereogenic, Stereogenicity.Nonstereogenic}),
+        (StereogenicityForm.NotSet, {Stereogenicity.Nonstereogenic}),
     ],
 )
 def test_stereo_set_members(variant, members):
@@ -297,7 +330,7 @@ def test_stereo_bond_update_parse_error():
     ],
 )
 def test_stereo_update_constraints_asserted(update_type, container_type, constraint_type, kind):
-    entry = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prochiral))
+    entry = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Prostereogenic))
     update = update_type(
         configuration=StereoConfigurationUpdate.Kinded(kind, None),
         constraints=container_type([entry]),
@@ -566,7 +599,7 @@ def test_stereo_form_new_named_configuration(form_type, configuration, expected)
     ],
 )
 @pytest.mark.parametrize("payload", [
-    StereogenicityForm.Lit(Stereogenicity.Symmetric), StereogenicityForm.LitSet(set()),
+    StereogenicityForm.Lit(Stereogenicity.Nonstereogenic), StereogenicityForm.LitSet(set()),
 ])
 @pytest.mark.parametrize("coset", [StereoCoset.Lit(0), StereoCoset.Undetermined()])
 def test_stereo_form_meet_constraints(form_type, container_type, constraint_type, kind, payload, coset):
@@ -637,16 +670,6 @@ def test_stereoatomconstraints_ligand_symmetry():
         LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Improper
     )
     assert constraints.ligand_symmetry(improper) == BooleanForm.Undetermined()
-
-
-def test_stereoatomconstraints_fluxionality():
-    permutation = LigandPermutation(Permutation([1, 0, 2, 3]))
-    constraints = StereoAtomConstraintsForm(
-        [StereoAtomConstraintForm.Fluxionality(FluxionalityForm(permutation, False))]
-    )
-    assert constraints.fluxionality(permutation) == BooleanForm.Lit(False)
-    other = LigandPermutation(Permutation([0, 1, 3, 2]))
-    assert constraints.fluxionality(other) == BooleanForm.Undetermined()
 
 
 def test_stereoatomconstraints_topicity():
@@ -755,20 +778,15 @@ def test_stereoatomview_constraints_write_through():
     )
 
 
-def test_stereoatomview_constraints_ligand_symmetry_and_fluxionality():
+def test_stereoatomview_constraints_ligand_symmetry():
     mol = stereo_atom_molecule()
     permutation = LigandPermutation(Permutation([1, 0, 2, 3]))
     oriented = OrientedLigandPermutation(permutation, Orientation.Proper)
     assert mol.stereo_atoms[0].constraints.ligand_symmetry(oriented) == BooleanForm.Undetermined()
-    assert mol.stereo_atoms[0].constraints.fluxionality(permutation) == BooleanForm.Undetermined()
     mol.stereo_atoms[0].constraints.set(
         StereoAtomConstraintForm.LigandSymmetry(LigandSymmetryForm(oriented, True))
     )
-    mol.stereo_atoms[0].constraints.set(
-        StereoAtomConstraintForm.Fluxionality(FluxionalityForm(permutation, False))
-    )
     assert mol.stereo_atoms[0].constraints.ligand_symmetry(oriented) == BooleanForm.Lit(True)
-    assert mol.stereo_atoms[0].constraints.fluxionality(permutation) == BooleanForm.Lit(False)
 
 
 def test_stereoatomviews_at():

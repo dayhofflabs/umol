@@ -2,10 +2,7 @@
 //! (`umol-io/tests/smiles_parsing/data/opensmiles`, ~9k molecules).
 //!
 //! Sweeps both `Molecule::substructure_matches` strategies against all six
-//! subgraph-isomorphism algorithms, over three patterns of increasing cost. The
-//! corpus, patterns, and matching semantics (element-only atoms, any-bonds,
-//! all-embeddings enumeration) mirror `scripts/rdkit_substructure_baseline.py`
-//! so the timings are directly comparable to the actual-RDKit baseline.
+//! subgraph-isomorphism algorithms, over three patterns of increasing cost.
 //!
 //! Small aromatic-ring and multicenter cases separately measure matching when
 //! nonuniform electron counts distinguish otherwise interchangeable atoms, with

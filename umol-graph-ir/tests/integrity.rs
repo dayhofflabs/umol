@@ -8,16 +8,16 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomForm, AtomId, BondForm, BooleanForm, Canonicalize,
-    CanonicalizeContext, ConstitutionColoring, Contradiction, ElectronCountsForm, EntitySpan,
-    FluxionalityForm, FrameTransport, GraphSymmetryConfig, IncidenceLevel, LigandPermutation,
-    Molecule, MoleculeCanonicalizeError, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
-    NumForm, ReactionSpan, ReactionSpanCanonicalizeError, ReactionSpanEntries,
+    CanonicalizeContext, Contradiction, ElectronCountsForm, EntitySpan, FrameTransport,
+    GraphSymmetryConfig, IncidenceLevel, LigandPermutation, LigandSymmetryForm, Molecule,
+    MoleculeCanonicalizeError, MoleculeEntries, MulticenterBondForm, MulticenterBondId, NumForm,
+    OrientedLigandPermutation, ReactionSpan, ReactionSpanCanonicalizeError, ReactionSpanEntries,
     StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoConfigurationForm, StereoCoset,
     StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm,
     SubstructureMatchAlgorithm, SubstructureMatchConfig, Topicity, TopicityForm,
     TopicityRelationForm,
 };
-use umol_perm::{DynPermutation, Permutation};
+use umol_perm::{DynPermutation, Orientation, Permutation};
 
 #[rstest]
 #[case::short(vec![1, 2], vec![NumForm::Lit(1), NumForm::Lit(2), NumForm::Undetermined], 3)]
@@ -157,10 +157,7 @@ fn test_molecule_electron_attributes(
 })]
 #[case::constraint_action(4, StereoAtomForm {
     configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
-    constraints: StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-        permutation: LigandPermutation(Permutation::identity(3)),
-        active: BooleanForm::Lit(true),
-    }).into(),
+    constraints: StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }).into(),
 })]
 fn test_molecule_stereo_attributes(#[case] degree: u32, #[case] form: StereoAtomForm) {
     let atoms = vec![AtomForm::from_element(Element::C); degree as usize + 1];
@@ -211,12 +208,7 @@ fn test_molecule_stereo_attributes(#[case] degree: u32, #[case] form: StereoAtom
         );
     }
     // Symmetry is infallible; malformed attributes have no classification guarantee.
-    molecule.graph_symmetry(&GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: true,
-        max_iterations: 2,
-        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-    });
+    molecule.graph_symmetry(&GraphSymmetryConfig::default());
 }
 
 #[rstest]

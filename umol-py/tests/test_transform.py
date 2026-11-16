@@ -13,6 +13,7 @@ from umol import (
     SimpleCycleEnumerationAlgorithm,
     StereoConfigurationForm,
     StereoCoset,
+    StereogenicSiteKind,
     Stereogenicity,
     StereoKind,
     StereoSelection,
@@ -164,7 +165,7 @@ def test_stereo_site_new_error(constructor, value, error):
     [
         ({}, None, None, None),
         (
-            {"sites": [], "kinds": [], "stereogenicities": []},
+            {"sites": [], "kinds": [], "stereogenic_site_kinds": []},
             frozenset(),
             frozenset(),
             frozenset(),
@@ -173,11 +174,11 @@ def test_stereo_site_new_error(constructor, value, error):
             {
                 "sites": [StereoSite.Atom(1), StereoSite.Bond(1)],
                 "kinds": {StereoKind.Tetrahedral, StereoKind.CisTrans},
-                "stereogenicities": {Stereogenicity.Prochiral},
+                "stereogenic_site_kinds": {StereogenicSiteKind.Prostereogenic},
             },
             frozenset({StereoSite.Atom(1), StereoSite.Bond(1)}),
             frozenset({StereoKind.Tetrahedral, StereoKind.CisTrans}),
-            frozenset({Stereogenicity.Prochiral}),
+            frozenset({StereogenicSiteKind.Prostereogenic}),
         ),
     ],
 )
@@ -185,8 +186,8 @@ def test_stereo_selection_new(kwargs, sites, kinds, classes):
     selection = StereoSelection(**kwargs)
     assert selection.sites == sites
     assert selection.kinds == kinds
-    assert selection.stereogenicities == classes
-    for field in ("sites", "kinds", "stereogenicities"):
+    assert selection.stereogenic_site_kinds == classes
+    for field in ("sites", "kinds", "stereogenic_site_kinds"):
         value = getattr(selection, field)
         assert value is None or type(value) is frozenset
         with pytest.raises(AttributeError):
@@ -197,15 +198,15 @@ def test_stereo_selection_new(kwargs, sites, kinds, classes):
 
 
 @pytest.mark.parametrize(
-    "kwargs,site,kind,stereogenicity,expected",
+    "kwargs,site,kind,site_kind,expected",
     [
         ({}, StereoSite.Atom(0), None, None, True),
         ({"sites": []}, StereoSite.Atom(0), None, None, False),
         ({"kinds": []}, StereoSite.Atom(0), None, None, False),
-        ({"stereogenicities": []}, StereoSite.Atom(0), None, None, False),
+        ({"stereogenic_site_kinds": []}, StereoSite.Atom(0), None, None, False),
         ({"kinds": [StereoKind.Tetrahedral]}, StereoSite.Atom(0), None, None, False),
         (
-            {"stereogenicities": [Stereogenicity.Symmetric]},
+            {"stereogenic_site_kinds": [StereogenicSiteKind.Nonstereogenic]},
             StereoSite.Atom(0),
             None,
             None,
@@ -215,56 +216,57 @@ def test_stereo_selection_new(kwargs, sites, kinds, classes):
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenic_site_kinds": [StereogenicSiteKind.Prostereogenic],
             },
             StereoSite.Atom(0),
             StereoKind.CisTrans,
-            Stereogenicity.Prochiral,
+            StereogenicSiteKind.Prostereogenic,
             True,
         ),
         (
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenic_site_kinds": [StereogenicSiteKind.Prostereogenic],
             },
             StereoSite.Bond(0),
             StereoKind.CisTrans,
-            Stereogenicity.Prochiral,
+            StereogenicSiteKind.Prostereogenic,
             False,
         ),
         (
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenic_site_kinds": [StereogenicSiteKind.Prostereogenic],
             },
             StereoSite.Atom(0),
             StereoKind.Tetrahedral,
-            Stereogenicity.Prochiral,
+            StereogenicSiteKind.Prostereogenic,
             False,
         ),
         (
             {
                 "sites": [StereoSite.Atom(0)],
                 "kinds": [StereoKind.CisTrans],
-                "stereogenicities": [Stereogenicity.Prochiral],
+                "stereogenic_site_kinds": [StereogenicSiteKind.Prostereogenic],
             },
             StereoSite.Atom(0),
             StereoKind.CisTrans,
-            Stereogenicity.Stereogenic,
+            StereogenicSiteKind.Constitutional,
             False,
         ),
     ],
 )
-def test_stereo_selection_matches(kwargs, site, kind, stereogenicity, expected):
+def test_stereo_selection_matches(kwargs, site, kind, site_kind, expected):
     selection = StereoSelection(**kwargs)
-    assert selection.matches(site, kind, stereogenicity) is expected
+    assert selection.matches(site, kind, site_kind) is expected
+    assert selection.matches(site, kind=kind, site_kind=site_kind) is expected
     assert (
         StereoSelection(
             sites=selection.sites,
             kinds=selection.kinds,
-            stereogenicities=selection.stereogenicities,
+            stereogenic_site_kinds=selection.stereogenic_site_kinds,
         )
         == selection
     )
@@ -275,7 +277,8 @@ def test_stereo_selection_matches(kwargs, site, kind, stereogenicity, expected):
     [
         ({"sites": [0]}, TypeError),
         ({"kinds": ["Th"]}, TypeError),
-        ({"stereogenicities": [StereoKind.Tetrahedral]}, TypeError),
+        ({"stereogenic_site_kinds": [StereoKind.Tetrahedral]}, TypeError),
+        ({"stereogenic_site_kinds": [Stereogenicity.Stereogenic]}, TypeError),
     ],
 )
 def test_stereo_selection_new_error(kwargs, error):
@@ -335,7 +338,10 @@ def test_remove_stereo_mode_matches(configuration, undetermined):
         (
             AddStereoConfig,
             frozenset({StereoKind.Tetrahedral, StereoKind.CisTrans}),
-            frozenset({Stereogenicity.Stereogenic}),
+            frozenset({
+                StereogenicSiteKind.Constitutional,
+                StereogenicSiteKind.Configurational,
+            }),
         ),
         (RemoveStereoConfig, None, None),
         (
@@ -349,9 +355,9 @@ def test_stereo_config_new(constructor, kinds, classes):
     config = constructor()
     assert config.selection.sites is None
     assert config.selection.kinds == kinds
-    assert config.selection.stereogenicities == classes
+    assert config.selection.stereogenic_site_kinds == classes
     assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
-    assert config.para_stereo_max_iterations == 16
+    assert config.max_classification_trials == 4096
     assert (
         eval(
             repr(config),
@@ -390,13 +396,13 @@ def test_stereo_config_new(constructor, kinds, classes):
             TypeError,
         ),
         (AddStereoConfig, {"ring_config": {}}, TypeError),
-        (AddStereoConfig, {"para_stereo_max_iterations": "8"}, TypeError),
-        (AddStereoConfig, {"para_stereo_max_iterations": -1}, OverflowError),
-        (AddStereoConfig, {"para_stereo_max_iterations": 1 << 32}, OverflowError),
-        (RemoveStereoConfig, {"para_stereo_max_iterations": -1}, OverflowError),
-        (RemoveStereoConfig, {"para_stereo_max_iterations": 1 << 32}, OverflowError),
-        (EnumerateStereoConfig, {"para_stereo_max_iterations": -1}, OverflowError),
-        (EnumerateStereoConfig, {"para_stereo_max_iterations": 1 << 32}, OverflowError),
+        (AddStereoConfig, {"max_classification_trials": "8"}, TypeError),
+        (AddStereoConfig, {"max_classification_trials": -1}, OverflowError),
+        (AddStereoConfig, {"max_classification_trials": 1 << 32}, OverflowError),
+        (RemoveStereoConfig, {"max_classification_trials": -1}, OverflowError),
+        (RemoveStereoConfig, {"max_classification_trials": 1 << 32}, OverflowError),
+        (EnumerateStereoConfig, {"max_classification_trials": -1}, OverflowError),
+        (EnumerateStereoConfig, {"max_classification_trials": 1 << 32}, OverflowError),
         (EnumerateStereoConfig, {"kinds": []}, TypeError),
     ],
 )
@@ -409,22 +415,22 @@ def test_stereo_config_new_error(constructor, kwargs, error):
     "constructor,kwargs",
     [
         (AddStereoConfig, {"ring_config": RingConfig()}),
-        (AddStereoConfig, {"para_stereo_max_iterations": 0}),
-        (AddStereoConfig, {"para_stereo_max_iterations": 25}),
-        (AddStereoConfig, {"para_stereo_max_iterations": (1 << 32) - 1}),
+        (AddStereoConfig, {"max_classification_trials": 0}),
+        (AddStereoConfig, {"max_classification_trials": 25}),
+        (AddStereoConfig, {"max_classification_trials": (1 << 32) - 1}),
         (RemoveStereoConfig, {"mode": RemoveStereoMode.Undetermined}),
-        (RemoveStereoConfig, {"para_stereo_max_iterations": 7}),
-        (RemoveStereoConfig, {"para_stereo_max_iterations": (1 << 32) - 1}),
+        (RemoveStereoConfig, {"max_classification_trials": 7}),
+        (RemoveStereoConfig, {"max_classification_trials": (1 << 32) - 1}),
         (EnumerateStereoConfig, {}),
-        (EnumerateStereoConfig, {"para_stereo_max_iterations": 5}),
-        (EnumerateStereoConfig, {"para_stereo_max_iterations": (1 << 32) - 1}),
+        (EnumerateStereoConfig, {"max_classification_trials": 5}),
+        (EnumerateStereoConfig, {"max_classification_trials": (1 << 32) - 1}),
     ],
 )
 def test_stereo_config_properties(constructor, kwargs):
     selection = StereoSelection(
         sites={StereoSite.Bond(1)},
         kinds={StereoKind.CisTrans},
-        stereogenicities={Stereogenicity.Symmetric},
+        stereogenic_site_kinds={StereogenicSiteKind.Nonstereogenic},
     )
     config = constructor(selection=selection, **kwargs)
     assert config.selection == selection

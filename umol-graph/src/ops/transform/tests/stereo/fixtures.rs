@@ -16,7 +16,7 @@ pub(super) fn tetrahedral() -> Molecule {
 }
 
 #[fixture]
-pub(super) fn prochiral() -> Molecule {
+pub(super) fn prostereogenic() -> Molecule {
     mol_dsl_concrete!(
         r#"{
         :atoms ["C" "F" "Cl" "H" "H"]
@@ -27,7 +27,7 @@ pub(super) fn prochiral() -> Molecule {
 }
 
 #[fixture]
-pub(super) fn symmetric() -> Molecule {
+pub(super) fn nonstereogenic() -> Molecule {
     mol_dsl_concrete!(
         r#"{
         :atoms ["C" "H" "H" "H" "H"]

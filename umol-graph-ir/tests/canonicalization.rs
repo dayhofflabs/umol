@@ -9,11 +9,7 @@
 
 use pretty_assertions::assert_eq;
 use rstest::rstest;
-use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{
-    AtomId, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig, Molecule,
-    MoleculeColoringFeatures,
-};
+use umol_graph_ir::ir::{AtomId, GraphSymmetryConfig, Molecule};
 use umol_graph_ir::mol_dsl;
 
 // CDK's AtomDiscretePartitionRefinerTest applies aromaticity to
@@ -40,14 +36,12 @@ const CDK_BIPHENYL_RENUMBERED: &str = r#"{
 const CDK_BIPHENYL_MAPPING: &[u32] = &[6, 11, 10, 9, 8, 7, 0, 5, 4, 3, 2, 1];
 const CDK_BIPHENYL_ORBITS: &[&[u32]] = &[&[0, 6], &[1, 5, 7, 11], &[2, 4, 8, 10], &[3, 9]];
 
-// RDKit's `ensure unused features are not used/isotopes` case ranks the two
-// terminal carbons of [13CH3]OC separately when isotopes are included and
-// together when they are excluded.
+// RDKit's isotope case separates the terminal carbons of [13CH3]OC.
+// Graph-symmetry colors include their stored isotope fields.
 const RDKIT_ISOTOPE: &str = r#"{:atoms ["C#i13" "O" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#;
 const RDKIT_ISOTOPE_RENUMBERED: &str = r#"{:atoms ["C" "C#i13" "O"] :bonds [[1 2 "1"] [2 0 "1"]]}"#;
 const RDKIT_ISOTOPE_MAPPING: &[u32] = &[1, 2, 0];
 const RDKIT_ISOTOPE_ORBITS: &[&[u32]] = &[&[0], &[1], &[2]];
-const RDKIT_NO_ISOTOPE_ORBITS: &[&[u32]] = &[&[0, 2], &[1]];
 
 // InChI's test_permutation_util.cpp uses this five-atom graph to verify that
 // permuting atom indices leaves the generated identifier invariant. Here it
@@ -138,27 +132,13 @@ const STEREO_BOND_MAPPING: &[u32] = &[4, 1, 5, 0, 2, 3];
 const STEREO_BOND_PROPER_ORBITS: &[&[u32]] = &[&[0, 1], &[2, 4], &[3, 5]];
 const STEREO_BOND_STAR_ORBITS: &[&[u32]] = &[&[0, 1], &[2, 4], &[3, 5]];
 
-fn graph_symmetry(molecule: &Molecule, include_isotopes: bool) -> GraphSymmetry {
-    let features = if include_isotopes {
-        MoleculeColoringFeatures::all()
-    } else {
-        MoleculeColoringFeatures::all().difference(MoleculeColoringFeatures::ISOTOPE)
-    };
-    molecule.graph_symmetry(&GraphSymmetryConfig {
-        coloring: ConstitutionColoring::new(features),
-        iterate_to_fixpoint: true,
-        max_iterations: 16,
-        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-    })
-}
-
-fn proper_orbits(molecule: &Molecule, include_isotopes: bool) -> Vec<Vec<AtomId>> {
-    let symmetry = graph_symmetry(molecule, include_isotopes);
+fn proper_orbits(molecule: &Molecule) -> Vec<Vec<AtomId>> {
+    let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig::default());
     orbit_partition(molecule, |id| symmetry.proper_orbit_of(id))
 }
 
 fn star_orbits(molecule: &Molecule) -> Vec<Vec<AtomId>> {
-    let symmetry = graph_symmetry(molecule, true);
+    let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig::default());
     orbit_partition(molecule, |id| symmetry.star_orbit_of(id))
 }
 
@@ -211,62 +191,46 @@ fn remap_partition(partition: &[&[u32]], mapping: &[u32]) -> Vec<Vec<AtomId>> {
     CDK_BIPHENYL,
     CDK_BIPHENYL_RENUMBERED,
     CDK_BIPHENYL_MAPPING,
-    CDK_BIPHENYL_ORBITS,
-    true
+    CDK_BIPHENYL_ORBITS
 )]
 #[case::rdkit_isotope_included(
     RDKIT_ISOTOPE,
     RDKIT_ISOTOPE_RENUMBERED,
     RDKIT_ISOTOPE_MAPPING,
-    RDKIT_ISOTOPE_ORBITS,
-    true
-)]
-#[case::rdkit_isotope_excluded(
-    RDKIT_ISOTOPE,
-    RDKIT_ISOTOPE_RENUMBERED,
-    RDKIT_ISOTOPE_MAPPING,
-    RDKIT_NO_ISOTOPE_ORBITS,
-    false
+    RDKIT_ISOTOPE_ORBITS
 )]
 #[case::inchi_permutation(
     INCHI_PERMUTATION,
     INCHI_PERMUTATION_RENUMBERED,
     INCHI_PERMUTATION_MAPPING,
-    INCHI_PERMUTATION_ORBITS,
-    true
+    INCHI_PERMUTATION_ORBITS
 )]
-#[case::dative(DATIVE, DATIVE_RENUMBERED, DATIVE_MAPPING, DATIVE_ORBITS, true)]
-#[case::aromatic(AROMATIC, AROMATIC_RENUMBERED, AROMATIC_MAPPING, AROMATIC_ORBITS, true)]
+#[case::dative(DATIVE, DATIVE_RENUMBERED, DATIVE_MAPPING, DATIVE_ORBITS)]
+#[case::aromatic(AROMATIC, AROMATIC_RENUMBERED, AROMATIC_MAPPING, AROMATIC_ORBITS)]
 #[case::multicenter(
     MULTICENTER,
     MULTICENTER_RENUMBERED,
     MULTICENTER_MAPPING,
-    MULTICENTER_ORBITS,
-    true
+    MULTICENTER_ORBITS
 )]
 #[case::noncovalent(
     NONCOVALENT,
     NONCOVALENT_RENUMBERED,
     NONCOVALENT_MAPPING,
-    NONCOVALENT_ORBITS,
-    true
+    NONCOVALENT_ORBITS
 )]
 fn test_molecule_graph_symmetry_corpus(
     #[case] input: &str,
     #[case] renumbered_input: &str,
     #[case] mapping: &[u32],
     #[case] expected_partition: &[&[u32]],
-    #[case] include_isotopes: bool,
 ) {
     let molecule = mol_dsl!(input);
     let renumbered = mol_dsl!(renumbered_input);
 
+    assert_eq!(proper_orbits(&molecule), atom_partition(expected_partition),);
     assert_eq!(
-        proper_orbits(&molecule, include_isotopes),
-        atom_partition(expected_partition),
-    );
-    assert_eq!(
-        proper_orbits(&renumbered, include_isotopes),
+        proper_orbits(&renumbered),
         remap_partition(expected_partition, mapping),
     );
 }
@@ -297,11 +261,11 @@ fn test_molecule_graph_symmetry_stereo_corpus(
     let renumbered = mol_dsl!(renumbered_input);
 
     assert_eq!(
-        proper_orbits(&molecule, true),
+        proper_orbits(&molecule),
         atom_partition(expected_proper_partition),
     );
     assert_eq!(
-        proper_orbits(&renumbered, true),
+        proper_orbits(&renumbered),
         remap_partition(expected_proper_partition, mapping),
     );
     assert_eq!(

@@ -178,11 +178,11 @@ mod tests {
             valence: GraphValenceModel::counts(Cow::Owned(valence_table![C => [4]])),
             aromaticity: GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::Strict },
             stereo: GraphStereoModel {
-                para_stereo: true,
+                stereo_bond_min_ring_size: 10,
                 ..GraphStereoModel::default()
             },
         }),
-        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[], fallback_aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict), aromaticity=AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.Strict), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8))"
+        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[], fallback_aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict), aromaticity=AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.Strict), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any()), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any())}, stereo_bond_min_ring_size=10, stereo_bond_e_min_ring_size=8))"
     )]
     fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -202,7 +202,7 @@ mod tests {
                 tie_break: GraphAromaticityTieBreak::Strict,
             },
             stereo: GraphStereoModel {
-                para_stereo: true,
+                stereo_bond_min_ring_size: 10,
                 ..GraphStereoModel::default()
             },
         };
@@ -227,7 +227,7 @@ mod tests {
                 tie_break: GraphAromaticityTieBreak::Strict,
             },
             stereo: GraphStereoModel {
-                para_stereo: true,
+                stereo_bond_min_ring_size: 10,
                 ..GraphStereoModel::default()
             },
         };

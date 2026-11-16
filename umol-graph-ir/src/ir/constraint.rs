@@ -61,8 +61,8 @@ pub use noncovalent::{
 pub use relational::RelationalConstraint;
 pub use ring::{RingMembershipForm, RingScope};
 pub use stereo::{
-    FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
-    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomConstraintsForm,
-    StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm, StereoLigandPair,
-    StereogenicityForm, TopicityForm, TopicityRelationForm,
+    LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoBondConstraintForm,
+    StereoBondConstraintKey, StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm,
+    TopicityForm, TopicityRelationForm,
 };

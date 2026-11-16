@@ -1,1013 +1,935 @@
-//! Graph-automorphism symmetry of a molecule, graded into proper vs improper.
+//! Search over colored incidence graphs: partitions and their refinement, the canonical search,
+//! and the search for a remapping that passes a check.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::collections::BTreeMap;
+use std::ops::ControlFlow;
+use std::{iter, mem};
 
-use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, NodeId};
-use umol_perm::{Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation};
-
-use super::coloring::MoleculeColoring;
-use super::entity::{Entity, EntityKind};
-use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
-use super::incidence::{IncidenceGraph, IncidenceLevel};
-use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::Molecule;
-#[cfg(test)]
-use super::molecule::MoleculeEntries;
-use super::stereo::{
-    coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
-    Topicity,
+use umol_graph_core::{
+    AutomorphismAlgorithm, AutomorphismOutput, Graph, NodeId, SubdivisionNodeSource, UnionFind,
 };
-use super::traits::AsLit;
 
-/// Configuration for [`Molecule::graph_symmetry`].
-pub struct GraphSymmetryConfig<C: MoleculeColoring> {
-    pub coloring: C,
-    pub iterate_to_fixpoint: bool,
-    pub max_iterations: u32,
-    pub automorphism_algorithm: AutomorphismAlgorithm,
+use super::incidence::{Incidence, IncidenceGraph};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct InitialColors {
+    pub(crate) entities: Vec<u32>,
+    pub(crate) incidences: Vec<u32>,
 }
 
-/// The converged, orientation-graded graph-automorphism symmetry of a molecule
-/// under a coloring. Owned and self-contained: molecule-level orbit queries read
-/// the stored partitions; per-carrier stabilizer re-runs use the stored colors.
-pub struct GraphSymmetry {
-    incidence: IncidenceGraph,
-    colors: Vec<u64>, // converged node colors; for site_stabilizer re-runs
-    proper_orbits: Vec<NodeId>,
-    star_orbits: Vec<NodeId>,
-    chiral: bool,
-    automorphism_algorithm: AutomorphismAlgorithm,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum AutomorphismColor {
+    Entity(u32),
+    Incidence(u32),
 }
 
-impl Molecule {
-    /// Build the molecule's graded graph-automorphism symmetry under `cfg.coloring`.
-    pub fn graph_symmetry<C: MoleculeColoring>(
-        &self,
-        cfg: &GraphSymmetryConfig<C>,
-    ) -> GraphSymmetry {
-        let incidence = self.incidence_graph(IncidenceLevel::Full);
-        let node_count = incidence.graph().node_count();
-        let base: Vec<u64> = (0..node_count)
-            .map(|i| cfg.coloring.color(self, incidence.entity(NodeId(i as u32))))
-            .collect();
+/// Colored simple graph and source-domain projection used by canonical search.
+///
+/// Source nodes occupy the leading `source_node_count` positions. Remaining vertices encode
+/// subdivided incidences or bonds and are excluded when backend automorphisms are projected onto
+/// the search domain.
+#[derive(Clone, Debug)]
+pub(crate) struct AutomorphismAdapter {
+    pub(crate) graph: Graph,
+    pub(crate) colors: Vec<AutomorphismColor>,
+    pub(crate) node_sources: Vec<SubdivisionNodeSource>,
+    pub(crate) source_node_count: usize,
+}
 
-        // Fixpoint: fold each stereo node's partition-dependent observable coset on
-        // top of the static base color, re-refine until the orbit partition stabilizes.
-        let mut auto = incidence
-            .graph()
-            .automorphisms(|node| base[node.index()], cfg.automorphism_algorithm);
-        let mut orbits = orbit_vec(&auto, node_count);
-        let mut iterations: u32 = 0;
-        loop {
-            iterations += 1;
-            let colors: Vec<u64> = (0..node_count)
-                .map(|i| self.folded_color(base[i], incidence.entity(NodeId(i as u32)), &orbits))
-                .collect();
-            let next = incidence
-                .graph()
-                .automorphisms(|node| colors[node.index()], cfg.automorphism_algorithm);
-            let next_orbits = orbit_vec(&next, node_count);
-            let stable = next_orbits == orbits;
-            auto = next;
-            orbits = next_orbits;
-            if stable || !cfg.iterate_to_fixpoint || iterations >= cfg.max_iterations {
-                break;
-            }
-        }
+/// Automorphism data over both the source-entity and complete adapter-node domains.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AutomorphismAdapterOutput {
+    pub(crate) source_orbits: Vec<NodeId>,
+    /// Source entity nodes in backend canonical-label order, used only to order search branches.
+    pub(crate) source_canonical_labels: Vec<NodeId>,
+    pub(crate) source_generators: Vec<Vec<NodeId>>,
+}
 
-        let colors: Vec<u64> = (0..node_count)
-            .map(|i| self.folded_color(base[i], incidence.entity(NodeId(i as u32)), &orbits))
-            .collect();
+impl AutomorphismAdapter {
+    /// Construct the exact graph adapter used by canonicalization.
+    pub(crate) fn new(incidence_graph: &IncidenceGraph, initial_colors: &InitialColors) -> Self {
+        let source = incidence_graph.graph();
+        debug_assert_eq!(initial_colors.entities.len(), source.node_count());
+        debug_assert_eq!(initial_colors.incidences.len(), source.edge_count());
 
-        // Grade the converged generators by their action on stereocenter cosets.
-        let mut proper: Vec<Vec<NodeId>> = Vec::new();
-        let mut improper: Vec<Vec<NodeId>> = Vec::new();
-        for generator in auto.generators() {
-            match self.grade_generator(
-                &incidence,
-                generator,
-                self.stereo_atoms()
-                    .ids()
-                    .map(Entity::StereoAtom)
-                    .chain(self.stereo_bonds().ids().map(Entity::StereoBond)),
-                None,
-            ) {
-                Some(Orientation::Proper) => proper.push(generator.clone()),
-                Some(Orientation::Improper) => improper.push(generator.clone()),
-                None => {} // mixed / invalid → discard
-            }
-        }
-
-        let all: Vec<Vec<NodeId>> = proper.iter().chain(improper.iter()).cloned().collect();
-        let proper_orbits = union_find(node_count, &proper);
-        let star_orbits = union_find(node_count, &all);
-        let chiral = self.has_oriented_center(&incidence) && improper.is_empty();
-
-        GraphSymmetry {
-            incidence,
-            colors,
-            proper_orbits,
-            star_orbits,
-            chiral,
-            automorphism_algorithm: cfg.automorphism_algorithm,
-        }
-    }
-
-    /// `base` combined with the stereo node's observable coset, or `base` unchanged.
-    fn folded_color(&self, base: u64, entity: Entity, orbits: &[NodeId]) -> u64 {
-        match self.observable_descriptor(entity, orbits) {
-            Some(observable) => {
-                let mut hasher = DefaultHasher::new();
-                base.hash(&mut hasher);
-                observable.hash(&mut hasher);
-                hasher.finish()
-            }
-            None => base,
-        }
-    }
-
-    /// The observable coset of a stereo node under the current orbit partition:
-    /// the stored coset reduced by ligand-position swaps that preserve the ligands'
-    /// current classes. `None` for non-stereo nodes or undetermined and
-    /// nonliteral configurations, or a ligand count that differs from the kind's degree.
-    fn observable_descriptor(&self, entity: Entity, orbits: &[NodeId]) -> Option<u32> {
-        let (kind, coset, ligands) = self.stereo_center(entity)?;
-        if ligands.len() != kind.degree() {
-            return None;
-        }
-        let &StereoCoset::Lit(raw) = coset else {
-            return None;
-        };
-        let coset_space = kind.class_key().space();
-        let classes: Vec<(StereoLigandKind, NodeId)> = ligands
+        let mut colors = initial_colors
+            .entities
             .iter()
-            .map(|ligand| (ligand.kind, orbits[ligand.atom_id.index()]))
-            .collect();
-        let mut generators = Vec::new();
-        for i in 0..classes.len() {
-            for j in (i + 1)..classes.len() {
-                if classes[i] == classes[j] {
-                    generators.push(
-                        Permutation::from_cycles(coset_space.degree(), &[vec![i, j]])
-                            .expect("class-pair transposition is in range and disjoint"),
-                    );
-                }
-            }
-        }
-        coset_space.observable_coset(raw, &generators)
-    }
+            .copied()
+            .map(AutomorphismColor::Entity)
+            .collect::<Vec<_>>();
+        let mut node_sources = source
+            .node_ids()
+            .map(SubdivisionNodeSource::Node)
+            .collect::<Vec<_>>();
+        let mut edges = Vec::new();
 
-    /// Combine a generator's orientation over the supplied stereo carriers.
-    /// `None` ⇒ discard (mixed across centers, or inconsistent).
-    fn grade_generator(
-        &self,
-        incidence: &IncidenceGraph,
-        generator: &[NodeId],
-        carriers: impl Iterator<Item = Entity>,
-        mut accumulated: Option<Orientation>,
-    ) -> Option<Orientation> {
-        for entity in carriers {
-            let contribution = match self.grade_center(incidence, entity, generator) {
-                Err(()) => return None,
-                Ok(None) => continue,
-                Ok(Some(orientation)) => orientation,
-            };
-            match accumulated {
-                None => accumulated = Some(contribution),
-                Some(previous) if previous == contribution => {}
-                Some(_) => return None,
-            }
-        }
-        Some(accumulated.unwrap_or(Orientation::Proper))
-    }
-
-    /// One stereocenter's orientation contribution to a generator. `Ok(None)` =
-    /// no constraint (non-stereogenic / undetermined); `Err` = generator invalid.
-    fn grade_center(
-        &self,
-        incidence: &IncidenceGraph,
-        entity: Entity,
-        generator: &[NodeId],
-    ) -> Result<Option<Orientation>, ()> {
-        let Some((kind, coset, ligands)) = self.stereo_center(entity) else {
-            return Ok(None);
-        };
-        let &StereoCoset::Lit(source) = coset else {
-            return Ok(None);
-        };
-        let coset_space = kind.class_key().space();
-        let target_entity = incidence.entity(generator[incidence.node_of(entity).index()]);
-        let Some((_, target_coset, target_ligands)) = self.stereo_center(target_entity) else {
-            return Err(());
-        };
-        if !matches!(target_coset, StereoCoset::Lit(_)) {
-            return Err(());
-        }
-
-        // The generator carries each ligand's bearing atom; the kind is preserved.
-        let image: Vec<StereoLigand> = ligands
-            .iter()
-            .map(|ligand| {
-                StereoLigand::new(AtomId::from(generator[ligand.atom_id.index()]), ligand.kind)
-            })
-            .collect();
-        let target_in_image = reexpress(kind, target_coset, &target_ligands, &image).ok_or(())?;
-
-        if source == target_in_image {
-            Ok(Some(Orientation::Proper))
-        } else if coset_space.enantiomer(target_in_image) == Some(source) {
-            Ok(Some(Orientation::Improper))
-        } else {
-            Err(())
-        }
-    }
-
-    /// Whether any stereocenter establishes a definite handedness (the precondition
-    /// for the molecule to be provably chiral).
-    fn has_oriented_center(&self, incidence: &IncidenceGraph) -> bool {
-        [EntityKind::StereoAtom, EntityKind::StereoBond]
-            .into_iter()
-            .flat_map(|kind| (0..incidence.entity_count(kind)).map(move |i| kind.with_id(i as u32)))
-            .any(|entity| {
+        let direct_pair_counts = source
+            .edge_ids()
+            .filter(|&edge| {
                 matches!(
-                    self.stereo_center(entity),
-                    Some((_, StereoCoset::Lit(_), _))
+                    incidence_graph.incidence(edge),
+                    Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
                 )
             })
+            .fold(BTreeMap::<[NodeId; 2], usize>::new(), |mut counts, edge| {
+                *counts.entry(source.edge_endpoints(edge)).or_default() += 1;
+                counts
+            });
+
+        let mut push_edge = |endpoints: [NodeId; 2]| {
+            edges.push([endpoints[0].0, endpoints[1].0]);
+        };
+        for edge in source.edge_ids() {
+            let endpoints = source.edge_endpoints(edge);
+            let direct = matches!(
+                incidence_graph.incidence(edge),
+                Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
+            ) && direct_pair_counts[&endpoints] == 1;
+            if direct {
+                push_edge(endpoints);
+                continue;
+            }
+
+            let occurrence = NodeId(node_sources.len() as u32);
+            node_sources.push(SubdivisionNodeSource::Edge(edge));
+            colors.push(AutomorphismColor::Incidence(
+                initial_colors.incidences[edge.index()],
+            ));
+            push_edge([endpoints[0], occurrence]);
+            push_edge([occurrence, endpoints[1]]);
+        }
+        let graph = Graph::new(node_sources.len(), &edges);
+        debug_assert!(graph.is_simple());
+
+        Self {
+            graph,
+            colors,
+            node_sources,
+            source_node_count: source.node_count(),
+        }
     }
 
-    /// The kind, stored coset, and ordered ligands of a stereo entity; `None` for
-    /// non-stereo entities, out-of-range ids, or an undetermined kind.
-    fn stereo_center(
+    pub(crate) fn graph(&self) -> &Graph {
+        &self.graph
+    }
+
+    pub(crate) fn color(&self, node: NodeId) -> AutomorphismColor {
+        self.colors[node.index()]
+    }
+
+    pub(crate) fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
+        self.node_sources[node.index()]
+    }
+
+    fn automorphisms_for_partition(
         &self,
-        entity: Entity,
-    ) -> Option<(StereoKind, &StereoCoset, Vec<StereoLigand>)> {
-        match entity {
-            Entity::StereoAtom(id) => {
-                let view = self.stereo_atoms().get(id)?;
-                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes().configuration
-                else {
-                    return None;
-                };
-                let ligands = view
-                    .ligands()
-                    .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
-                    .collect();
-                Some((*kind, coset, ligands))
+        partition: &OrderedPartition,
+        algorithm: AutomorphismAlgorithm,
+    ) -> AutomorphismAdapterOutput {
+        let cell_indices = partition.cell_indices(self.graph().node_count());
+        // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
+        // exact adapter color here keeps orbit pruning restricted to true automorphisms.
+        let output = self.graph().automorphisms(
+            |node| (self.color(node), cell_indices[node.index()]),
+            algorithm,
+        );
+
+        self.project_automorphisms(&output)
+    }
+
+    pub(crate) fn project_automorphisms(
+        &self,
+        output: &AutomorphismOutput,
+    ) -> AutomorphismAdapterOutput {
+        let source_node = |node| match self.node_source(node) {
+            SubdivisionNodeSource::Node(source) if source.index() < self.source_node_count => {
+                source
             }
-            Entity::StereoBond(id) => {
-                let view = self.stereo_bonds().get(id)?;
-                let StereoConfigurationForm::Kinded(kind, coset) = &view.attributes().configuration
-                else {
-                    return None;
-                };
-                let ligands = view
-                    .ligands()
-                    .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
-                    .collect();
-                Some((*kind, coset, ligands))
+            SubdivisionNodeSource::Node(_) => {
+                unreachable!("disjoint colors preserve the source-node domain")
             }
-            _ => None,
+            SubdivisionNodeSource::Edge(_) => {
+                unreachable!("disjoint colors preserve the adapter node domain")
+            }
+        };
+        let source_orbits = (0..self.source_node_count)
+            .map(|index| source_node(output.orbit_of(NodeId(index as u32))))
+            .collect();
+        let source_canonical_labels = output
+            .canonical_labels()
+            .iter()
+            .filter_map(|&node| match self.node_source(node) {
+                SubdivisionNodeSource::Node(source) if source.index() < self.source_node_count => {
+                    Some(source)
+                }
+                SubdivisionNodeSource::Node(_) => None,
+                SubdivisionNodeSource::Edge(_) => None,
+            })
+            .collect();
+        let source_generators = output
+            .generators()
+            .iter()
+            .map(|generator| {
+                generator[..self.source_node_count]
+                    .iter()
+                    .copied()
+                    .map(source_node)
+                    .collect()
+            })
+            .collect();
+        AutomorphismAdapterOutput {
+            source_orbits,
+            source_canonical_labels,
+            source_generators,
         }
     }
 }
 
-impl GraphSymmetry {
-    pub fn is_chiral(&self) -> bool {
-        self.chiral
+fn source_orbits_from_generators(
+    source_node_count: usize,
+    generators: &[Vec<NodeId>],
+) -> Vec<NodeId> {
+    let mut sets = UnionFind::new(source_node_count);
+    for generator in generators {
+        debug_assert_eq!(generator.len(), source_node_count);
+        for (source, image) in generator.iter().enumerate() {
+            sets.union(source, image.index());
+        }
     }
 
-    pub fn same_proper_orbit(&self, a: AtomId, b: AtomId) -> bool {
-        self.proper_orbits[a.index()] == self.proper_orbits[b.index()]
+    let roots = (0..source_node_count)
+        .map(|source| sets.find(source))
+        .collect::<Vec<_>>();
+    let mut representatives = vec![usize::MAX; source_node_count];
+    for (source, root) in roots.iter().copied().enumerate() {
+        representatives[root] = representatives[root].min(source);
+    }
+    roots
+        .into_iter()
+        .map(|root| NodeId(representatives[root] as u32))
+        .collect()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OrderedPartition {
+    pub(crate) cells: Vec<Vec<NodeId>>,
+}
+
+/// Minimum carrier size at which refinement tracks only cells created by the preceding split.
+const ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT: usize = 32;
+
+impl OrderedPartition {
+    pub(crate) fn from_descriptors<C: Clone + Ord>(descriptors: &[C]) -> Self {
+        let mut cells = BTreeMap::<C, Vec<NodeId>>::new();
+        for (index, descriptor) in descriptors.iter().enumerate() {
+            cells
+                .entry(descriptor.clone())
+                .or_default()
+                .push(NodeId(index as u32));
+        }
+
+        Self {
+            cells: cells.into_values().collect(),
+        }
     }
 
-    pub fn same_star_orbit(&self, a: AtomId, b: AtomId) -> bool {
-        self.star_orbits[a.index()] == self.star_orbits[b.index()]
+    pub(crate) fn from_color_ranks(colors: impl IntoIterator<Item = u32>) -> Self {
+        let mut cells = Vec::<Vec<NodeId>>::new();
+        for (index, color) in colors.into_iter().enumerate() {
+            let color = color as usize;
+            if cells.len() <= color {
+                cells.resize_with(color + 1, Vec::new);
+            }
+            cells[color].push(NodeId(index as u32));
+        }
+        cells.retain(|cell| !cell.is_empty());
+        Self { cells }
     }
 
-    pub fn proper_orbit_of(&self, a: AtomId) -> Vec<AtomId> {
-        self.orbit_members(&self.proper_orbits, a)
+    pub(crate) fn refine(self, graph: &Graph) -> Self {
+        if graph.node_count() < ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT {
+            self.refine_by_all_cells(graph)
+        } else {
+            self.refine_by_active_cells(graph)
+        }
     }
 
-    pub fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId> {
-        self.orbit_members(&self.star_orbits, a)
+    pub(crate) fn refine_by_active_cells(mut self, graph: &Graph) -> Self {
+        let node_count = graph.node_count();
+        let mut active_cells = vec![true; self.cells.len()];
+        let mut node_active_columns = vec![usize::MAX; node_count];
+        let mut signatures = Vec::<u32>::new();
+        let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
+        let mut next_active_cells = Vec::<bool>::with_capacity(self.cells.len());
+
+        loop {
+            node_active_columns.fill(usize::MAX);
+            let mut active_count = 0;
+            for (cell_index, cell) in self.cells.iter().enumerate() {
+                if active_cells[cell_index] {
+                    for node in cell {
+                        node_active_columns[node.index()] = active_count;
+                    }
+                    active_count += 1;
+                }
+            }
+            signatures.clear();
+            signatures.resize(node_count * active_count, 0);
+            for node in graph.node_ids() {
+                let offset = node.index() * active_count;
+                for neighbor in graph.neighbors(node) {
+                    let column = node_active_columns[neighbor.node.index()];
+                    if column != usize::MAX {
+                        signatures[offset + column] += 1;
+                    }
+                }
+            }
+
+            let mut changed = false;
+            for mut cell in self.cells.drain(..) {
+                let signature = |node: NodeId| {
+                    let offset = node.index() * active_count;
+                    &signatures[offset..offset + active_count]
+                };
+                cell.sort_unstable_by(|lhs, rhs| {
+                    signature(*rhs)
+                        .cmp(signature(*lhs))
+                        .then_with(|| lhs.cmp(rhs))
+                });
+
+                let mut group_start = 0;
+                for index in 1..cell.len() {
+                    if signature(cell[index]) != signature(cell[group_start]) {
+                        next_cells.push(cell[group_start..index].to_vec());
+                        group_start = index;
+                    }
+                }
+                if group_start == 0 {
+                    next_cells.push(cell);
+                    next_active_cells.push(false);
+                } else {
+                    next_cells.push(cell[group_start..].to_vec());
+                    let new_cell_count = next_cells.len() - next_active_cells.len();
+                    next_active_cells.extend(iter::repeat_n(true, new_cell_count));
+                    changed = true;
+                }
+            }
+
+            mem::swap(&mut self.cells, &mut next_cells);
+            if !changed {
+                return self;
+            }
+            mem::swap(&mut active_cells, &mut next_active_cells);
+            next_active_cells.clear();
+        }
     }
 
-    fn orbit_members(&self, orbits: &[NodeId], a: AtomId) -> Vec<AtomId> {
-        let rep = orbits[a.index()];
-        (0..self.incidence.entity_count(EntityKind::Atom))
-            .filter(|&i| orbits[i] == rep)
-            .map(|i| AtomId(i as u32))
+    pub(crate) fn refine_by_all_cells(mut self, graph: &Graph) -> Self {
+        let node_count = graph.node_count();
+        let mut cell_indices = vec![0; node_count];
+        let mut signatures = Vec::<u32>::new();
+        let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
+
+        loop {
+            for (cell_index, cell) in self.cells.iter().enumerate() {
+                for node in cell {
+                    cell_indices[node.index()] = cell_index as u32;
+                }
+            }
+            let cell_count = self.cells.len();
+            signatures.clear();
+            signatures.resize(node_count * cell_count, 0);
+            for node in graph.node_ids() {
+                let offset = node.index() * cell_count;
+                for neighbor in graph.neighbors(node) {
+                    signatures[offset + cell_indices[neighbor.node.index()] as usize] += 1;
+                }
+            }
+
+            let mut changed = false;
+            for mut cell in self.cells.drain(..) {
+                let signature = |node: NodeId| {
+                    let offset = node.index() * cell_count;
+                    &signatures[offset..offset + cell_count]
+                };
+                cell.sort_unstable_by(|lhs, rhs| {
+                    signature(*rhs)
+                        .cmp(signature(*lhs))
+                        .then_with(|| lhs.cmp(rhs))
+                });
+
+                let mut group_start = 0;
+                for index in 1..cell.len() {
+                    if signature(cell[index]) != signature(cell[group_start]) {
+                        next_cells.push(cell[group_start..index].to_vec());
+                        group_start = index;
+                    }
+                }
+                if group_start == 0 {
+                    next_cells.push(cell);
+                } else {
+                    next_cells.push(cell[group_start..].to_vec());
+                    changed = true;
+                }
+            }
+
+            mem::swap(&mut self.cells, &mut next_cells);
+            if !changed {
+                return self;
+            }
+        }
+    }
+
+    pub(crate) fn individualize(&self, cell_index: usize, node: NodeId) -> Self {
+        let mut cells = Vec::with_capacity(self.cells.len() + 1);
+        for (index, cell) in self.cells.iter().enumerate() {
+            if index != cell_index {
+                cells.push(cell.clone());
+                continue;
+            }
+
+            cells.push(vec![node]);
+            let remainder = cell
+                .iter()
+                .copied()
+                .filter(|&candidate| candidate != node)
+                .collect::<Vec<_>>();
+            if !remainder.is_empty() {
+                cells.push(remainder);
+            }
+        }
+
+        Self { cells }
+    }
+
+    pub(crate) fn first_non_singleton_entity_cell(&self, entity_count: usize) -> Option<usize> {
+        self.cells.iter().position(|cell| {
+            cell.len() > 1 && cell.first().is_some_and(|node| node.index() < entity_count)
+        })
+    }
+
+    fn entity_order(&self, entity_count: usize) -> Vec<NodeId> {
+        self.cells
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|node| node.index() < entity_count)
             .collect()
     }
 
-    pub(crate) fn incidence(&self) -> &IncidenceGraph {
-        &self.incidence
-    }
-
-    /// Generators of the stabilizer of a node: one automorphism run with the
-    /// site uniquely colored. Ungraded (graph-core node space); the per-carrier
-    /// projection grades them.
-    pub(crate) fn site_stabilizer(&self, site: NodeId) -> Vec<Vec<NodeId>> {
-        self.incidence
-            .graph()
-            .automorphisms(
-                |node| (node == site, self.colors[node.index()]),
-                self.automorphism_algorithm,
-            )
-            .generators()
-            .to_vec()
+    pub(crate) fn cell_indices(&self, node_count: usize) -> Vec<u32> {
+        let mut indices = vec![0; node_count];
+        for (cell_index, cell) in self.cells.iter().enumerate() {
+            for node in cell {
+                indices[node.index()] = cell_index as u32;
+            }
+        }
+        indices
     }
 }
 
-/// The local oriented ligand-position symmetry of one stereo carrier, plus its
-/// kind and stored coset — the compact input to stereo assertions.
-pub struct StereoSymmetry {
-    group: OrientedPermutationGroup,
-    kind: StereoKind,
-    coset: StereoCoset,
-}
-
-impl Molecule {
-    /// Project the molecule symmetry onto a stereo atom's ligand positions.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the id is unavailable or the stereo kind is undetermined.
-    pub fn stereo_atom_symmetry(&self, gs: &GraphSymmetry, id: StereoAtomId) -> StereoSymmetry {
-        let site = self
-            .stereo_atoms()
-            .get(id)
-            .expect("stereo atom id in range")
-            .site_id();
-        self.project_stereo(gs, Entity::StereoAtom(id), Entity::Atom(site))
-    }
-
-    /// Project the molecule symmetry onto a stereo bond's ligand positions.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the id is unavailable or the stereo kind is undetermined.
-    pub fn stereo_bond_symmetry(&self, gs: &GraphSymmetry, id: StereoBondId) -> StereoSymmetry {
-        let site = self
-            .stereo_bonds()
-            .get(id)
-            .expect("stereo bond id in range")
-            .site_id();
-        self.project_stereo(gs, Entity::StereoBond(id), Entity::Bond(site))
-    }
-
-    fn project_stereo(&self, gs: &GraphSymmetry, carrier: Entity, site: Entity) -> StereoSymmetry {
-        let (kind, coset, ligands) = {
-            let (k, c, l) = self
-                .stereo_center(carrier)
-                .expect("carrier is a stereo element");
-            (k, c.clone(), l)
-        };
-        let degree = ligands.len();
-        let site_node = gs.incidence().node_of(site);
-
-        let mut oriented: Vec<OrientedPermutation> = Vec::new();
-        // The carrier stabilizer, projected onto ligand positions and graded.
-        for generator in gs.site_stabilizer(site_node) {
-            let Some(permutation) = project_onto_ligands(&ligands, &generator) else {
-                continue;
-            };
-            let local_orientation = match kind {
-                StereoKind::Tetrahedral => {
-                    let orientation = if permutation.sign() == 1 {
-                        Orientation::Proper
-                    } else {
-                        Orientation::Improper
-                    };
-                    Some(orientation)
-                }
-                StereoKind::CisTrans => {
-                    if !kind.class_key().space().allows(permutation) {
-                        continue;
-                    }
-                    None
-                }
-                _ => None,
-            };
-            let binary = matches!(kind, StereoKind::Tetrahedral | StereoKind::CisTrans);
-            let carriers = self
-                .stereo_atoms()
-                .ids()
-                .map(Entity::StereoAtom)
-                .chain(self.stereo_bonds().ids().map(Entity::StereoBond))
-                .filter(|&entity| !binary || entity != carrier);
-            let Some(orientation) =
-                self.grade_generator(gs.incidence(), &generator, carriers, local_orientation)
-            else {
-                continue;
-            };
-            oriented.push(oriented_permutation(orientation, permutation));
-        }
-        StereoSymmetry {
-            group: OrientedPermutationGroup::generate(degree, &oriented),
-            kind,
-            coset,
-        }
-    }
-}
-
-impl StereoSymmetry {
-    /// The local oriented ligand-position symmetry group.
-    pub fn group(&self) -> &OrientedPermutationGroup {
-        &self.group
-    }
-
-    /// The carrier's stereo kind.
-    pub fn kind(&self) -> StereoKind {
-        self.kind
-    }
-
-    /// The carrier's stored coset.
-    pub fn coset(&self) -> &StereoCoset {
-        &self.coset
-    }
-
-    /// Whether a literal coset has a singleton orbit under local ligand symmetry.
-    ///
-    /// For tetrahedral and cis/trans kinds, an undetermined coset or a nonempty
-    /// finite coset set is classified from the action on both cosets.
-    /// This does not choose or modify the stored coset.
-    /// Other nonliteral configurations, empty or invalid finite sets, invalid
-    /// literal indices, and incompatible ligand actions return false.
-    ///
-    /// # Semantic properties
-    ///
-    /// For a valid tetrahedral or cis/trans ligand action, the result agrees for
-    /// an undetermined coset, any valid nonempty finite coset set, and either
-    /// literal coset in the same ligand frame.
-    pub fn is_stereogenic(&self) -> bool {
-        let coset = self.coset.as_lit();
-        let binary_domain = matches!(self.kind, StereoKind::Tetrahedral | StereoKind::CisTrans)
-            && match &self.coset {
-                StereoCoset::Undetermined => true,
-                StereoCoset::LitSet(domain) => {
-                    !domain.is_empty() && domain.iter().all(|&index| index < 2)
-                }
-                _ => false,
-            };
-        if coset.is_none() && !binary_domain {
-            return false;
-        }
-        let perms: Vec<Permutation> = self
-            .group
-            .elements()
+/// Whether two partitions agree in the number, the size, and the color of their cells, position by
+/// position. Every cell holds nodes of one color.
+pub(crate) fn same_cells(
+    source: &AutomorphismAdapter,
+    source_partition: &OrderedPartition,
+    target: &AutomorphismAdapter,
+    target_partition: &OrderedPartition,
+) -> bool {
+    source_partition.cells.len() == target_partition.cells.len()
+        && source_partition
+            .cells
             .iter()
-            .map(|op| op.permutation())
-            .collect();
-        let Some(classes) = self.kind.class_key().space().orbit_reps(&perms) else {
-            return false;
-        };
-        match coset {
-            Some(coset) => {
-                let Some(&class) = classes.get(coset as usize) else {
-                    return false;
-                };
-                classes.iter().filter(|&&c| c == class).count() == 1
-            }
-            None => classes.len() == 2 && classes[0] != classes[1],
-        }
-    }
-
-    /// Stereogenic, prochiral (an enantiotopic ligand pair), or symmetric.
-    ///
-    /// Graph-derived actions fix virtual ligands, so prochirality does not arise
-    /// from treating virtual hydrogens as distinguishable positions.
-    pub fn stereogenicity(&self) -> Stereogenicity {
-        if self.is_stereogenic() {
-            Stereogenicity::Stereogenic
-        } else if self.has_enantiotopic_pair() {
-            Stereogenicity::Prochiral
-        } else {
-            Stereogenicity::Symmetric
-        }
-    }
-
-    /// The topicity relation between two ligand positions.
-    pub fn topicity(&self, a: StereoLigandPosition, b: StereoLigandPosition) -> Topicity {
-        if self.group.proper_orbit_of(a.index()).contains(&b.index()) {
-            Topicity::Homotopic
-        } else if self.group.star_orbit_of(a.index()).contains(&b.index()) {
-            Topicity::Enantiotopic
-        } else {
-            Topicity::Diastereotopic
-        }
-    }
-
-    fn has_enantiotopic_pair(&self) -> bool {
-        let degree = self.kind.degree();
-        (0..degree).any(|a| {
-            (a + 1..degree).any(|b| {
-                self.topicity(
-                    StereoLigandPosition(a as u32),
-                    StereoLigandPosition(b as u32),
-                ) == Topicity::Enantiotopic
+            .zip(&target_partition.cells)
+            .all(|(source_cell, target_cell)| {
+                source_cell.len() == target_cell.len()
+                    && source.color(source_cell[0]) == target.color(target_cell[0])
             })
-        })
-    }
 }
 
-fn oriented_permutation(orientation: Orientation, permutation: Permutation) -> OrientedPermutation {
-    match orientation {
-        Orientation::Proper => OrientedPermutation::proper(permutation),
-        Orientation::Improper => OrientedPermutation::improper(permutation),
-    }
-}
-
-/// A stabilizer generator's action on the carrier's ligand positions: atom ligands follow the
-/// generator, while distinct virtual ligands sit on the fixed site and stay put. `None` if an atom
-/// ligand's image is not a ligand atom of the carrier.
-fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Option<Permutation> {
-    let degree = ligands.len();
-    let mut image = vec![0usize; degree];
-    for (i, ligand) in ligands.iter().enumerate() {
-        let target = match ligand.kind {
-            StereoLigandKind::Atom => {
-                let atom = generator[ligand.atom_id.index()].index();
-                (0..degree).find(|&j| {
-                    ligands[j].kind == StereoLigandKind::Atom && ligands[j].atom_id.index() == atom
-                })?
+/// Whether the remapping `images` carries every entity node of `source` to a node of `target` with
+/// the same color and the same incidences.
+///
+/// `images` holds the image of each entity node of `source`, and `target` has as many entity nodes.
+/// Two entity nodes are incident when an edge joins them or a subdivision node lies between them.
+/// The color of an incidence is the color of its subdivision node; an edge has none.
+pub(crate) fn remapping_preserves_incidences(
+    source: &AutomorphismAdapter,
+    target: &AutomorphismAdapter,
+    images: &[NodeId],
+) -> bool {
+    fn incidences(
+        adapter: &AutomorphismAdapter,
+        node: NodeId,
+        image: impl Fn(NodeId) -> NodeId,
+        incidences: &mut Vec<(NodeId, Option<AutomorphismColor>)>,
+    ) {
+        incidences.clear();
+        for neighbor in adapter.graph().neighbors(node) {
+            if neighbor.node.index() < adapter.source_node_count {
+                incidences.push((image(neighbor.node), None));
+            } else {
+                let other = adapter
+                    .graph()
+                    .neighbors(neighbor.node)
+                    .iter()
+                    .map(|endpoint| endpoint.node)
+                    .find(|&endpoint| endpoint != node)
+                    .expect("a subdivision node joins two entity nodes");
+                incidences.push((image(other), Some(adapter.color(neighbor.node))));
             }
-            _ => i,
+        }
+        incidences.sort_unstable();
+    }
+
+    let mut source_incidences = Vec::new();
+    let mut target_incidences = Vec::new();
+    (0..source.source_node_count).all(|index| {
+        let node = NodeId(index as u32);
+        let image = images[index];
+        if source.color(node) != target.color(image) {
+            return false;
+        }
+        incidences(
+            source,
+            node,
+            |neighbor| images[neighbor.index()],
+            &mut source_incidences,
+        );
+        incidences(target, image, |neighbor| neighbor, &mut target_incidences);
+        source_incidences == target_incidences
+    })
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CanonicalSearchStats {
+    pub(crate) initial_residual_cell_sizes: Vec<usize>,
+    pub(crate) refinement_calls: usize,
+    pub(crate) branch_order_calls: usize,
+    pub(crate) backend_calls: usize,
+    pub(crate) visited_leaves: usize,
+    pub(crate) leaf_comparisons: usize,
+    pub(crate) orbit_pruned_branches: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CanonicalCandidate<K> {
+    pub(crate) key: K,
+    pub(crate) entity_order: Vec<NodeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CanonicalSearchResult<K> {
+    pub(crate) candidate: CanonicalCandidate<K>,
+    #[cfg(test)]
+    pub(crate) stats: CanonicalSearchStats,
+}
+
+/// Minimize a typed leaf candidate over an exact partition ordered by semantic descriptors.
+///
+/// Adapter colors are opaque equality labels and do not order the partition. The search prunes with
+/// the automorphisms of the adapter and visits the candidates of a cell in the order of the backend
+/// canonical labels, so the leaf key must be invariant under adapter automorphisms.
+pub(crate) fn canonical_search<K, Descriptor, LeafCandidate>(
+    adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
+    algorithm: AutomorphismAlgorithm,
+    leaf_candidate: &LeafCandidate,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+{
+    canonical_search_impl(
+        adapter,
+        OrderedPartition::from_descriptors(partition_descriptors),
+        algorithm,
+        leaf_candidate,
+        false,
+        &|_| {},
+    )
+}
+
+pub(crate) fn canonical_search_from_partition<K, LeafCandidate>(
+    adapter: &AutomorphismAdapter,
+    partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    leaf_candidate: &LeafCandidate,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+{
+    canonical_search_impl(
+        adapter,
+        partition,
+        algorithm,
+        leaf_candidate,
+        false,
+        &|_| {},
+    )
+}
+
+pub(crate) fn canonical_search_with_generator_filter<
+    K,
+    Descriptor,
+    LeafCandidate,
+    FilterGenerators,
+>(
+    adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
+    algorithm: AutomorphismAlgorithm,
+    leaf_candidate: &LeafCandidate,
+    filter_generators: &FilterGenerators,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    canonical_search_impl(
+        adapter,
+        OrderedPartition::from_descriptors(partition_descriptors),
+        algorithm,
+        leaf_candidate,
+        true,
+        filter_generators,
+    )
+}
+
+fn canonical_search_impl<K, LeafCandidate, FilterGenerators>(
+    adapter: &AutomorphismAdapter,
+    initial: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    leaf_candidate: &LeafCandidate,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    let initial = initial.refine(adapter.graph());
+    let mut best = None;
+    #[cfg(test)]
+    let mut stats = CanonicalSearchStats {
+        initial_residual_cell_sizes: initial
+            .cells
+            .iter()
+            .filter(|cell| {
+                cell.len() > 1
+                    && cell
+                        .first()
+                        .is_some_and(|node| node.index() < adapter.source_node_count)
+            })
+            .map(Vec::len)
+            .collect(),
+        refinement_calls: 1,
+        ..Default::default()
+    };
+
+    search_partition(
+        adapter,
+        initial,
+        algorithm,
+        leaf_candidate,
+        apply_generator_filter,
+        filter_generators,
+        &mut best,
+        #[cfg(test)]
+        &mut stats,
+    );
+
+    CanonicalSearchResult {
+        candidate: best.expect("every finite partition has a discrete entity refinement"),
+        #[cfg(test)]
+        stats,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn search_partition<K, LeafCandidate, FilterGenerators>(
+    adapter: &AutomorphismAdapter,
+    partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    leaf_candidate: &LeafCandidate,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+    best: &mut Option<CanonicalCandidate<K>>,
+    #[cfg(test)] stats: &mut CanonicalSearchStats,
+) where
+    K: Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    let Some(cell_index) = partition.first_non_singleton_entity_cell(adapter.source_node_count)
+    else {
+        #[cfg(test)]
+        {
+            stats.visited_leaves += 1;
+        }
+        let entity_order = partition.entity_order(adapter.source_node_count);
+        let candidate = leaf_candidate(&entity_order);
+        let improves = if let Some(best) = best.as_ref() {
+            #[cfg(test)]
+            {
+                stats.leaf_comparisons += 1;
+            }
+            candidate.key < best.key
+        } else {
+            true
         };
-        image[i] = target;
-    }
-    Permutation::try_from(image.as_slice()).ok()
-}
-
-fn orbit_vec(auto: &AutomorphismOutput, node_count: usize) -> Vec<NodeId> {
-    (0..node_count)
-        .map(|i| auto.orbit_of(NodeId(i as u32)))
-        .collect()
-}
-
-/// Orbit representative (the component's minimum node) per node, under the group
-/// generated by `generators` (each an image map over `0..node_count`).
-fn union_find(node_count: usize, generators: &[Vec<NodeId>]) -> Vec<NodeId> {
-    fn find(parent: &mut [usize], mut x: usize) -> usize {
-        while parent[x] != x {
-            parent[x] = parent[parent[x]];
-            x = parent[x];
+        if improves {
+            *best = Some(candidate);
         }
-        x
+        return;
+    };
+
+    let mut candidates = partition.cells[cell_index].clone();
+    #[cfg(test)]
+    {
+        stats.backend_calls += 1;
     }
-    let mut parent: Vec<usize> = (0..node_count).collect();
-    for generator in generators {
-        for (i, image) in generator.iter().enumerate() {
-            let a = find(&mut parent, i);
-            let b = find(&mut parent, image.index());
-            if a != b {
-                parent[a.max(b)] = a.min(b);
+    let mut automorphisms = adapter.automorphisms_for_partition(&partition, algorithm);
+    if apply_generator_filter {
+        filter_generators(&mut automorphisms.source_generators);
+        automorphisms.source_orbits = source_orbits_from_generators(
+            adapter.source_node_count,
+            &automorphisms.source_generators,
+        );
+    }
+
+    let orbits = &automorphisms.source_orbits;
+    let mut representatives = BTreeMap::<NodeId, NodeId>::new();
+    for candidate in candidates {
+        representatives
+            .entry(orbits[candidate.index()])
+            .and_modify(|representative| *representative = (*representative).min(candidate))
+            .or_insert(candidate);
+    }
+    #[cfg(test)]
+    {
+        stats.orbit_pruned_branches += partition.cells[cell_index].len() - representatives.len();
+    }
+    candidates = representatives.into_values().collect();
+
+    #[cfg(test)]
+    {
+        stats.branch_order_calls += 1;
+    }
+    let mut ranks = vec![0; adapter.source_node_count];
+    for (rank, node) in automorphisms.source_canonical_labels.iter().enumerate() {
+        ranks[node.index()] = rank;
+    }
+    candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+
+    for candidate in candidates {
+        #[cfg(test)]
+        {
+            stats.refinement_calls += 1;
+        }
+        let child = partition
+            .individualize(cell_index, candidate)
+            .refine(adapter.graph());
+        search_partition(
+            adapter,
+            child,
+            algorithm,
+            leaf_candidate,
+            apply_generator_filter,
+            filter_generators,
+            best,
+            #[cfg(test)]
+            stats,
+        );
+    }
+}
+
+/// Whether a remapping from `source` to `target` passes `check`.
+///
+/// Both partitions are refined, and cells that differ give false. The first candidate that
+/// passes `check` ends the search.
+///
+/// `check` receives the image of each entity node of `source`. It must give the same answer for
+/// two remappings that differ by an automorphism of `target` that the search keeps, which
+/// `filter_generators` restricts when `apply_generator_filter` is set. The colors of the two
+/// adapters must stand for the same colors.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn remapping_exists<Check, FilterGenerators>(
+    source: &AutomorphismAdapter,
+    source_partition: OrderedPartition,
+    target: &AutomorphismAdapter,
+    target_partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    check: &Check,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> bool
+where
+    Check: Fn(&[NodeId]) -> bool,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    visit_remapping_candidates(
+        source,
+        source_partition,
+        target,
+        target_partition,
+        algorithm,
+        &mut |images| {
+            if check(images) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-        }
-    }
-    (0..node_count)
-        .map(|i| NodeId(find(&mut parent, i) as u32))
-        .collect()
+        },
+        apply_generator_filter,
+        filter_generators,
+    )
+    .is_break()
 }
 
-/// `coset` (in `stored` ligand order) re-expressed in `requested` order, as a coset
-/// index. `None` if the orders aren't a relabeling of one identical ligand set.
-fn reexpress(
-    kind: StereoKind,
-    coset: &StereoCoset,
-    stored: &[StereoLigand],
-    requested: &[StereoLigand],
-) -> Option<u32> {
-    let permutation = Permutation::between(stored, requested)?;
-    match coset_apply_permutation(coset, permutation, kind) {
-        Some(StereoCoset::Lit(index)) => Some(index),
-        _ => None,
+/// Visit candidate entity remappings from `source` to `target` until completion or `Break`.
+///
+/// Candidates need not preserve incidences. Branch pruning can omit candidates related by
+/// kept target generators; every question answered by the visitor must be invariant under
+/// those generators. The adapter colors must stand for the same colors. Each image slice
+/// borrows a candidate buffer for the duration of the call; candidate order is unspecified.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn visit_remapping_candidates<B, Visitor, FilterGenerators>(
+    source: &AutomorphismAdapter,
+    source_partition: OrderedPartition,
+    target: &AutomorphismAdapter,
+    target_partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    visitor: &mut Visitor,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> ControlFlow<B>
+where
+    Visitor: FnMut(&[NodeId]) -> ControlFlow<B>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    let entity_count = source.source_node_count;
+    let source_root = source_partition.refine(source.graph());
+    let target_root = target_partition.refine(target.graph());
+    if !same_cells(source, &source_root, target, &target_root) {
+        return ControlFlow::Continue(());
+    }
+    let images = |source_order: &[NodeId], target_order: &[NodeId]| {
+        let mut images = vec![NodeId(0); entity_count];
+        for (source_node, target_node) in source_order.iter().zip(target_order) {
+            images[source_node.index()] = *target_node;
+        }
+        images
+    };
+    if source_root
+        .first_non_singleton_entity_cell(entity_count)
+        .is_none()
+    {
+        return visitor(&images(
+            &source_root.entity_order(entity_count),
+            &target_root.entity_order(entity_count),
+        ));
+    }
+
+    let mut source_path = source_root;
+    let mut target_path = Some(target_root.clone());
+    while let Some(cell_index) = source_path.first_non_singleton_entity_cell(entity_count) {
+        target_path = target_path.map(|path| {
+            let node = path.cells[cell_index][0];
+            path.individualize(cell_index, node).refine(target.graph())
+        });
+        let node = source_path.cells[cell_index][0];
+        source_path = source_path
+            .individualize(cell_index, node)
+            .refine(source.graph());
+        if target_path
+            .as_ref()
+            .is_some_and(|path| !same_cells(source, &source_path, target, path))
+        {
+            target_path = None;
+        }
+    }
+    let source_order = source_path.entity_order(entity_count);
+    let first_images =
+        target_path.map(|path| images(&source_order, &path.entity_order(entity_count)));
+    if let Some(images) = &first_images {
+        if let ControlFlow::Break(value) = visitor(images) {
+            return ControlFlow::Break(value);
+        }
+    }
+
+    let mut pending = vec![target_root];
+    while let Some(partition) = pending.pop() {
+        let partition = partition.refine(target.graph());
+        let Some(cell_index) = partition.first_non_singleton_entity_cell(entity_count) else {
+            let images = images(&source_order, &partition.entity_order(entity_count));
+            if first_images.as_deref() != Some(images.as_slice()) {
+                if let ControlFlow::Break(value) = visitor(&images) {
+                    return ControlFlow::Break(value);
+                }
+            }
+            continue;
+        };
+
+        let mut automorphisms = target.automorphisms_for_partition(&partition, algorithm);
+        if apply_generator_filter {
+            filter_generators(&mut automorphisms.source_generators);
+            automorphisms.source_orbits =
+                source_orbits_from_generators(entity_count, &automorphisms.source_generators);
+        }
+        let mut representatives = BTreeMap::<NodeId, NodeId>::new();
+        for &candidate in &partition.cells[cell_index] {
+            representatives
+                .entry(automorphisms.source_orbits[candidate.index()])
+                .and_modify(|representative| *representative = (*representative).min(candidate))
+                .or_insert(candidate);
+        }
+        let mut candidates = representatives.into_values().collect::<Vec<_>>();
+        let mut ranks = vec![0; entity_count];
+        for (rank, node) in automorphisms.source_canonical_labels.iter().enumerate() {
+            ranks[node.index()] = rank;
+        }
+        candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+        pending.extend(
+            candidates
+                .into_iter()
+                .rev()
+                .map(|node| partition.individualize(cell_index, node)),
+        );
+    }
+    ControlFlow::Continue(())
+}
+
+/// Assign dense integers to the colors of one entity kind or of the incidences, in the order of the
+/// colors and starting at `first`. Each color comes with the position of its integer in `ranks`.
+/// The integer after the last one used is returned.
+pub(crate) fn rank_colors<T: Ord>(
+    mut colors: Vec<(T, usize)>,
+    first: u32,
+    ranks: &mut [u32],
+) -> u32 {
+    colors.sort_unstable_by(|(left, _), (right, _)| left.cmp(right));
+    let mut rank = first;
+    let mut previous = None;
+    for (color, position) in &colors {
+        if previous.is_some_and(|previous| previous != color) {
+            rank += 1;
+        }
+        ranks[*position] = rank;
+        previous = Some(color);
+    }
+    if colors.is_empty() {
+        first
+    } else {
+        rank + 1
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use pretty_assertions::assert_eq;
-    use rstest::*;
-    use umol_chem::element::Element;
-
-    use super::*;
-    use crate::ir::atom::AtomForm;
-    use crate::ir::bond::BondForm;
-    use crate::ir::coloring::ConstitutionColoring;
-    use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
-    use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
-
-    fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
-        GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: true,
-            max_iterations: 16,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-        }
-    }
-
-    #[fixture]
-    fn benzene_ring() -> Molecule {
-        let atoms = vec![AtomForm::from_element(Element::C); 6];
-        let bonds = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
-            .collect();
-        Molecule::from_entries(MoleculeEntries {
-            atoms,
-            bonds,
-            ..Default::default()
-        })
-    }
-
-    // A tetrahedral center on atom 0 with the four given peripheral elements.
-    fn tetrahedral(peripherals: [Element; 4]) -> Molecule {
-        let mut atoms = vec![AtomForm::from_element(Element::C)];
-        atoms.extend(peripherals.into_iter().map(AtomForm::from_element));
-        let bonds = (1..=4)
-            .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
-            .collect();
-        Molecule::from_entries(MoleculeEntries {
-            atoms,
-            bonds,
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            )],
-            ..Default::default()
-        })
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_constitutional(benzene_ring: Molecule) {
-        let symmetry = benzene_ring.graph_symmetry(&config());
-        assert_eq!(
-            symmetry.automorphism_algorithm,
-            AutomorphismAlgorithm::Nauty
-        );
-        assert!(symmetry.same_proper_orbit(AtomId(0), AtomId(3)));
-        assert_eq!(
-            symmetry.proper_orbit_of(AtomId(0)),
-            vec![
-                AtomId(0),
-                AtomId(1),
-                AtomId(2),
-                AtomId(3),
-                AtomId(4),
-                AtomId(5),
-            ],
-        );
-        assert!(!symmetry.is_chiral());
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_chiral() {
-        // Four distinct ligands ⇒ a genuine stereocenter, no compensating symmetry.
-        let mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        let symmetry = mol.graph_symmetry(&config());
-        assert!(symmetry.is_chiral());
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_enantiotopic() {
-        // Two identical Cl ligands: enantiotopic — same star orbit, distinct proper.
-        let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        let symmetry = mol.graph_symmetry(&config());
-        assert!(!symmetry.is_chiral());
-        assert!(!symmetry.same_proper_orbit(AtomId(1), AtomId(2)));
-        assert!(symmetry.same_star_orbit(AtomId(1), AtomId(2)));
-    }
-
-    #[rstest]
-    #[case::atom(
-        MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 5],
-            bonds: (1..=4)
-                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-                .collect(),
-            stereo_atoms: vec![(
-                AtomId(0),
-                (1..=4)
-                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                    .collect(),
-                StereoAtomForm::default(),
-            )],
-            ..Default::default()
-        },
-        AtomId(1),
-        vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
-    )]
-    #[case::bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 6],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(1), AtomId(4), BondForm::from_order(1)),
-                (AtomId(1), AtomId(5), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(0),
-                (2..=5)
-                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                    .collect(),
-                StereoBondForm::default(),
-            )],
-            ..Default::default()
-        },
-        AtomId(2),
-        vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
-    )]
-    fn test_molecule_graph_symmetry_kindless(
-        #[case] entries: MoleculeEntries,
-        #[case] atom: AtomId,
-        #[case] expected_orbit: Vec<AtomId>,
-    ) {
-        let molecule = Molecule::try_from_entries(entries).expect("kindless stereo is admitted");
-        for coloring in [
-            ConstitutionColoring::entity_only(),
-            ConstitutionColoring::full(),
-        ] {
-            let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
-                coloring,
-                iterate_to_fixpoint: false,
-                max_iterations: 1,
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            });
-
-            assert_eq!(symmetry.proper_orbit_of(atom), expected_orbit);
-            assert_eq!(symmetry.is_chiral(), false);
-        }
-    }
-
-    #[rstest]
-    fn test_graph_symmetry_site_stabilizer(benzene_ring: Molecule) {
-        let symmetry = benzene_ring.graph_symmetry(&config());
-        // Every stabilizer generator fixes the distinguished site.
-        let generators = symmetry.site_stabilizer(NodeId(0));
-        assert!(generators.iter().all(|g| g[0] == NodeId(0)));
-    }
-
-    #[rstest]
-    fn test_graph_symmetry_is_chiral_no_stereo(benzene_ring: Molecule) {
-        // No stereocenters ⇒ trivially achiral despite no improper generators.
-        assert!(!benzene_ring.graph_symmetry(&config()).is_chiral());
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_atom_symmetry_stereogenic() {
-        let mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        let gs = mol.graph_symmetry(&config());
-        let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-        assert!(stereo.is_stereogenic());
-        // Four distinct ligands ⇒ no local symmetry ⇒ pairwise diastereotopic.
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
-            Topicity::Diastereotopic
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_graph_symmetry_out_of_range_coset() {
-        // A malformed (out-of-range) coset must not panic graph_symmetry: the
-        // element contributes no observable descriptor and the orbit partition
-        // is still computed.
-        let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        mol.stereo_atom_mut(StereoAtomId(0))
-            .attributes_mut()
-            .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
-        let gs = mol.graph_symmetry(&config());
-        assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
-    }
-
-    #[rstest]
-    fn test_molecule_observable_descriptor() {
-        let mut mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        mol.stereo_atom_mut(StereoAtomId(0))
-            .attributes_mut()
-            .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1);
-        assert_eq!(
-            mol.observable_descriptor(
-                Entity::StereoAtom(StereoAtomId(0)),
-                &[NodeId(0), NodeId(1), NodeId(1), NodeId(3), NodeId(4)],
-            ),
-            Some(0),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_atom_symmetry_prochiral() {
-        let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
-        let gs = mol.graph_symmetry(&config());
-        let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-        // Two identical Cl ⇒ prochiral, not a genuine stereocenter.
-        assert!(!stereo.is_stereogenic());
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
-            Topicity::Enantiotopic
-        ); // the two Cl
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(2)),
-            Topicity::Diastereotopic
-        ); // Cl vs F
-    }
-
-    #[rstest]
-    fn test_molecule_stereo_bond_symmetry() {
-        // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
-        let mol = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::F),
-                AtomForm::from_element(Element::Cl),
-                AtomForm::from_element(Element::Br),
-                AtomForm::from_element(Element::I),
-            ],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-                (AtomId(0), AtomId(3), BondForm::from_order(1)),
-                (AtomId(1), AtomId(4), BondForm::from_order(1)),
-                (AtomId(1), AtomId(5), BondForm::from_order(1)),
-            ],
-            stereo_bonds: vec![(
-                BondId(0),
-                vec![
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
-                ],
-                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-            )],
-            ..Default::default()
-        });
-        let gs = mol.graph_symmetry(&config());
-        let stereo = mol.stereo_bond_symmetry(&gs, StereoBondId(0));
-        assert!(stereo.is_stereogenic());
-        assert_eq!(
-            stereo.topicity(StereoLigandPosition(0), StereoLigandPosition(1)),
-            Topicity::Diastereotopic
-        ); // F vs Cl on C0
-    }
-
-    #[rstest]
-    #[case::singleton(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(0),
-        true,
-    )]
-    #[case::merged(
-        OrientedPermutationGroup::generate(
-            4,
-            &[OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3]))],
-        ),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(0),
-        false,
-    )]
-    #[case::invalid_generator(
-        OrientedPermutationGroup::generate(3, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(0),
-        false,
-    )]
-    #[case::invalid_coset(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Lit(2),
-        false,
-    )]
-    #[case::undetermined(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Undetermined,
-        true,
-    )]
-    #[case::undetermined_merged(
-        OrientedPermutationGroup::generate(4, &[
-            OrientedPermutation::improper(Permutation::from_image(&[1, 0, 2, 3])),
-        ]),
-        StereoKind::Tetrahedral,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    #[case::cis_trans_undetermined(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::CisTrans,
-        StereoCoset::Undetermined,
-        true,
-    )]
-    #[case::cis_trans_merged(
-        OrientedPermutationGroup::generate(4, &[
-            OrientedPermutation::proper(Permutation::from_image(&[1, 0, 2, 3])),
-        ]),
-        StereoKind::CisTrans,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    #[case::cis_trans_invalid_action(
-        OrientedPermutationGroup::generate(4, &[
-            OrientedPermutation::proper(Permutation::from_image(&[0, 2, 1, 3])),
-        ]),
-        StereoKind::CisTrans,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    #[case::finite_domain(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::lit_set([0, 1]),
-        true,
-    )]
-    #[case::finite_singleton(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::CisTrans,
-        StereoCoset::lit_set([1]),
-        true,
-    )]
-    #[case::empty_domain(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::lit_set([]),
-        false,
-    )]
-    #[case::invalid_domain(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::Tetrahedral,
-        StereoCoset::lit_set([0, 2]),
-        false,
-    )]
-    #[case::nonbinary_literal(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::SquarePlanar,
-        StereoCoset::Lit(0),
-        true,
-    )]
-    #[case::nonbinary_undetermined(
-        OrientedPermutationGroup::generate(4, &[]),
-        StereoKind::SquarePlanar,
-        StereoCoset::Undetermined,
-        false,
-    )]
-    fn test_stereo_symmetry_is_stereogenic(
-        #[case] group: OrientedPermutationGroup,
-        #[case] kind: StereoKind,
-        #[case] coset: StereoCoset,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(
-            StereoSymmetry { group, kind, coset }.is_stereogenic(),
-            expected,
-        );
-    }
-
-    #[rstest]
-    #[case::valid(
-        &[NodeId(1), NodeId(0)],
-        Some(Permutation::from_image(&[1, 0])),
-    )]
-    #[case::collision(&[NodeId(0), NodeId(0)], None)]
-    fn test_project_onto_ligands(
-        #[case] generator: &[NodeId],
-        #[case] expected: Option<Permutation>,
-    ) {
-        assert_eq!(
-            project_onto_ligands(
-                &[
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                ],
-                generator,
-            ),
-            expected,
-        );
-    }
-
-    #[rstest]
-    #[case::hydrogen(StereoLigandKind::ImplicitHydrogen)]
-    #[case::lone_pair(StereoLigandKind::LonePair)]
-    #[case::virtual_ligand(StereoLigandKind::Virtual)]
-    fn test_project_onto_ligands_virtual(#[case] kind: StereoLigandKind) {
-        let ligands = [
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(0), kind),
-        ];
-        assert_eq!(
-            project_onto_ligands(&ligands, &[NodeId(0), NodeId(2), NodeId(1), NodeId(3)]),
-            Some(Permutation::from_image(&[1, 0, 2, 3])),
-        );
-    }
-}
+mod tests;

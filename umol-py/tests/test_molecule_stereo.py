@@ -3,14 +3,13 @@ from umol import (
     AddStereoConfig,
     ContradictionError,
     InvalidatedViewError,
-    ModelConversionError,
     Molecule,
     MoleculeDefaults,
     RemoveStereoConfig,
     RemoveStereoMode,
     StereoAtomForm,
     StereoBondForm,
-    Stereogenicity,
+    StereogenicSiteKind,
     StereoInconsistency,
     StereoKind,
     StereoModel,
@@ -121,6 +120,76 @@ def test_molecule_add_stereo_selection(stereo_source, method):
         assert result is None
 
 
+@pytest.mark.parametrize("method", ["add_stereo", "add_stereo_into"])
+@pytest.mark.parametrize(
+    "selection,rows",
+    [
+        (
+            None,
+            '{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th*"} '
+            '{:site 2 :ligands [1 3 5 [:h 2]] :attrs "Th*"}',
+        ),
+        (
+            StereoSelection(
+                sites={StereoSite.Atom(0)},
+                stereogenic_site_kinds={StereogenicSiteKind.Configurational},
+            ),
+            '{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th*"}',
+        ),
+    ],
+    ids=["all_candidates", "selected_output"],
+)
+def test_molecule_add_stereo_context(method, selection, rows):
+    molecule = Molecule.parse(
+        """{:atoms ["C#h" "C#h2" "C#h" "C#h2" "Cl" "Cl"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"]]}""",
+        defaults=MoleculeDefaults.concrete(),
+    )
+    original = molecule.copy()
+    expected = Molecule.parse(
+        f"""{{:atoms ["C#h" "C#h2" "C#h" "C#h2" "Cl" "Cl"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"]]
+        :stereo-atoms [{rows}]}}""",
+        defaults=MoleculeDefaults.concrete(),
+    )
+    result = getattr(molecule, method)(
+        StereoModel.default(), config=AddStereoConfig(selection=selection)
+    )
+    if method == "add_stereo":
+        assert result == expected
+        assert molecule == original
+    else:
+        assert result is None
+        assert molecule == expected
+
+
+def test_molecule_add_stereo_enumeration():
+    source = Molecule.parse(
+        """{:atoms ["C#h" "C#h2" "C#h" "C#h2" "Cl" "Cl"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"]]}""",
+        defaults=MoleculeDefaults.concrete(),
+    )
+    added = source.add_stereo(StereoModel.default())
+    results = list(
+        added.enumerate_stereo(
+            StereoModel.default(), sites=[StereoSite.Atom(0), StereoSite.Atom(2)]
+        )
+    )
+    expected = [
+        Molecule.parse(
+            f"""{{:atoms ["C#h" "C#h2" "C#h" "C#h2" "Cl" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"] [0 4 "1"] [2 5 "1"]]
+            :stereo-atoms [{{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th{first}"}}
+                           {{:site 2 :ligands [1 3 5 [:h 2]] :attrs "Th{second}"}}]}}""",
+            defaults=MoleculeDefaults.concrete(),
+        )
+        for first, second in [(0, 0), (0, 1), (1, 0), (1, 1)]
+    ]
+    assert results == expected
+    for molecule in results:
+        assert molecule.add_stereo(StereoModel.default()) == molecule
+
+
 @pytest.mark.parametrize("method", ["remove_stereo", "remove_stereo_into"])
 @pytest.mark.parametrize(
     "kwargs", [{}, {"config": RemoveStereoConfig(mode=RemoveStereoMode.All)}]
@@ -184,7 +253,7 @@ def test_molecule_remove_stereo_selection(stereo_determined, method):
             selection=StereoSelection(
                 sites=[StereoSite.Atom(0), StereoSite.Bond(4)],
                 kinds=[StereoKind.CisTrans],
-                stereogenicities=[Stereogenicity.Stereogenic],
+                stereogenic_site_kinds=[StereogenicSiteKind.Constitutional],
             )
         ),
     )
@@ -262,17 +331,21 @@ def test_molecule_add_stereo_evidence(stereo_determined, method):
 
 
 @pytest.mark.parametrize("method", ["remove_stereo", "remove_stereo_into"])
-def test_molecule_remove_stereo_classification(stereo_determined, method):
+def test_molecule_remove_stereo_classification_identity(stereo_determined, method):
     stereo_determined.stereo_atoms[0] = StereoAtomForm.parse("Sp0")
     original = stereo_determined.copy()
-    with pytest.raises(ModelConversionError) as caught:
-        getattr(stereo_determined, method)(
-            StereoModel.default(),
-            config=RemoveStereoConfig(
-                selection=StereoSelection(stereogenicities={Stereogenicity.Symmetric})
-            ),
-        )
-    assert caught.value.kind == StereoKind.SquarePlanar
+    result = getattr(stereo_determined, method)(
+        StereoModel.default(),
+        config=RemoveStereoConfig(
+            selection=StereoSelection(
+                stereogenic_site_kinds={StereogenicSiteKind.Nonstereogenic}
+            )
+        ),
+    )
+    if method == "remove_stereo":
+        assert result == original
+    else:
+        assert result is None
     assert stereo_determined == original
 
 

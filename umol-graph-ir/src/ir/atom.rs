@@ -261,16 +261,38 @@ impl From<&str> for AtomForm {
     }
 }
 
-/// The color of an [`AtomForm`]: the whole form, since no part of it depends on a participant
-/// frame.
+/// The inherent fields and constraint container of an [`AtomForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct AtomColor<'a>(&'a AtomForm);
 
+/// The field color of [`AtomForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct AtomFieldColor<'a> {
+    element: &'a ElementForm,
+    isotope_mass: &'a IsotopeMassForm,
+    charge: &'a NumForm,
+    implicit_hydrogens: &'a NumForm,
+    lone_pairs: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+}
+
 impl AsColor for AtomForm {
     type Color<'a> = AtomColor<'a>;
+    type FieldColor<'a> = AtomFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         AtomColor(self)
+    }
+
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        AtomFieldColor {
+            element: &self.element,
+            isotope_mass: &self.isotope_mass,
+            charge: &self.charge,
+            implicit_hydrogens: &self.implicit_hydrogens,
+            lone_pairs: &self.lone_pairs,
+            unpaired_electrons: &self.unpaired_electrons,
+        }
     }
 }
 
@@ -824,6 +846,10 @@ impl Lattice for IsotopeMassForm {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::mem::size_of;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -1147,6 +1173,110 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
+    }
+
+    #[rstest]
+    #[case::element_priority(
+        AtomForm::from_element(Element::C).with_charge(2).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::from_element(Element::N).with_charge(-2),
+        Ordering::Less
+    )]
+    #[case::isotope_priority(
+        AtomForm::from_element(Element::C).with_isotope_mass(12_u32).with_charge(2),
+        AtomForm::from_element(Element::C).with_isotope_mass(13_u32).with_charge(-2),
+        Ordering::Less
+    )]
+    #[case::charge_priority(
+        AtomForm::default().with_charge(-1).with_implicit_hydrogens(3),
+        AtomForm::default().with_charge(1).with_implicit_hydrogens(0),
+        Ordering::Less
+    )]
+    #[case::hydrogen_priority(
+        AtomForm::default().with_implicit_hydrogens(1).with_lone_pairs(3),
+        AtomForm::default().with_implicit_hydrogens(2).with_lone_pairs(0),
+        Ordering::Less
+    )]
+    #[case::lone_pair_priority(
+        AtomForm::default().with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8)),
+        AtomForm::default().with_lone_pairs(2),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(3)),
+        AtomForm::default().with_constraint(AtomConstraintForm::valence(4)),
+        Ordering::Less
+    )]
+    #[case::raw_element(
+        AtomForm::from_element(Element::C),
+        AtomForm::new(ElementForm::lit_set([Element::C])),
+        Ordering::Less
+    )]
+    #[case::raw_constraint(
+        AtomForm::default().with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+        AtomForm::default().with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([4]))),
+        Ordering::Less
+    )]
+    fn test_atom_form_as_color_order(
+        #[case] lhs: AtomForm,
+        #[case] rhs: AtomForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(AtomForm::default(), AtomForm::default())]
+    #[case::constraints(
+        AtomForm::from_element(Element::C).with_constraints([AtomConstraintForm::valence(4), AtomConstraintForm::Degree(NumForm::Lit(3))]),
+        AtomForm::from_element(Element::C)
+    )]
+    #[case::contradiction(
+        AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([]))),
+        AtomForm::from_element(Element::C)
+    )]
+    #[case::raw_fields(
+        AtomForm::new(ElementForm::lit_set([Element::C])).with_charge(NumForm::lit_set([1])).with_constraint(AtomConstraintForm::valence(4)),
+        AtomForm::new(ElementForm::lit_set([Element::C])).with_charge(NumForm::lit_set([1]))
+    )]
+    #[case::fields(
+        AtomForm::from_element(Element::N).with_isotope_mass(15_u32).with_charge(-1).with_implicit_hydrogens(2).with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(AtomConstraintForm::valence(3)),
+        AtomForm::from_element(Element::N).with_isotope_mass(15_u32).with_charge(-1).with_implicit_hydrogens(2).with_lone_pairs(1).with_unpaired_electrons((1_u8, 2_u8))
+    )]
+    fn test_atom_form_as_field_color(#[case] input: AtomForm, #[case] expected: AtomForm) {
+        let original = input.clone();
+        let color = input.as_field_color();
+        let expected_color = AtomFieldColor {
+            element: &expected.element,
+            isotope_mass: &expected.isotope_mass,
+            charge: &expected.charge,
+            implicit_hydrogens: &expected.implicit_hydrogens,
+            lone_pairs: &expected.lone_pairs,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
+    }
+
+    #[rstest]
+    fn test_atom_color_size() {
+        assert_eq!(size_of::<AtomColor<'_>>(), size_of::<&AtomForm>());
     }
 
     #[rustfmt::skip]

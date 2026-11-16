@@ -3,23 +3,24 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_perm::{OrientedPermutationGroup, Permutation};
+use umol_perm::{Orientation, Permutation};
 
+use super::super::entity::{DescriptionLevel, Entity};
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::molecule::Molecule;
-use super::super::stereo::{
-    StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
-};
-use super::super::symmetry::StereoSymmetry;
-use super::super::traits::{FrameTransport, Lattice};
+use super::super::molecule::symmetry::{remapping_exists_at, remapping_exists_for};
+use super::super::molecule::{GraphSymmetry, Molecule};
+use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind};
+use super::super::traits::{AsLit, FrameTransport, Lattice};
 use super::atom::AtomView;
 use super::bond::BondView;
 use super::constraints::{StereoAtomConstraintsView, StereoBondConstraintsView};
 use super::ligand::StereoLigandView;
 use crate::ir::{
-    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomConstraintsForm,
-    StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm, StereoCoset,
+    BooleanForm, LigandSymmetryForm, OrientedLigandPermutation, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoBondConstraintForm,
+    StereoBondConstraintKey, StereoBondConstraintsForm, StereoCoset, Stereogenicity,
+    StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 /// Namespace accessor for stereo-atom views on a `Molecule`.
@@ -50,8 +51,11 @@ impl<'a> StereoAtomViews<'a> {
     /// Views of stereo atoms incident on `atom` (site or ligand).
     pub fn incident(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomView<'a>> + 'a {
         let molecule = self.molecule;
-        self.incident_ids(atom)
-            .map(move |id| StereoAtomView { molecule, id })
+        self.incident_ids(atom).map(move |id| StereoAtomView {
+            molecule,
+            id,
+            symmetry: None,
+        })
     }
 
     // Ids of stereo atoms incident, in which `atom` is ligand.
@@ -83,7 +87,11 @@ impl<'a> StereoAtomViews<'a> {
     ) -> impl Iterator<Item = StereoAtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.incident_as_ligand_ids(atom)
-            .map(move |id| StereoAtomView { molecule, id })
+            .map(move |id| StereoAtomView {
+                molecule,
+                id,
+                symmetry: None,
+            })
     }
 
     /// Id of the stereo atom sited on `atom`, if any.
@@ -101,8 +109,11 @@ impl<'a> StereoAtomViews<'a> {
     /// View of the stereo atom sited on `atom`, if any.
     pub fn at(&self, atom: AtomId) -> Option<StereoAtomView<'a>> {
         let molecule = self.molecule;
-        self.at_id(atom)
-            .map(move |id| StereoAtomView { molecule, id })
+        self.at_id(atom).map(move |id| StereoAtomView {
+            molecule,
+            id,
+            symmetry: None,
+        })
     }
 }
 
@@ -111,15 +122,21 @@ impl<'a> StereoAtomViews<'a> {
 pub struct StereoAtomView<'a> {
     molecule: &'a Molecule,
     id: StereoAtomId,
+    symmetry: Option<&'a GraphSymmetry>,
 }
 
 impl<'a> StereoAtomView<'a> {
     /// Constraint reading of this stereo atom: the container's read API
     /// (asserted side, meanings intact) plus the keyed accessors. Mutation
-    /// stays on the stored container.
+    /// stays on the stored container. Attached graph-symmetry data is carried
+    /// into the constraints view.
     #[inline]
     pub fn constraints(&self) -> StereoAtomConstraintsView<'a> {
-        StereoAtomConstraintsView::new(self.molecule, self.id)
+        let view = StereoAtomConstraintsView::new(self.molecule, self.id);
+        match self.symmetry {
+            Some(symmetry) => view.with_symmetry(symmetry),
+            None => view,
+        }
     }
 
     /// View of the stereo site atom.
@@ -199,7 +216,11 @@ impl<'a> StereoBondViews<'a> {
     pub fn incident_to_atom(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         self.incident_to_atom_ids(atom)
-            .map(move |id| StereoBondView { molecule, id })
+            .map(move |id| StereoBondView {
+                molecule,
+                id,
+                symmetry: None,
+            })
     }
 
     /// Ids of stereo bonds incident, in which `atom` is ligand.
@@ -231,7 +252,11 @@ impl<'a> StereoBondViews<'a> {
     ) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         self.incident_as_ligand_ids(atom)
-            .map(move |id| StereoBondView { molecule, id })
+            .map(move |id| StereoBondView {
+                molecule,
+                id,
+                symmetry: None,
+            })
     }
 
     /// Ids of stereo bonds, in which `atom` is a site endpoint.
@@ -254,7 +279,11 @@ impl<'a> StereoBondViews<'a> {
     pub fn incident_as_site(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         self.incident_as_site_ids(atom)
-            .map(move |id| StereoBondView { molecule, id })
+            .map(move |id| StereoBondView {
+                molecule,
+                id,
+                symmetry: None,
+            })
     }
 
     /// Id of the stereo bond sited on `bond`, if any.
@@ -273,8 +302,11 @@ impl<'a> StereoBondViews<'a> {
     /// View of the stereo bond sited on `bond`, if any.
     pub fn at(&self, bond: BondId) -> Option<StereoBondView<'a>> {
         let molecule = self.molecule;
-        self.at_id(bond)
-            .map(move |id| StereoBondView { molecule, id })
+        self.at_id(bond).map(move |id| StereoBondView {
+            molecule,
+            id,
+            symmetry: None,
+        })
     }
 }
 
@@ -283,15 +315,21 @@ impl<'a> StereoBondViews<'a> {
 pub struct StereoBondView<'a> {
     molecule: &'a Molecule,
     id: StereoBondId,
+    symmetry: Option<&'a GraphSymmetry>,
 }
 
 impl<'a> StereoBondView<'a> {
     /// Constraint reading of this stereo bond: the container's read API
     /// (asserted side, meanings intact) plus the keyed accessors. Mutation
-    /// stays on the stored container.
+    /// stays on the stored container. Attached graph-symmetry data is carried
+    /// into the constraints view.
     #[inline]
     pub fn constraints(&self) -> StereoBondConstraintsView<'a> {
-        StereoBondConstraintsView::new(self.molecule, self.id)
+        let view = StereoBondConstraintsView::new(self.molecule, self.id);
+        match self.symmetry {
+            Some(symmetry) => view.with_symmetry(symmetry),
+            None => view,
+        }
     }
 
     /// View of the stereo site bond.
@@ -353,7 +391,11 @@ macro_rules! stereo_views {
 
             pub fn iter(&self) -> impl ExactSizeIterator<Item = $view<'a>> {
                 let molecule = self.molecule;
-                molecule.$raw().ids().map(move |id| $view { molecule, id })
+                molecule.$raw().ids().map(move |id| $view {
+                    molecule,
+                    id,
+                    symmetry: None,
+                })
             }
 
             pub fn contains(&self, id: $id) -> bool {
@@ -364,6 +406,7 @@ macro_rules! stereo_views {
                 self.contains(id).then_some($view {
                     molecule: self.molecule,
                     id,
+                    symmetry: None,
                 })
             }
         }
@@ -511,8 +554,223 @@ stereo_view_mut!(
 
 /// Methods shared by the readonly molecule stereo views.
 macro_rules! stereo_view_queries {
-    ($view:ident, $id:ty, $form:ty, $site:ty, $raw:ident, $ligand_error:literal) => {
+    ($view:ident, $id:ty, $form:ty, $site:ty, $raw:ident, $entity:ident, $site_entity:ident,
+     $ligand_error:literal) => {
         impl<'a> $view<'a> {
+            /// Attach borrowed graph-symmetry data for the derived readings.
+            ///
+            /// The data must describe the unchanged molecule for meaningful results. That
+            /// relationship is not validated; mismatched context has no specified result.
+            pub fn with_symmetry(mut self, symmetry: &'a GraphSymmetry) -> Self {
+                self.symmetry = Some(symmetry);
+                self
+            }
+
+            /// Classify the record by changing its own coset and, if needed, fixing one ligand.
+            ///
+            /// Nonliteral own cosets use the kind's first coset. Other records are read as stored.
+            ///
+            /// # Panics
+            ///
+            /// Panics without attached symmetry data or when the record has no kind.
+            ///
+            /// # Semantic properties
+            ///
+            /// With compatible data and cosets, atom renumbering and the record's own coset do
+            /// not change the class. The supplied molecule is preserved exactly.
+            pub fn stereogenicity(&self) -> Stereogenicity {
+                let symmetry = self.symmetry.expect("stereo view has symmetry data");
+                let kind = self.kind();
+                let ligands = self.ligand_ids();
+                if ligands.iter().enumerate().all(|(index, ligand)| {
+                    ligand.kind != StereoLigandKind::Atom
+                        || ligands[..index].iter().all(|other| {
+                            other.kind != StereoLigandKind::Atom
+                                || symmetry.cell(Entity::Atom(ligand.atom_id))
+                                    != symmetry.cell(Entity::Atom(other.atom_id))
+                        })
+                }) {
+                    return Stereogenicity::Stereogenic;
+                }
+                let own = self.coset().as_lit().unwrap_or(0);
+                let is_stereogenic = |fixed: &[AtomId]| {
+                    (0..kind.class_key().space().count() as u32)
+                        .filter(|&coset| coset != own)
+                        .any(|coset| {
+                            !remapping_exists_for(
+                                self.molecule,
+                                symmetry,
+                                Entity::$entity(self.id),
+                                coset,
+                                fixed,
+                            )
+                        })
+                };
+                if is_stereogenic(&[]) {
+                    Stereogenicity::Stereogenic
+                } else if ligands.iter().any(|ligand| {
+                    ligand.kind == StereoLigandKind::Atom && is_stereogenic(&[ligand.atom_id])
+                }) {
+                    Stereogenicity::Prostereogenic
+                } else {
+                    Stereogenicity::Nonstereogenic
+                }
+            }
+
+            /// The relation between two ligands under remappings that fix this record.
+            ///
+            /// Virtual positions are fixed. A constitutional remapping is tested only after
+            /// preserving and mirror remappings fail.
+            ///
+            /// # Panics
+            ///
+            /// Panics without attached data, without a kind, or for an unavailable position.
+            ///
+            /// # Semantic properties
+            ///
+            /// With compatible data, the relation is symmetric and each position is homotopic
+            /// to itself. The supplied molecule is preserved exactly.
+            pub fn topicity(&self, a: StereoLigandPosition, b: StereoLigandPosition) -> Topicity {
+                let symmetry = self.symmetry.expect("stereo view has symmetry data");
+                self.kind();
+                let first = self.ligand(a);
+                let second = self.ligand(b);
+                if a == b {
+                    return Topicity::Homotopic;
+                }
+                if first.kind() != StereoLigandKind::Atom
+                    || second.kind() != StereoLigandKind::Atom
+                    || symmetry.cell(Entity::Atom(first.atom_id()))
+                        != symmetry.cell(Entity::Atom(second.atom_id()))
+                {
+                    return Topicity::Distinct;
+                }
+                let (mut source, exchange_ends) = match Entity::$site_entity(self.site_id()) {
+                    Entity::Atom(site) => (vec![site], false),
+                    Entity::Bond(site) => (
+                        self.molecule.bond(site).atom_ids().to_vec(),
+                        self.ligand_ids()
+                            .iter()
+                            .all(|ligand| ligand.kind == StereoLigandKind::Atom),
+                    ),
+                    _ => unreachable!(),
+                };
+                let mut target = source.clone();
+                source.push(first.atom_id());
+                target.push(second.atom_id());
+                for (level, orientation, relation) in [
+                    (
+                        DescriptionLevel::Structure,
+                        Orientation::Proper,
+                        Topicity::Homotopic,
+                    ),
+                    (
+                        DescriptionLevel::Structure,
+                        Orientation::Improper,
+                        Topicity::Enantiotopic,
+                    ),
+                    (
+                        DescriptionLevel::Constitution,
+                        Orientation::Proper,
+                        Topicity::Diastereotopic,
+                    ),
+                ] {
+                    if remapping_exists_at(
+                        self.molecule,
+                        symmetry,
+                        level,
+                        orientation,
+                        &source,
+                        &target,
+                    ) {
+                        return relation;
+                    }
+                    if exchange_ends {
+                        target.swap(0, 1);
+                        let found = remapping_exists_at(
+                            self.molecule,
+                            symmetry,
+                            level,
+                            orientation,
+                            &source,
+                            &target,
+                        );
+                        target.swap(0, 1);
+                        if found {
+                            return relation;
+                        }
+                    }
+                }
+                Topicity::Distinct
+            }
+
+            /// Whether the requested oriented ligand permutation is a symmetry of this record.
+            ///
+            /// Returns false for an incompatible degree or action, or a moved virtual position.
+            ///
+            /// # Panics
+            ///
+            /// Panics without attached symmetry data or when the record has no kind.
+            ///
+            /// # Semantic properties
+            ///
+            /// The search fixes the site and realizes every supplied ligand image while
+            /// preserving the selected forms or carrying them to their mirrors. It preserves
+            /// the supplied molecule exactly.
+            pub fn ligand_symmetry(&self, permutation: OrientedLigandPermutation) -> bool {
+                let symmetry = self.symmetry.expect("stereo view has symmetry data");
+                let kind = self.kind();
+                let action = permutation.permutation.0;
+                let ligands = self.ligand_ids();
+                if action.degree() != ligands.len()
+                    || !kind.class_key().space().allows(action)
+                    || ligands.iter().enumerate().any(|(index, ligand)| {
+                        ligand.kind != StereoLigandKind::Atom && action.apply(index) != index
+                    })
+                {
+                    return false;
+                }
+                let (mut source, exchange_ends) = match Entity::$site_entity(self.site_id()) {
+                    Entity::Atom(site) => (vec![site], false),
+                    Entity::Bond(site) => (
+                        self.molecule.bond(site).atom_ids().to_vec(),
+                        ligands
+                            .iter()
+                            .all(|ligand| ligand.kind == StereoLigandKind::Atom),
+                    ),
+                    _ => unreachable!(),
+                };
+                let mut target = source.clone();
+                for (index, ligand) in ligands.iter().enumerate() {
+                    if ligand.kind == StereoLigandKind::Atom {
+                        source.push(ligand.atom_id);
+                        target.push(ligands[action.apply(index)].atom_id);
+                    }
+                }
+                if remapping_exists_at(
+                    self.molecule,
+                    symmetry,
+                    DescriptionLevel::Structure,
+                    permutation.orientation,
+                    &source,
+                    &target,
+                ) {
+                    return true;
+                }
+                if exchange_ends {
+                    target.swap(0, 1);
+                    return remapping_exists_at(
+                        self.molecule,
+                        symmetry,
+                        DescriptionLevel::Structure,
+                        permutation.orientation,
+                        &source,
+                        &target,
+                    );
+                }
+                false
+            }
+
             #[inline]
             pub fn id(&self) -> $id {
                 self.id
@@ -588,67 +846,10 @@ macro_rules! stereo_view_queries {
                 self.attributes().is_ground()
             }
 
-            /// The local oriented ligand-position symmetry group.
-            pub fn ligand_symmetry(&self, symmetry: &StereoSymmetry) -> OrientedPermutationGroup {
-                symmetry.group().clone()
-            }
-
-            /// Stereogenicity classification of this carrier.
-            pub fn stereogenicity(&self, symmetry: &StereoSymmetry) -> Stereogenicity {
-                symmetry.stereogenicity()
-            }
-
-            /// Whether this carrier is a genuine stereocenter.
-            pub fn is_stereogenic(&self, symmetry: &StereoSymmetry) -> bool {
-                symmetry.is_stereogenic()
-            }
-
-            /// Whether this carrier is prochiral (some enantiotopic ligand pair).
-            pub fn is_prochiral(&self, symmetry: &StereoSymmetry) -> bool {
-                symmetry.stereogenicity() == Stereogenicity::Prochiral
-            }
-
             /// Kind-level chirality — whether the geometry can encode handedness.
             /// No symmetry computation.
             pub fn is_chiral(&self) -> bool {
                 self.kind().is_chiral_class()
-            }
-
-            /// Topicity of two ligand positions.
-            pub fn topicity(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> Topicity {
-                symmetry.topicity(a, b)
-            }
-
-            pub fn is_homotopic(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> bool {
-                symmetry.topicity(a, b) == Topicity::Homotopic
-            }
-
-            pub fn is_enantiotopic(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> bool {
-                symmetry.topicity(a, b) == Topicity::Enantiotopic
-            }
-
-            pub fn is_diastereotopic(
-                &self,
-                a: StereoLigandPosition,
-                b: StereoLigandPosition,
-                symmetry: &StereoSymmetry,
-            ) -> bool {
-                symmetry.topicity(a, b) == Topicity::Diastereotopic
             }
 
             /// The ordered ligand identifiers.
@@ -666,6 +867,8 @@ stereo_view_queries!(
     StereoAtomForm,
     AtomId,
     raw_stereo_atoms,
+    StereoAtom,
+    Atom,
     "ligand id must refer to a ligand of this stereo atom"
 );
 stereo_view_queries!(
@@ -674,6 +877,8 @@ stereo_view_queries!(
     StereoBondForm,
     BondId,
     raw_stereo_bonds,
+    StereoBond,
+    Bond,
     "ligand id must refer to a ligand of this stereo bond"
 );
 
@@ -819,14 +1024,36 @@ pub(crate) fn stereo_atom_asserted_constraints(
     &molecule.stereo_atom(id).attributes().constraints
 }
 
-/// Derived side of one stereo-atom constraint key: always vacuous.
+/// Derived side of one stereo-atom constraint key.
 pub(crate) fn stereo_atom_derived_constraint(
-    _molecule: &Molecule,
-    _id: StereoAtomId,
+    molecule: &Molecule,
+    id: StereoAtomId,
+    symmetry: Option<&GraphSymmetry>,
     key: StereoAtomConstraintKey,
     _complete: bool,
 ) -> Option<StereoAtomConstraintForm> {
-    Some(StereoAtomConstraintForm::undetermined(key))
+    let stereo = molecule.stereo_atom(id);
+    if stereo.attributes().configuration.kind().is_none() {
+        return Some(StereoAtomConstraintForm::undetermined(key));
+    }
+    let stereo = stereo.with_symmetry(symmetry.expect("stereo view has symmetry data"));
+    Some(match key {
+        StereoAtomConstraintKey::Stereogenicity => StereoAtomConstraintForm::Stereogenicity(
+            StereogenicityForm::Lit(stereo.stereogenicity()),
+        ),
+        StereoAtomConstraintKey::Topicity(pair) => {
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair,
+                relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+            })
+        }
+        StereoAtomConstraintKey::LigandSymmetry(permutation) => {
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                permutation,
+                invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+            })
+        }
+    })
 }
 
 /// Stored constraint container of the stereo bond `id`.
@@ -837,14 +1064,36 @@ pub(crate) fn stereo_bond_asserted_constraints(
     &molecule.stereo_bond(id).attributes().constraints
 }
 
-/// Derived side of one stereo-bond constraint key: always vacuous.
+/// Derived side of one stereo-bond constraint key.
 pub(crate) fn stereo_bond_derived_constraint(
-    _molecule: &Molecule,
-    _id: StereoBondId,
+    molecule: &Molecule,
+    id: StereoBondId,
+    symmetry: Option<&GraphSymmetry>,
     key: StereoBondConstraintKey,
     _complete: bool,
 ) -> Option<StereoBondConstraintForm> {
-    Some(StereoBondConstraintForm::undetermined(key))
+    let stereo = molecule.stereo_bond(id);
+    if stereo.attributes().configuration.kind().is_none() {
+        return Some(StereoBondConstraintForm::undetermined(key));
+    }
+    let stereo = stereo.with_symmetry(symmetry.expect("stereo view has symmetry data"));
+    Some(match key {
+        StereoBondConstraintKey::Stereogenicity => StereoBondConstraintForm::Stereogenicity(
+            StereogenicityForm::Lit(stereo.stereogenicity()),
+        ),
+        StereoBondConstraintKey::Topicity(pair) => {
+            StereoBondConstraintForm::Topicity(TopicityForm {
+                pair,
+                relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+            })
+        }
+        StereoBondConstraintKey::LigandSymmetry(permutation) => {
+            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                permutation,
+                invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+            })
+        }
+    })
 }
 
 #[cfg(test)]
@@ -852,12 +1101,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::AutomorphismAlgorithm;
 
     use super::super::assert_exact_size_by;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::coloring::ConstitutionColoring;
     use crate::ir::constraint::{
         StereoAtomConstraintForm, StereoBondConstraintForm, StereogenicityForm,
     };
@@ -866,9 +1113,10 @@ mod tests {
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
     use crate::ir::stereo::{
-        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity, Topicity,
+        StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Stereogenicity,
     };
-    use crate::ir::symmetry::GraphSymmetryConfig;
+
+    mod symmetry;
 
     #[fixture]
     fn molecule() -> Molecule {
@@ -1011,7 +1259,7 @@ mod tests {
                     ligands.clone(),
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1))
                         .with_constraint(StereoAtomConstraintForm::Stereogenicity(
-                            StereogenicityForm::Lit(Stereogenicity::Prochiral),
+                            StereogenicityForm::Lit(Stereogenicity::Prostereogenic),
                         )),
                 ),
                 (AtomId(6), vec![], StereoAtomForm::default()),
@@ -1022,7 +1270,7 @@ mod tests {
                     ligands.clone(),
                     StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)).with_constraint(
                         StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                            Stereogenicity::Prochiral,
+                            Stereogenicity::Prostereogenic,
                         )),
                     ),
                 ),
@@ -1169,6 +1417,11 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_view_is_chiral(molecule: Molecule) {
+        assert_eq!(molecule.stereo_atom(StereoAtomId(0)).is_chiral(), true);
+    }
+
+    #[rstest]
     fn test_stereo_atom_view_ligand_count(molecule: Molecule) {
         assert_eq!(molecule.stereo_atom(StereoAtomId(0)).ligand_count(), 4);
     }
@@ -1202,62 +1455,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_stereo_queries(
-        #[values(StereoCoset::Undetermined, StereoCoset::Lit(0), StereoCoset::Lit(1), StereoCoset::lit_set([0, 1]))]
-        coset: StereoCoset,
+    #[case::middle(AtomId(2), Some(StereoLigandPosition(1)))]
+    #[case::unavailable(AtomId(7), None)]
+    fn test_stereo_atom_view_ligand_position(
+        molecule: Molecule,
+        #[case] atom: AtomId,
+        #[case] expected: Option<StereoLigandPosition>,
     ) {
-        // A clean stereocenter: C bonded to four distinct halogens.
-        let mol = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::F),
-                AtomForm::from_element(Element::Cl),
-                AtomForm::from_element(Element::Br),
-                AtomForm::from_element(Element::I),
-            ],
-            bonds: (1..=4)
-                .map(|i| (AtomId(0), AtomId(i), BondForm::from_order(1)))
-                .collect(),
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, coset),
-            )],
-            ..Default::default()
-        });
-        let gs = mol.graph_symmetry(&GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: true,
-            max_iterations: 16,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-        });
-        let symmetry = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
-        let view = mol.stereo_atom(StereoAtomId(0));
-
-        assert!(view.is_chiral()); // tetrahedral kind, no symmetry computation
-        assert!(view.is_stereogenic(&symmetry));
-        assert_eq!(view.stereogenicity(&symmetry), Stereogenicity::Stereogenic);
         assert_eq!(
-            view.topicity(StereoLigandPosition(0), StereoLigandPosition(1), &symmetry),
-            Topicity::Diastereotopic,
+            molecule.stereo_atom(StereoAtomId(0)).ligand_position(atom),
+            expected
         );
-        assert!(view.is_diastereotopic(
-            StereoLigandPosition(0),
-            StereoLigandPosition(1),
-            &symmetry
-        ));
-        assert_eq!(view.ligand_symmetry(&symmetry).order(), 1);
-        assert_eq!(
-            view.ligand_position(AtomId(2)),
-            Some(StereoLigandPosition(1))
-        );
-        assert_eq!(view.ligand_position(AtomId(99)), None);
-        assert_eq!(view.ligand_ids().len(), 4);
     }
 
     #[rstest]

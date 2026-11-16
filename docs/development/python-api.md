@@ -459,21 +459,21 @@ the executing operation performs contextual checks. StereoSite and StereoInconsi
 retain Rust equality, ordering, and hashing. Named inconsistency fields
 retain their Rust names; StereoSite's tuple payload is available as _0.
 
-StereoSelection accepts keyword-only sites, kinds, and stereogenicities. Each accepts
-None or an iterable of the corresponding typed values. None is unrestricted and an
-empty iterable selects nothing; the filters intersect. Properties return None or
-frozensets. matches(site, kind=None, stereogenicity=None) delegates to Rust, with omitted
-optional arguments supplying its absent values. This permits callers to test the
-information they have without calculating missing values in the binding.
+StereoSelection accepts keyword-only sites, kinds and stereogenic_site_kinds. Each accepts
+None or an iterable of the corresponding typed values. None is unrestricted and an empty
+iterable selects nothing; the filters intersect. Properties return None or frozensets.
+matches(site, kind=None, site_kind=None) delegates to Rust without looking up a molecule or
+calculating absent values. StereogenicSiteKind classifies the role of a candidate site among
+possible stereoisomers; it differs from Stereogenicity in the current assignment.
 
 AddStereoConfig, RemoveStereoConfig, and EnumerateStereoConfig expose the corresponding
 Rust fields through immutable properties. Keyword-only construction supplies Rust defaults
 for omitted configuration fields. selection=None selects the operation's default selection;
 an explicit StereoSelection() supplies unrestricted filters. All three expose
-automorphism_algorithm and para_stereo_max_iterations. The iteration limit defaults
-to 16, accepts the u32 range, and is forwarded to every symmetry path, including
-both enumeration classification and assignment checks. AddStereoConfig also
-exposes ring_config; RemoveStereoConfig exposes mode.
+automorphism_algorithm and max_classification_trials. The trial limit defaults to 4096 and
+accepts the u32 range. It bounds confirmation of one site's classification, with conservative
+retention at the limit; it does not bound the number of batch results or enumerated isomers.
+AddStereoConfig also exposes ring_config; RemoveStereoConfig exposes mode.
 
 StereoModel owns stereo_bond_min_ring_size and stereo_bond_e_min_ring_size, both
 defaulting to 8. Zero disables the corresponding restriction. Both are required
@@ -494,9 +494,9 @@ that perception does not process. Its matches method accepts StereoConfiguration
 
 All three configurations select all topology sites by default. Their other defaults are:
 
-| Configuration | Kinds | Stereogenicities | Removal mode |
+| Configuration | Kinds | Stereogenic site kinds | Removal mode |
 | --- | --- | --- | --- |
-| AddStereoConfig | Tetrahedral, CisTrans | Stereogenic | none |
+| AddStereoConfig | Tetrahedral, CisTrans | Constitutional, Configurational | none |
 | RemoveStereoConfig | unrestricted | unrestricted | All |
 | EnumerateStereoConfig | Tetrahedral, CisTrans | unrestricted | none |
 
@@ -504,15 +504,17 @@ All three default to AutomorphismAlgorithm.Nauty(); addition also uses RingConfi
 Rust default.
 
 Addition creates missing selected entities and preserves existing arrangements and source
-assertions. New cosets are undetermined. Symmetric and prochiral arrangements are permitted when
-selected explicitly; an entity does not itself assert stereogenicity.
+assertions. New cosets are undetermined. Nonstereogenic and prostereogenic sites are admitted
+when selected explicitly; an entity does not itself assert stereogenicity. With site-kind
+filtering, recognition collects all eligible prospective sites as classification context before
+applying output selectors, so required fields outside the output selection can be needed.
 Removal clears the corresponding #T/#C assertion at each removed entity's site, preserving
 other assertions and topology. Undetermined mode excludes finite coset sets, symbolic
-configurations, and kindless forms. A stereogenicity filter requests classification;
+configurations, and kindless forms. A stereogenic_site_kinds filter requests classification;
 unrestricted removal can strip unsupported geometries without interpreting them.
 
 Addition is idempotent for the same model/configuration. Removal is idempotent without a
-stereogenicity filter; removing entities can change the classifications of remaining entities.
+site-kind filter; removing entities can change the classifications of remaining entities.
 These equalities use structural Molecule equality.
 
 The immutable configuration values replace Rust's mutable public fields with constructor
@@ -528,7 +530,7 @@ classes while retaining the Rust message:
 | --- | --- | --- |
 | InvalidSite | IndexError | site: StereoSite |
 | MissingStereoEntity | InvalidStructureError | site: StereoSite |
-| UnsupportedKind, UnsupportedFluxionality | ModelConversionError | kind: StereoKind |
+| UnsupportedKind | ModelConversionError | kind: StereoKind |
 | UnsupportedConfiguration | ModelConversionError | site: StereoSite |
 | UnderdeterminedAtomField | UnderdeterminedError | atom: int, attributes: AtomForm |
 | UnderdeterminedBondOrder | UnderdeterminedError | bond: int |
@@ -536,6 +538,70 @@ classes while retaining the Rust message:
 
 Addition's separate inconsistency variant also produces ContradictionError with the typed
 inconsistency attribute.
+
+### Graph symmetry and attached stereo readings
+
+GraphSymmetry is an opaque immutable owner of auxiliary data. It has no public constructor and
+holds no molecule. copy() explicitly clones the data. GraphSymmetryConfig has writable
+keyword-configured fields automorphism_algorithm, max_classification_trials and
+include_constraints, defaulting to Nauty, 4096 and False. default() returns those defaults;
+copy() is independent and the mutable config is unhashable. Preparation copies the config value.
+
+Molecule.graph_symmetry(config) returns GraphSymmetryView, which retains the molecule and owns
+its computed data. GraphSymmetryView.from_graph_symmetry(data, molecule) retains borrowed data
+and the supplied molecule without copying either. Pairing does not validate compatibility;
+meaningful readings require data describing the selected molecular representation. Queries
+read the supplied forms without normalization; rebuild data after relevant changes.
+
+into_graph_symmetry() consumes the view, moving owned data or cloning borrowed data into an
+independent GraphSymmetry. Every alias of the consumed view subsequently raises ConsumedError;
+the molecule and any source data remain usable. Whole-molecule mutation invalidates an active
+view through the existing counter, including for a no-op or rollback, and access then raises
+InvalidatedViewError. Ordinary attribute edits leave accessors live, subject to the data's
+semantic compatibility requirement.
+
+The molecule takes the auxiliary data as the first argument to is_chiral, same_proper_orbit,
+same_star_orbit, proper_orbit_of, star_orbit_of and stereogenic_site_kinds. The symmetry view
+exposes the same operations using its retained pair. Unavailable atom IDs return false or an
+empty orbit, matching Rust. Orbits are independent lists of integer atom IDs in ascending order.
+stereogenic_site_kinds returns an independent list of (Entity, StereogenicSiteKind), ordered by
+stereo-atom record ID then stereo-bond record ID. Kindless records are omitted; no stereo records
+and only kindless records both produce an empty list. These are record IDs rather than topology
+site IDs. The caller can retain the returned batch; the auxiliary data stores no final answers.
+
+StereoAtomView and StereoBondView attach GraphSymmetry with with_symmetry(data), returning a
+new accessor while preserving the source. stereogenicity(), topicity(a, b) and
+ligand_symmetry(permutation) read derived values. Their constraints property carries the same
+data; StereoAtomConstraintsView and StereoBondConstraintsView also expose with_symmetry.
+Attachment retains Python owner references without copying the molecule or auxiliary data.
+
+The constraint views expose raw typed getters and normalized own assertions. Their derived
+keys return literal forms, and evidence meets those forms with the assertion. Kindless keyed
+readings remain vacuous without symmetry data. Kinded derivation without data raises ValueError;
+direct stereo readings also require a kind. Unavailable topicity positions raise IndexError.
+Bottom assertions and empty patterns retain their short circuits. Standalone form/update
+constraint views still require molecule context for derived readings and comparisons.
+These raw-input readings have no general normalization-invariance guarantee.
+
+```python
+from umol import (
+    GraphSymmetryConfig, Molecule, MoleculeDefaults, StereoAtomConstraintKey,
+    Stereogenicity,
+)
+
+mol = Molecule.parse(
+    '{:atoms ["C" "H" "F" "Cl" "Br"] '
+    ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+    ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}',
+    defaults=MoleculeDefaults.concrete(),
+)
+symmetry = mol.graph_symmetry(GraphSymmetryConfig()).into_graph_symmetry()
+stereo = mol.stereo_atoms[0].with_symmetry(symmetry)
+assert mol.is_chiral(symmetry)
+assert stereo.stereogenicity() == Stereogenicity.Stereogenic
+reading = stereo.constraints.derived(StereoAtomConstraintKey.Stereogenicity())
+kinds = mol.stereogenic_site_kinds(symmetry)
+```
 
 ### Stereo enumeration
 
@@ -549,7 +615,7 @@ The sequence controls traversal; selection is supplied separately through the co
 Enumeration processes existing arrangements and preserves topology, ligand frames, and source
 assertions. Fixed cosets are retained; undetermined cosets and finite absolute sets supply their
 admitted values. Constant expressions are normalized; variable expressions and selected
-unsupported geometries reject processing. Compatible symmetric/prochiral arrangements remain
+unsupported geometries reject processing. Compatible nonstereogenic and prostereogenic arrangements remain
 eligible. Empty selected work yields one unchanged result when its checks are consistent.
 
 The call borrows the molecule and preserves its aliases, views, and iterators. It stores

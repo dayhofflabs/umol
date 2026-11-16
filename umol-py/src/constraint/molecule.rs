@@ -2042,7 +2042,7 @@ mod tests {
         GraphIrStereoBondId(11),
         GraphIrStereoKind::CisTrans,
         GraphIrStereoBondConstraintForm::Stereogenicity(GraphIrStereogenicityForm::Lit(
-            GraphIrStereogenicity::Prochiral,
+            GraphIrStereogenicity::Prostereogenic,
         )),
     ))]
     #[case::relational(GraphIrConstraint::Relational(

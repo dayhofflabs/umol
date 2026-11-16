@@ -629,21 +629,21 @@ def test_ringsizecounts_len_iter_contains():
             "StereoAtom",
             umol.StereoAtomConstraintForm.Stereogenicity(
                 umol.StereogenicityForm.LitSet(
-                    {umol.Stereogenicity.Symmetric, umol.Stereogenicity.Prochiral}
+                    {umol.Stereogenicity.Nonstereogenic, umol.Stereogenicity.Prostereogenic}
                 )
             ),
             "stereogenicity",
             umol.StereogenicityForm.LitSet(
-                {umol.Stereogenicity.Symmetric, umol.Stereogenicity.Prochiral}
+                {umol.Stereogenicity.Nonstereogenic, umol.Stereogenicity.Prostereogenic}
             ),
         ),
         (
             "StereoBond",
             umol.StereoBondConstraintForm.Stereogenicity(
-                umol.StereogenicityForm.Lit(umol.Stereogenicity.Symmetric)
+                umol.StereogenicityForm.Lit(umol.Stereogenicity.Nonstereogenic)
             ),
             "stereogenicity",
-            umol.StereogenicityForm.Lit(umol.Stereogenicity.Symmetric),
+            umol.StereogenicityForm.Lit(umol.Stereogenicity.Nonstereogenic),
         ),
     ],
 )

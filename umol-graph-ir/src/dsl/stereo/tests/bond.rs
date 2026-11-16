@@ -35,7 +35,6 @@ fn test_stereo_bond_dsl_to_string(#[case] form: StereoBondDsl, #[case] expected:
 
 #[rustfmt::skip]
 #[rstest]
-#[case::fluxionality_involution("Ct1#f~")]
 #[case::topicity("Ct1#o(0,1)=")]
 #[case::stereogenicity("Ct1#g/")]
 fn test_stereo_bond_inline_render_identity(#[case] s: &str) {
@@ -79,7 +78,6 @@ fn test_stereo_bond_dsl_to_edn(#[case] form: StereoBondDsl, #[case] expected: &s
 
 #[rstest]
 #[case::symmetry(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))]
-#[case::fluxionality(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }))]
 #[case::topicity(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
 #[case::stereogenicity(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
     Stereogenicity::Stereogenic
@@ -152,7 +150,6 @@ fn test_stereo_bond_update_dsl_display_roundtrip(#[case] input: &str) {
 
 #[rstest]
 #[case::symmetry(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))]
-#[case::fluxionality(StereoBondConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }))]
 #[case::topicity(StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
 #[case::stereogenicity(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
     Stereogenicity::Stereogenic

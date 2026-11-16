@@ -24,7 +24,7 @@ fn test_parse_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomDsl) 
 #[case::duplicate("Th1#g/#g=", ParseError::DuplicateStereoPredicate("#g".to_string()))]
 #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
 #[case::overlapping_ligand_permutation("Th1#p(0,1)(1,2)", ParseError::InvalidValue("cycle point 1 occurs more than once".to_string()))]
-#[case::repeated_ligand_position("Th1#f(0,1,0)", ParseError::InvalidValue("cycle point 0 occurs more than once".to_string()))]
+#[case::repeated_ligand_position("Th1#p(0,1,0)", ParseError::InvalidValue("cycle point 0 occurs more than once".to_string()))]
 #[case::ligand_position_out_of_range("Th1#p(0,4)", ParseError::InvalidValue("cycle point 4 at cycle 0, position 1 is outside 0..4".to_string()))]
 fn test_parse_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
     assert_eq!(parse_stereo_atom(input).unwrap_err(), expected);
@@ -42,7 +42,6 @@ fn test_stereo_atom_dsl_to_string(#[case] form: StereoAtomDsl, #[case] expected:
 
 #[rustfmt::skip]
 #[rstest]
-#[case::fluxionality("Th1#f(0,1,2)")]
 #[case::ligand_symmetry_involution("Th1#p~")]
 #[case::ligand_symmetry_not_present("Th1#p~!")]
 #[case::ligand_symmetry_explicit("Th1#p(0,1,2)")]
@@ -50,9 +49,10 @@ fn test_stereo_atom_dsl_to_string(#[case] form: StereoAtomDsl, #[case] expected:
 #[case::topicity_negated("Th1#o(0,1)!'")]
 #[case::topicity_lit_set("Th1#o(0,1){=,'}")]
 #[case::topicity_not_set("Th1#o(0,1)!{=,'}")]
+#[case::topicity_distinct("Th1#o(0,1)%")]
 #[case::stereogenicity("Th1#g/")]
 #[case::stereogenicity_lit_set("Th1#g{=,/}")]
-#[case::multiple("Th1#f(0,1,2)#o(0,1)=#g/")]
+#[case::multiple("Th1#p(0,1,2)#o(0,1)=#g/")]
 fn test_stereo_atom_inline_render_identity(#[case] s: &str) {
     assert_eq!(parse_stereo_atom(s).unwrap().to_string(), s);
 }
@@ -67,8 +67,6 @@ fn test_stereo_atom_inline_render(#[case] input: &str, #[case] canonical: &str) 
 
 #[rustfmt::skip]
 #[rstest]
-#[case::fluxionality("Th1#f(0,1,2)",
-    StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanForm::Lit(true) }))]
 #[case::ligand_symmetry("Th1#p(0,1,2)",
     StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
         permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
@@ -77,14 +75,14 @@ fn test_stereo_atom_inline_render(#[case] input: &str, #[case] canonical: &str) 
     StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
         permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), orientation: Orientation::Proper },
         invariant: BooleanForm::Lit(false) }))]
-#[case::fluxionality_absent("Th1#f(0,1,2)!",
-    StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 2, 0, 3])), active: BooleanForm::Lit(false) }))]
 #[case::topicity_negated("Th1#o(0,1)!'",
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
 #[case::topicity_lit_set("Th1#o(0,1){=,'}",
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
 #[case::topicity_not_set("Th1#o(0,1)!{=,'}",
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
+#[case::topicity_distinct("Th1#o(0,1)%",
+    StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Distinct) }))]
 #[case::topicity_open("Th1#o(0,1)*",
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Undetermined }))]
 #[case::stereogenicity("Th1#g/",
@@ -149,7 +147,6 @@ fn test_stereo_atom_dsl_to_edn(#[case] form: StereoAtomDsl, #[case] expected: &s
 
 #[rstest]
 #[case::symmetry(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))]
-#[case::fluxionality(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }))]
 #[case::topicity(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
 #[case::stereogenicity(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
     Stereogenicity::Stereogenic
@@ -237,7 +234,6 @@ fn test_stereo_atom_update_dsl_display_roundtrip(#[case] input: &str) {
 
 #[rstest]
 #[case::symmetry(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))]
-#[case::fluxionality(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }))]
 #[case::topicity(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) }))]
 #[case::stereogenicity(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
     Stereogenicity::Stereogenic

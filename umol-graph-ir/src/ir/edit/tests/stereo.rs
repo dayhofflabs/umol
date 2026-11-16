@@ -26,10 +26,10 @@ use crate::ir::{MoleculeApplyError, RollbackMethod, Transaction};
 )]
 #[case::kind_assignment_raw_precondition(
     StereoAtomForm { constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), ..Default::default() },
-    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))) },
+    StereoAtomUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::Tetrahedral, coset: None }, constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))) },
     vec![
         Edit::ModifyStereoAtomField { id: StereoAtomHandle::Id(StereoAtomId(7)), change: StereoAtomFieldChange::Configuration { old: StereoConfigurationForm::Undetermined, new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined) } },
-        Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(7)), kind: Some(StereoKind::Tetrahedral), old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))) },
+        Edit::ModifyStereoAtomConstraint { id: StereoAtomHandle::Id(StereoAtomId(7)), kind: Some(StereoKind::Tetrahedral), old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))) },
     ],
 )]
 fn test_edits_update_stereo_atom(
@@ -181,10 +181,10 @@ fn test_edits_update_stereo_atom_construction(
 )]
 #[case::kind_assignment_raw_precondition(
     StereoBondForm { constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), ..Default::default() },
-    StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))) },
+    StereoBondUpdate { configuration: StereoConfigurationUpdate::Kinded { kind: StereoKind::CisTrans, coset: None }, constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))) },
     vec![
         Edit::ModifyStereoBondField { id: StereoBondHandle::Id(StereoBondId(7)), change: StereoBondFieldChange::Configuration { old: StereoConfigurationForm::Undetermined, new: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined) } },
-        Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(7)), kind: Some(StereoKind::CisTrans), old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric))) },
+        Edit::ModifyStereoBondConstraint { id: StereoBondHandle::Id(StereoBondId(7)), kind: Some(StereoKind::CisTrans), old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))) },
     ],
 )]
 fn test_edits_update_stereo_bond(

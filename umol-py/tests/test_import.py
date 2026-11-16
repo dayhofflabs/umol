@@ -95,7 +95,9 @@ PUBLIC_EXPORTS = frozenset(
     ElementScope
     EnumerateStereoConfig
     Entity
-    FluxionalityForm
+    GraphSymmetry
+    GraphSymmetryConfig
+    GraphSymmetryView
     HashedFeatureSet
     HashedFingerprintConfig
     InvalidStructureError
@@ -225,6 +227,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoTerm
     StereoSelection
     StereoSite
+    StereogenicSiteKind
     Stereogenicity
     StereogenicityForm
     StructuralFeatureSet

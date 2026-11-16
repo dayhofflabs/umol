@@ -169,21 +169,41 @@ impl From<&str> for BondForm {
     }
 }
 
-/// The color of a [`BondForm`]: the whole form, since no part of it depends on a participant
-/// frame.
+/// The inherent fields and constraint container of a [`BondForm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct BondColor<'a>(&'a BondForm);
 
+/// The field color of [`BondForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct BondFieldColor<'a> {
+    order: &'a NumForm,
+    charge: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+}
+
 impl AsColor for BondForm {
     type Color<'a> = BondColor<'a>;
+    type FieldColor<'a> = BondFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         BondColor(self)
+    }
+
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        BondFieldColor {
+            order: &self.order,
+            charge: &self.charge,
+            unpaired_electrons: &self.unpaired_electrons,
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::mem::size_of;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -491,5 +511,82 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
+    }
+
+    #[rstest]
+    #[case::order_priority(
+        BondForm::from_order(1).with_charge(2).with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::from_order(2).with_charge(-2),
+        Ordering::Less
+    )]
+    #[case::charge_priority(
+        BondForm::default().with_charge(-1).with_unpaired_electrons((1_u8, 2_u8)),
+        BondForm::default().with_charge(1),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        BondForm::default().with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        BondForm::default(),
+        BondForm::default().with_constraint(BondConstraintForm::aromatic(true)),
+        Ordering::Less
+    )]
+    #[case::raw_order(
+        BondForm::from_order(1),
+        BondForm::new(NumForm::lit_set([1])),
+        Ordering::Less
+    )]
+    fn test_bond_form_as_color_order(
+        #[case] lhs: BondForm,
+        #[case] rhs: BondForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(BondForm::default(), BondForm::default())]
+    #[case::constraint(
+        BondForm::from_order(2).with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::from_order(2)
+    )]
+    #[case::fields(
+        BondForm::from_order(2).with_charge(-1).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::from_order(2).with_charge(-1).with_unpaired_electrons((1_u8, 2_u8))
+    )]
+    #[case::raw_order(
+        BondForm::new(NumForm::lit_set([1])).with_charge(NumForm::lit_set([-1])).with_constraint(BondConstraintForm::aromatic(true)),
+        BondForm::new(NumForm::lit_set([1])).with_charge(NumForm::lit_set([-1]))
+    )]
+    fn test_bond_form_as_field_color(#[case] input: BondForm, #[case] expected: BondForm) {
+        let original = input.clone();
+        let color = input.as_field_color();
+        let expected_color = BondFieldColor {
+            order: &expected.order,
+            charge: &expected.charge,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
+    }
+
+    #[rstest]
+    fn test_bond_color_size() {
+        assert_eq!(size_of::<BondColor<'_>>(), size_of::<&BondForm>());
     }
 }

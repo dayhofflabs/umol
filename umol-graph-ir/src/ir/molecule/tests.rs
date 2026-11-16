@@ -16,7 +16,7 @@ use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm, Remapping, ShortestCycleAlgorithm,
     SimpleCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
-use umol_perm::{DynPermutation, Permutation, MAX_DEGREE};
+use umol_perm::{DynPermutation, Orientation, Permutation, MAX_DEGREE};
 
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
@@ -26,10 +26,10 @@ use super::super::compact::MoleculeCompaction;
 use super::super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintsForm, BondConstraintForm,
     BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
-    DativeBondConstraintsForm, FluxionalityForm, LigandPermutation, MoleculeConstraint,
-    MulticenterBondConstraintForm, NoncovalentBondConstraintForm, RelationalConstraint, RingScope,
-    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
-    TopicityForm, TopicityRelationForm,
+    DativeBondConstraintsForm, LigandPermutation, LigandSymmetryForm, MoleculeConstraint,
+    MulticenterBondConstraintForm, NoncovalentBondConstraintForm, OrientedLigandPermutation,
+    RelationalConstraint, RingScope, StereoAtomConstraintForm, StereoBondConstraintForm,
+    StereoLigandPair, StereogenicityForm, TopicityForm, TopicityRelationForm,
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondForm;
@@ -1059,10 +1059,7 @@ fn test_molecule_try_from_entries_error(
         entries.constraints = Constraint::StereoAtom(
             StereoAtomId(0),
             StereoKind::Tetrahedral,
-            StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: LigandPermutation(Permutation::identity(3)),
-                active: BooleanForm::Lit(true),
-            }),
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }),
         )
         .into();
     },
@@ -7309,10 +7306,7 @@ fn test_molecule_editor_constraints_mut(#[from(rich_molecule)] molecule: Molecul
 )]
 #[case::permutation(
     Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::identity(3)),
-            active: BooleanForm::Lit(true),
-        })),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })),
     MoleculeIntegrityError::StereoPermutationDegree {
         entity: Entity::StereoAtom(StereoAtomId(0)), expected: 4, actual: 3,
     }

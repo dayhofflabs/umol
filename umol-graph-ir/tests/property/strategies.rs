@@ -35,23 +35,22 @@ pub(crate) use umol_graph_ir::ir::{
     Constraint, ConstraintDelta, ConstraintEdit, Constraints, DativeBondConstraintForm,
     DativeBondConstraintKey, DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange,
     DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
-    ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, FluxionalityForm,
-    FrameTransport, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
-    LigandSymmetryForm, MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence,
-    MoleculeEntries, MoleculeIntegrityError, MulticenterBondConstraintForm,
-    MulticenterBondConstraintKey, MulticenterBondConstraintsForm, MulticenterBondDelta,
-    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondHandle, MulticenterBondId,
-    MulticenterBondUpdate, MulticenterValenceForm, NoncovalentBondConstraintForm,
-    NoncovalentBondConstraintsForm, NoncovalentBondDelta, NoncovalentBondFieldChange,
-    NoncovalentBondForm, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindForm, NoncovalentBondUpdate, Normalize, NumForm, OrientedLigandPermutation,
-    PredExpr, Reaction, ReactionSpan, RelOp, RelationalConstraint, RingMembershipForm, RingScope,
-    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange,
-    StereoAtomForm, StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
-    StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationForm,
-    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm,
+    ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, FrameTransport, FromIr,
+    IntoIr, IsotopeMassForm, Lattice, LigandPermutation, LigandSymmetryForm, MemOp, Molecule,
+    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MoleculeIntegrityError,
+    MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsForm,
+    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondHandle,
+    MulticenterBondId, MulticenterBondUpdate, MulticenterValenceForm,
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm, NoncovalentBondDelta,
+    NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle, NoncovalentBondId,
+    NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate, Normalize, NumForm,
+    OrientedLigandPermutation, PredExpr, Reaction, ReactionSpan, RelOp, RelationalConstraint,
+    RingMembershipForm, RingScope, StereoAtomConstraintForm, StereoAtomConstraintsForm,
+    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomHandle, StereoAtomId,
+    StereoAtomUpdate, StereoBondConstraintForm, StereoBondConstraintsForm, StereoBondDelta,
+    StereoBondFieldChange, StereoBondForm, StereoBondHandle, StereoBondId, StereoBondUpdate,
+    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm,
     TetrahedralStereoForm, Topicity, TopicityForm, TopicityRelationForm, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
@@ -283,7 +282,7 @@ pub(crate) fn raw_topicity_relation_strategy() -> BoxedStrategy<TopicityRelation
 
 pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<StereogenicityForm> {
     prop_oneof![
-        2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric]))),
+        2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Nonstereogenic]))),
         2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
         3 => stereogenicity_relation_strategy(),
     ]
@@ -1195,6 +1194,7 @@ pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRela
         Just(TopicityRelationForm::Lit(Topicity::Homotopic)),
         Just(TopicityRelationForm::Lit(Topicity::Enantiotopic)),
         Just(TopicityRelationForm::Lit(Topicity::Diastereotopic)),
+        Just(TopicityRelationForm::Lit(Topicity::Distinct)),
         Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Homotopic
         ]))),
@@ -1204,19 +1204,22 @@ pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRela
         Just(TopicityRelationForm::NotSet(BTreeSet::from([
             Topicity::Diastereotopic
         ]))),
+        Just(TopicityRelationForm::NotSet(BTreeSet::from([
+            Topicity::Distinct
+        ]))),
     ]
 }
 
 pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityForm> {
     prop_oneof![
-        Just(StereogenicityForm::Lit(Stereogenicity::Symmetric)),
-        Just(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+        Just(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic)),
+        Just(StereogenicityForm::Lit(Stereogenicity::Prostereogenic)),
         Just(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
         Just(StereogenicityForm::NotSet(BTreeSet::from([
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         ]))),
         Just(StereogenicityForm::NotSet(BTreeSet::from([
-            Stereogenicity::Prochiral
+            Stereogenicity::Prostereogenic
         ]))),
         Just(StereogenicityForm::NotSet(BTreeSet::from([
             Stereogenicity::Stereogenic
@@ -1254,15 +1257,6 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
             },
             invariant: BooleanForm::Lit(invariant),
         })
-}
-
-pub(crate) fn fluxionality_strategy(degree: usize) -> impl Strategy<Value = FluxionalityForm> {
-    (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
-        FluxionalityForm {
-            permutation: LigandPermutation(permutation),
-            active: BooleanForm::Lit(active),
-        }
-    })
 }
 
 pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = TopicityForm> {
@@ -1367,12 +1361,6 @@ macro_rules! stereo_constraint_strategy {
                             invariant: BooleanForm::Lit(invariant),
                         })
                     }),
-                (permutation_strategy(degree), any::<bool>()).prop_map(|(permutation, active)| {
-                    $constraint::Fluxionality(FluxionalityForm {
-                        permutation: LigandPermutation(permutation),
-                        active: BooleanForm::Lit(active),
-                    })
-                }),
                 (ligand_pair_strategy(degree), topicity_relation_strategy()).prop_map(
                     |(pair, relation)| $constraint::Topicity(TopicityForm { pair, relation })
                 ),
@@ -4580,8 +4568,8 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
             StereoAtomId(id),
             StereoKind::Tetrahedral,
             StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(match value % 3 {
-                0 => Stereogenicity::Symmetric,
-                1 => Stereogenicity::Prochiral,
+                0 => Stereogenicity::Nonstereogenic,
+                1 => Stereogenicity::Prostereogenic,
                 _ => Stereogenicity::Stereogenic,
             })),
         ),
@@ -4589,8 +4577,8 @@ fn transaction_constraint(kind: EntityKind, id: u32, value: i64) -> Constraint {
             StereoBondId(id),
             StereoKind::CisTrans,
             StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(match value % 3 {
-                0 => Stereogenicity::Symmetric,
-                1 => Stereogenicity::Prochiral,
+                0 => Stereogenicity::Nonstereogenic,
+                1 => Stereogenicity::Prostereogenic,
                 _ => Stereogenicity::Stereogenic,
             })),
         ),

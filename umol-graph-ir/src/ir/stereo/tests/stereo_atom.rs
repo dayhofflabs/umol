@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use pretty_assertions::assert_eq;
 
 use super::*;
@@ -65,10 +68,6 @@ fn test_stereo_atom_form_normalize(
         invariant: BooleanForm::Lit(true),
     })),
 )]
-#[case::fluxionality(
-    StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) }),
-    Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(false) })),
-)]
 #[case::topicity(
     StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::lit_set([Topicity::Homotopic]) }),
     Some(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })),
@@ -110,7 +109,7 @@ fn test_stereo_atom_form_normalize_constraints(
 }
 
 #[rstest]
-#[case::literal(StereogenicityForm::Lit(Stereogenicity::Symmetric))]
+#[case::literal(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))]
 #[case::contradiction(StereogenicityForm::lit_set([]))]
 fn test_stereo_atom_form_normalized_eq_constraints(#[case] payload: StereogenicityForm) {
     let form = StereoAtomForm {
@@ -150,7 +149,7 @@ fn test_stereo_atom_form_meet(
 }
 
 #[rstest]
-#[case::literal(StereogenicityForm::Lit(Stereogenicity::Symmetric))]
+#[case::literal(StereogenicityForm::Lit(Stereogenicity::Nonstereogenic))]
 #[case::contradiction(StereogenicityForm::lit_set([]))]
 fn test_stereo_atom_form_meet_constraints(
     #[case] payload: StereogenicityForm,
@@ -284,15 +283,21 @@ fn test_stereo_atom_form_mirror(#[case] input: StereoAtomForm, #[case] expected:
 fn test_stereo_atom_form_reframe_by_constraints() {
     let action = Permutation::from_image(&[1, 0, 2, 3]);
     let input = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
         }),
     );
     let expected = StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])),
-            active: BooleanForm::Lit(true),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
         }),
     );
 
@@ -507,16 +512,6 @@ fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomForm) {
     StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
     true
 )]
-#[case::fluxionality(
-    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
-        })
-    ),
-    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-    true
-)]
 #[case::topicity(
     StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
         StereoAtomConstraintForm::Topicity(TopicityForm {
@@ -532,18 +527,12 @@ fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomForm) {
         .with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
             Stereogenicity::Stereogenic
         )))
-        .with_constraint(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
-        })),
+        .with_constraint(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })),
     StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32)
         .with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
             Stereogenicity::Stereogenic
         )))
-        .with_constraint(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
-            active: BooleanForm::Lit(true),
-        }))
+        .with_constraint(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) }))
         .reframe_by(&Permutation::from_image(&[1, 0, 2, 3]))
         .expect("case action is an action of the kind"),
     true
@@ -554,4 +543,77 @@ fn test_stereo_atom_form_as_color(
     #[case] expected: bool,
 ) {
     assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+    if expected {
+        let mut lhs_hash = DefaultHasher::new();
+        let mut rhs_hash = DefaultHasher::new();
+        lhs.as_color().hash(&mut lhs_hash);
+        rhs.as_color().hash(&mut rhs_hash);
+        assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+    }
+}
+
+#[rstest]
+#[case::kind_priority(
+    StereoAtomForm::default().with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    Ordering::Less
+)]
+#[case::kind(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoAtomForm::new(StereoKind::SquarePlanar, 0_u32),
+    Ordering::Less
+)]
+#[case::constraint(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    Ordering::Less
+)]
+#[case::raw_constraint(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))),
+    Ordering::Less
+)]
+#[case::raw_coset(
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0])),
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    Ordering::Equal
+)]
+fn test_stereo_atom_form_as_color_order(
+    #[case] lhs: StereoAtomForm,
+    #[case] rhs: StereoAtomForm,
+    #[case] expected: Ordering,
+) {
+    assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+}
+
+#[rstest]
+#[case::empty(StereoAtomForm::default(), None)]
+#[case::kindless(
+    StereoAtomForm::default().with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), None)]
+#[case::constraint(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), Some(StereoKind::Tetrahedral))]
+#[case::contradiction(
+    StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([]))), Some(StereoKind::Tetrahedral))]
+#[case::raw_coset(
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::mirror(StereoTerm::var_in("x", [])))).with_constraint(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::lit_set([Stereogenicity::Stereogenic]))), Some(StereoKind::Tetrahedral))]
+#[case::raw_frame_constraint(
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0])).with_constraint(StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(7)), relation: TopicityRelationForm::Lit(Topicity::Enantiotopic) })), Some(StereoKind::Tetrahedral))]
+#[case::kind(
+    StereoAtomForm::new(StereoKind::SquarePlanar, 0_u32),
+    Some(StereoKind::SquarePlanar)
+)]
+fn test_stereo_atom_form_as_field_color(
+    #[case] input: StereoAtomForm,
+    #[case] expected: Option<StereoKind>,
+) {
+    let original = input.clone();
+    let color = input.as_field_color();
+    let expected_color = StereoAtomFieldColor { kind: expected };
+    assert_eq!(color, expected_color);
+    let mut actual_hash = DefaultHasher::new();
+    let mut expected_hash = DefaultHasher::new();
+    color.hash(&mut actual_hash);
+    expected_color.hash(&mut expected_hash);
+    assert_eq!(actual_hash.finish(), expected_hash.finish());
+    assert_eq!(input, original);
 }

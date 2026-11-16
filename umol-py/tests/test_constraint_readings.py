@@ -25,11 +25,12 @@ from umol import (
     Edits,
     Element,
     ElementForm,
-    FluxionalityForm,
+    GraphSymmetryConfig,
     InvalidatedViewError,
     LigandPermutation,
     LigandSymmetryForm,
     Molecule,
+    MoleculeDefaults,
     MulticenterBondConstraintForm,
     MulticenterBondConstraintsForm,
     MulticenterBondForm,
@@ -143,10 +144,10 @@ ENTITY_CASES = [
     pytest.param(
         "stereo_bonds", StereoBondConstraintsForm,
         StereoBondConstraintForm.Stereogenicity(
-            StereogenicityForm.LitSet({Stereogenicity.Symmetric})
+            StereogenicityForm.LitSet({Stereogenicity.Nonstereogenic})
         ),
         StereoBondConstraintForm.Stereogenicity(
-            StereogenicityForm.Lit(Stereogenicity.Symmetric)
+            StereogenicityForm.Lit(Stereogenicity.Nonstereogenic)
         ),
         StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()),
         StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()),
@@ -242,7 +243,8 @@ def test_entity_constraints_view_asserted(
 
 
 @pytest.mark.parametrize(
-    "namespace,container_type,raw,expected,top,derived,closed", ENTITY_CASES
+    "namespace,container_type,raw,expected,top,derived,closed",
+    [case for case in ENTITY_CASES if case.values[0] not in ("stereo_atoms", "stereo_bonds")]
 )
 def test_entity_constraints_view_evidenced(
     molecule, namespace, container_type, raw, expected, top, derived, closed,
@@ -285,7 +287,8 @@ def test_entity_constraints_view_derived_error(
 
 
 @pytest.mark.parametrize(
-    "namespace,container_type,raw,expected,top,derived,closed", ENTITY_CASES
+    "namespace,container_type,raw,expected,top,derived,closed",
+    [case for case in ENTITY_CASES if case.values[0] not in ("stereo_atoms", "stereo_bonds")]
 )
 @pytest.mark.parametrize("operation", ["transact", "tracked_transact", "combine"])
 def test_entity_constraints_view_evidenced_invalidation(
@@ -308,7 +311,8 @@ def test_entity_constraints_view_evidenced_invalidation(
 
 
 @pytest.mark.parametrize(
-    "namespace,container_type,raw,expected,top,derived,closed", ENTITY_CASES
+    "namespace,container_type,raw,expected,top,derived,closed",
+    [case for case in ENTITY_CASES if case.values[0] not in ("stereo_atoms", "stereo_bonds")]
 )
 @pytest.mark.parametrize("method", ["edit", "apply", "tracked_apply"])
 def test_entity_constraints_view_evidenced_edit(
@@ -439,10 +443,6 @@ def test_entity_constraints_view_derived_frame(source, namespace, expected, meth
              LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Proper), True),
          LigandSymmetryForm(OrientedLigandPermutation(
              LigandPermutation(Permutation([1, 0, 2, 3])), Orientation.Proper), BooleanForm.Undetermined())),
-        ("Fluxionality",
-         FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False),
-         FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), False),
-         FluxionalityForm(LigandPermutation(Permutation([1, 0, 2, 3])), BooleanForm.Undetermined())),
         ("Topicity",
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.LitSet({Topicity.Homotopic})),
          TopicityForm(StereoLigandPair(0, 1), TopicityRelationForm.Lit(Topicity.Homotopic)),
@@ -483,7 +483,7 @@ def test_stereo_constraints_view_asserted(
     reading = top if configuration == "kindless" else expected
     for method in ("asserted", "asserted_complete"):
         assert getattr(view, method)(raw.key) == reading
-    if backing == "molecule":
+    if backing == "molecule" and configuration == "kindless":
         for method in ("evidenced", "evidenced_complete"):
             assert getattr(view, method)(raw.key) == reading
         assert view.derived(raw.key) == top
@@ -496,6 +496,156 @@ def test_stereo_constraints_view_asserted(
     entity.configuration = StereoConfigurationForm.Undetermined()
     assert view.asserted(raw.key) == top
     assert view.get(raw.key) == raw
+
+
+@pytest.fixture(params=["atom", "bond"])
+def stereo_molecule(request):
+    if request.param == "atom":
+        source = ('{:atoms ["C" "H" "F" "Cl" "Br"] '
+                  ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+                  ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}')
+        return (Molecule.parse(source, defaults=MoleculeDefaults.concrete()),
+                "stereo_atoms", StereoAtomConstraintForm, StereoAtomConstraintsForm,
+                (0, 1), Topicity.Distinct, [0, 1, 2, 3])
+    source = ('{:atoms ["C" "C" "F" "Cl" "F" "Cl"] '
+              ':bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] '
+              ':stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}')
+    return (Molecule.parse(source, defaults=MoleculeDefaults.concrete()),
+            "stereo_bonds", StereoBondConstraintForm, StereoBondConstraintsForm,
+            (0, 2), Topicity.Homotopic, [2, 3, 0, 1])
+
+
+@pytest.mark.parametrize("reading", ["stereogenicity", "topicity", "ligand_symmetry", "moved"])
+@pytest.mark.parametrize("assertion", ["absent", "matching", "conflicting"])
+@pytest.mark.parametrize("include_constraints", [False, True])
+@pytest.mark.parametrize("attach_on_constraints", [False, True])
+def test_stereo_constraints_view_with_symmetry(
+    stereo_molecule, reading, assertion, include_constraints, attach_on_constraints,
+):
+    molecule, namespace, constraint_type, container_type, pair, topicity, image = stereo_molecule
+    if reading == "stereogenicity":
+        expected = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Stereogenic))
+        contrary = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Nonstereogenic))
+        top = constraint_type.Stereogenicity(StereogenicityForm.Undetermined())
+    elif reading == "topicity":
+        pair = StereoLigandPair(*pair)
+        expected = constraint_type.Topicity(TopicityForm(pair, TopicityRelationForm.Lit(topicity)))
+        contrary = constraint_type.Topicity(TopicityForm(pair, TopicityRelationForm.Lit(
+            Topicity.Homotopic if topicity == Topicity.Distinct else Topicity.Distinct)))
+        top = constraint_type.Topicity(TopicityForm(pair, TopicityRelationForm.Undetermined()))
+    else:
+        permutation = OrientedLigandPermutation(LigandPermutation(Permutation(
+            image if reading == "ligand_symmetry" else [1, 0, 2, 3])), Orientation.Proper)
+        expected = constraint_type.LigandSymmetry(LigandSymmetryForm(permutation, reading == "ligand_symmetry"))
+        contrary = constraint_type.LigandSymmetry(LigandSymmetryForm(permutation, reading != "ligand_symmetry"))
+        top = constraint_type.LigandSymmetry(LigandSymmetryForm(permutation, BooleanForm.Undetermined()))
+    entity = getattr(molecule, namespace)[0]
+    own = expected if assertion == "matching" else contrary if assertion == "conflicting" else top
+    if assertion != "absent":
+        entity.constraints.set(own)
+    original = molecule.copy()
+    data = molecule.graph_symmetry(GraphSymmetryConfig(include_constraints=include_constraints)).into_graph_symmetry()
+    source = entity.constraints
+    references = sys.getrefcount(data)
+    attached = (source.with_symmetry(data) if attach_on_constraints else
+                entity.with_symmetry(data).constraints)
+    assert sys.getrefcount(data) == references + 1
+    key = expected.key
+    assert attached.asserted(key) == own
+    assert attached.asserted_complete(key) == own
+    assert attached.derived(key) == expected
+    assert attached.derived_complete(key) == expected
+    evidence = None if assertion == "conflicting" else expected
+    assert attached.evidenced(key) == evidence
+    assert attached.evidenced_complete(key) == evidence
+    pattern = container_type([expected])
+    assert attached.satisfies(pattern) == (assertion != "conflicting")
+    assert attached.is_compatible(pattern) == (assertion != "conflicting")
+    assert attached.satisfies(container_type([]))
+    assert attached.is_compatible(container_type([]))
+    with pytest.raises(ValueError, match="requires symmetry context"):
+        source.derived(key)
+    assert molecule == original
+    del molecule, data, entity, source
+    assert attached.derived(key) == expected
+
+
+@pytest.mark.parametrize("reading", ["stereogenicity", "topicity", "ligand_symmetry"])
+@pytest.mark.parametrize("kindless", [False, True])
+def test_stereo_constraints_view_derived_error(stereo_molecule, reading, kindless):
+    molecule, namespace, constraint_type, container_type, pair, _, image = stereo_molecule
+    if reading == "stereogenicity":
+        top = constraint_type.Stereogenicity(StereogenicityForm.Undetermined())
+        literal = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Stereogenic))
+    elif reading == "topicity":
+        top = constraint_type.Topicity(TopicityForm(StereoLigandPair(*pair), TopicityRelationForm.Undetermined()))
+        literal = constraint_type.Topicity(TopicityForm(StereoLigandPair(*pair), Topicity.Homotopic))
+    else:
+        permutation = OrientedLigandPermutation(LigandPermutation(Permutation(image)), Orientation.Proper)
+        top = constraint_type.LigandSymmetry(LigandSymmetryForm(permutation, BooleanForm.Undetermined()))
+        literal = constraint_type.LigandSymmetry(LigandSymmetryForm(permutation, True))
+    entity = getattr(molecule, namespace)[0]
+    if kindless:
+        entity.configuration = StereoConfigurationForm.Undetermined()
+    view = entity.constraints
+    for method in READINGS[2:]:
+        if kindless:
+            assert getattr(view, method)(top.key) == top
+        else:
+            with pytest.raises(ValueError, match="requires symmetry context"):
+                getattr(view, method)(top.key)
+    for method in ("satisfies", "is_compatible"):
+        assert getattr(view, method)(container_type([]))
+        if kindless:
+            assert getattr(view, method)(container_type([literal])) == (method == "is_compatible")
+        else:
+            with pytest.raises(ValueError, match="requires symmetry context"):
+                getattr(view, method)(container_type([literal]))
+
+
+def test_stereo_constraints_view_with_symmetry_error(stereo_molecule, forms):
+    molecule, namespace, _, _, _, _, _ = stereo_molecule
+    data = molecule.graph_symmetry(GraphSymmetryConfig()).into_graph_symmetry()
+    with pytest.raises(ValueError, match="requires molecule context"):
+        forms[namespace].constraints.with_symmetry(data)
+
+
+@pytest.mark.parametrize("operation", ["transact", "tracked_transact", "combine_from"])
+def test_stereo_constraints_view_with_symmetry_invalidation(stereo_molecule, operation):
+    molecule, namespace, constraint_type, container_type, _, _, _ = stereo_molecule
+    data = molecule.graph_symmetry(GraphSymmetryConfig()).into_graph_symmetry()
+    view = getattr(molecule, namespace)[0].constraints.with_symmetry(data)
+    expected = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Stereogenic))
+    saved = view.derived(expected.key)
+    if operation == "combine_from":
+        molecule.combine_from(Molecule())
+    else:
+        getattr(molecule, operation)([Edits()])
+    for method in READINGS:
+        with pytest.raises(InvalidatedViewError):
+            getattr(view, method)(expected.key)
+    for method in ("satisfies", "is_compatible"):
+        with pytest.raises(InvalidatedViewError):
+            getattr(view, method)(container_type([]))
+    with pytest.raises(InvalidatedViewError):
+        view.with_symmetry(data)
+    assert saved == expected
+
+
+@pytest.mark.parametrize("operation", ["edit", "apply", "tracked_apply"])
+def test_stereo_constraints_view_with_symmetry_edit(stereo_molecule, operation):
+    molecule, namespace, constraint_type, container_type, _, _, _ = stereo_molecule
+    data = molecule.graph_symmetry(GraphSymmetryConfig()).into_graph_symmetry()
+    view = getattr(molecule, namespace)[0].constraints.with_symmetry(data)
+    expected = constraint_type.Stereogenicity(StereogenicityForm.Lit(Stereogenicity.Stereogenic))
+    if operation == "edit":
+        assert molecule.edit().finish() == molecule
+    else:
+        getattr(molecule, operation)(Edits())
+    for method in READINGS[2:]:
+        assert getattr(view, method)(expected.key) == expected
+    assert view.satisfies(container_type([expected]))
+    assert view.is_compatible(container_type([expected]))
 
 
 @pytest.mark.parametrize(

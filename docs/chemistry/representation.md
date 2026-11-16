@@ -100,7 +100,7 @@ For example, this tetrahedral description uses three actual ligands and an impli
 
 The configuration is relative to that frame. `:cw` abbreviates `"Th1"`; `"Th*"` fixes the
 tetrahedral kind while leaving the coset undetermined. A stereo description does not assert
-stereogenicity: symmetric and prochiral arrangements can also be stored.
+stereogenicity: nonstereogenic and prostereogenic arrangements can also be stored.
 
 Atom `#T` and bond `#C` constraints describe kind only. `#T+` requests tetrahedral stereo;
 `#T!` excludes that kind, and `#T*` adds no constraint. `#C+`, `#C!`, and `#C*` have the
@@ -117,6 +117,27 @@ or lone pair without changing its position or the stored configuration.
 SMILES and MOL raising construct explicit stereo entities. When a source does not identify a
 virtual ligand's kind, raising preserves it as `:virt`. Export conveys explicit frames and
 configurations; an unresolved generic virtual ligand is rejected by the current format conversion.
+
+Stereogenicity describes one record in its present stereo context. Another coset must give a
+different molecule for the record to be Stereogenic. A record that becomes stereogenic after
+one ligand replacement is Prostereogenic; the remainder is Nonstereogenic. Topicity distinguishes
+Homotopic, Enantiotopic and Diastereotopic equivalent ligands from constitutionally Distinct
+ligands. These readings preserve the supplied graph representation.
+
+StereogenicSiteKind instead describes a candidate record's role among possible stereoisomers.
+Constitutional and Configurational sites are the two kinds of stereogenic unit in the literature;
+Prostereogenic and Nonstereogenic complete the classification. The molecule calculates these
+kinds together over its kinded records, independently of their stored coset assignments, and
+returns the batch to the caller. Site selection for stereo transformations uses these kinds.
+A stored arrangement does not by itself assert either classification.
+
+GraphSymmetry holds reusable search data without a molecule or final query results. Molecule and
+stereo-view readings use it with the supplied molecule. GraphSymmetryConfig.include_constraints
+chooses whether entity assertions participate in symmetry, defaulting to false. The readings do
+not normalize their inputs; literal and singleton-set spellings can remain distinguishable.
+Canonicalization separately supplies normalized inputs and includes all represented constraints.
+See the [operation contracts](../development/operations.md#graph-symmetry-and-stereo-readings)
+and [Python interfaces](../development/python-api.md#graph-symmetry-and-attached-stereo-readings).
 
 ## Full and partial specification
 

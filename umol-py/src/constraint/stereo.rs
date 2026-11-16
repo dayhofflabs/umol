@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{
-    FluxionalityForm as GraphIrFluxionalityForm, LigandSymmetryForm as GraphIrLigandSymmetryForm,
+    LigandSymmetryForm as GraphIrLigandSymmetryForm,
     StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
     StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
     StereoAtomConstraintsForm as GraphIrStereoAtomConstraintsForm,
@@ -28,9 +28,10 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr, FrozenSetItems};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::stereo::{
-    LigandPermutation, OrientedLigandPermutation, StereoAtomForm, StereoAtomUpdate, StereoBondForm,
-    StereoBondUpdate, StereoLigandPair, Stereogenicity, Topicity,
+    OrientedLigandPermutation, StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate,
+    StereoLigandPair, Stereogenicity, Topicity,
 };
+use crate::symmetry::GraphSymmetry;
 
 /// A topicity relation constraint value: the undetermined wildcard, a single topicity, a set
 /// of admissible topicities, or the complement of a set. A finite-domain subset lattice over
@@ -304,82 +305,6 @@ impl LigandSymmetryForm {
     }
 }
 
-/// A fluxionality constraint value: a proper ligand permutation realized by dynamics, with an
-/// assertion of whether the move is `active`. Corresponds to the Rust `FluxionalityForm`.
-#[pyclass]
-pub struct FluxionalityForm {
-    pub(crate) permutation: LigandPermutation,
-    pub(crate) active: Py<BooleanForm>,
-}
-
-#[pymethods]
-impl FluxionalityForm {
-    #[new]
-    pub(crate) fn new(
-        py: Python<'_>,
-        permutation: LigandPermutation,
-        active: BooleanLike,
-    ) -> PyResult<Self> {
-        Ok(FluxionalityForm {
-            permutation,
-            active: into_py_variant(py, BooleanForm::from_rust(&active.to_rust(py)))?,
-        })
-    }
-
-    #[getter]
-    pub(crate) fn permutation(&self) -> LigandPermutation {
-        self.permutation
-    }
-
-    #[getter]
-    pub(crate) fn active(&self, py: Python<'_>) -> Py<BooleanForm> {
-        self.active.clone_ref(py)
-    }
-
-    pub(crate) fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
-        self.to_rust(py) == other.to_rust(py)
-    }
-
-    pub(crate) fn __hash__(&self, py: Python<'_>) -> u64 {
-        hash_rust(&self.to_rust(py))
-    }
-
-    pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(format!(
-            "FluxionalityForm({}, {})",
-            self.permutation.__repr__(),
-            self.active.bind(py).as_any().repr()?.extract::<String>()?,
-        ))
-    }
-}
-
-impl_py_lattice!(
-    FluxionalityForm,
-    GraphIrFluxionalityForm,
-    |value: &FluxionalityForm, py: Python<'_>| -> PyResult<GraphIrFluxionalityForm> {
-        Ok(value.to_rust(py))
-    },
-    |py: Python<'_>, value: GraphIrFluxionalityForm| -> PyResult<FluxionalityForm> {
-        FluxionalityForm::from_rust(py, &value)
-    }
-);
-
-impl FluxionalityForm {
-    pub(crate) fn from_rust(py: Python<'_>, form: &GraphIrFluxionalityForm) -> PyResult<Self> {
-        Ok(FluxionalityForm {
-            permutation: LigandPermutation::from_rust(form.permutation),
-            active: into_py_variant(py, BooleanForm::from_rust(&form.active))?,
-        })
-    }
-
-    pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrFluxionalityForm {
-        GraphIrFluxionalityForm {
-            permutation: self.permutation.to_rust(),
-            active: self.active.bind(py).borrow().to_rust(),
-        }
-    }
-}
-
 /// A per-pair topicity constraint value: a relation between a pair of ligand positions.
 /// Corresponds to the Rust `TopicityForm`.
 #[pyclass]
@@ -462,8 +387,8 @@ impl TopicityForm {
 
 /// Per-entity stereo constraint surface — key + constraint enum + container + args —
 /// macro-generated for the two stereo entities (`StereoAtom`, `StereoBond`), which share the
-/// value types (`LigandSymmetryForm`/`FluxionalityForm`/`TopicityForm`/`StereogenicityForm`) and
-/// key sub-types (`OrientedLigandPermutation`/`LigandPermutation`/`StereoLigandPair`); only
+/// value types (`LigandSymmetryForm`/`TopicityForm`/`StereogenicityForm`) and
+/// key sub-types (`OrientedLigandPermutation`/`StereoLigandPair`); only
 /// the enum/container/key names and their Rust IR peers differ.
 macro_rules! stereo_constraints {
     (
@@ -474,13 +399,12 @@ macro_rules! stereo_constraints {
         $value:ident, $entity_update:ident, $view:ident, $storage:ident, $rust_view:ident,
         $rust_id:ident, $namespace:ident, $entity_mut:ident, $id_error:literal $(,)?
     ) => {
-        /// The key (identity) of a stereo constraint: the sub-keyed oriented/ligand
+        /// The key (identity) of a stereo constraint: the sub-keyed oriented
         /// permutation or ligand pair for the per-permutation / per-pair constraints; the
         /// bare discriminant for stereogenicity.
         #[pyclass]
         pub enum $key {
             LigandSymmetry(Py<OrientedLigandPermutation>),
-            Fluxionality(Py<LigandPermutation>),
             Topicity(Py<StereoLigandPair>),
             Stereogenicity(),
         }
@@ -498,7 +422,6 @@ macro_rules! stereo_constraints {
             pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
                 let (variant, arity) = match &*slf.bind(py).borrow() {
                     $key::LigandSymmetry(_) => ("LigandSymmetry", 1),
-                    $key::Fluxionality(_) => ("Fluxionality", 1),
                     $key::Topicity(_) => ("Topicity", 1),
                     $key::Stereogenicity() => ("Stereogenicity", 0),
                 };
@@ -512,10 +435,6 @@ macro_rules! stereo_constraints {
                     $rust_key::LigandSymmetry(permutation) => Self::LigandSymmetry(
                         into_py_variant(py, OrientedLigandPermutation::from_rust(*permutation))?,
                     ),
-                    $rust_key::Fluxionality(permutation) => Self::Fluxionality(into_py_variant(
-                        py,
-                        LigandPermutation::from_rust(*permutation),
-                    )?),
                     $rust_key::Topicity(pair) => {
                         Self::Topicity(into_py_variant(py, StereoLigandPair::from_rust(*pair))?)
                     }
@@ -528,21 +447,17 @@ macro_rules! stereo_constraints {
                     Self::LigandSymmetry(permutation) => {
                         $rust_key::LigandSymmetry(permutation.bind(py).borrow().to_rust())
                     }
-                    Self::Fluxionality(permutation) => {
-                        $rust_key::Fluxionality(permutation.bind(py).borrow().to_rust())
-                    }
                     Self::Topicity(pair) => $rust_key::Topicity(pair.bind(py).borrow().to_rust()),
                     Self::Stereogenicity() => $rust_key::Stereogenicity,
                 }
             }
         }
 
-        /// A stereo constraint: a ligand-symmetry, fluxionality, topicity, or stereogenicity
+        /// A stereo constraint: a ligand-symmetry, topicity, or stereogenicity
         /// predicate on a stereo atom / bond.
         #[pyclass(frozen)]
         pub enum $constraint {
             LigandSymmetry(Py<LigandSymmetryForm>),
-            Fluxionality(Py<FluxionalityForm>),
             Topicity(Py<TopicityForm>),
             Stereogenicity(Py<StereogenicityForm>),
         }
@@ -566,7 +481,6 @@ macro_rules! stereo_constraints {
             pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
                 let variant = match &*slf.bind(py).borrow() {
                     $constraint::LigandSymmetry(_) => "LigandSymmetry",
-                    $constraint::Fluxionality(_) => "Fluxionality",
                     $constraint::Topicity(_) => "Topicity",
                     $constraint::Stereogenicity(_) => "Stereogenicity",
                 };
@@ -591,10 +505,6 @@ macro_rules! stereo_constraints {
                     $rust_constraint::LigandSymmetry(value) => Self::LigandSymmetry(
                         into_py_variant(py, LigandSymmetryForm::from_rust(py, value)?)?,
                     ),
-                    $rust_constraint::Fluxionality(value) => Self::Fluxionality(into_py_variant(
-                        py,
-                        FluxionalityForm::from_rust(py, value)?,
-                    )?),
                     $rust_constraint::Topicity(value) => {
                         Self::Topicity(into_py_variant(py, TopicityForm::from_rust(py, value)?)?)
                     }
@@ -608,9 +518,6 @@ macro_rules! stereo_constraints {
                 match self {
                     Self::LigandSymmetry(value) => {
                         $rust_constraint::LigandSymmetry(value.bind(py).borrow().to_rust(py))
-                    }
-                    Self::Fluxionality(value) => {
-                        $rust_constraint::Fluxionality(value.bind(py).borrow().to_rust(py))
                     }
                     Self::Topicity(value) => {
                         $rust_constraint::Topicity(value.bind(py).borrow().to_rust(py))
@@ -888,19 +795,6 @@ macro_rules! stereo_constraints {
                 BooleanForm::from_rust(self.0.ligand_symmetry(permutation.to_rust()))
             }
 
-            /// The fluxionality constraints.
-            pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityForm>> {
-                self.0
-                    .fluxionalities()
-                    .map(|f| FluxionalityForm::from_rust(py, f))
-                    .collect()
-            }
-
-            /// The fluxionality `active` value at `permutation` (undetermined if absent).
-            pub(crate) fn fluxionality(&self, permutation: LigandPermutation) -> BooleanForm {
-                BooleanForm::from_rust(self.0.fluxionality(permutation.to_rust()))
-            }
-
             /// The topicity constraints.
             pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityForm>> {
                 self.0
@@ -1009,18 +903,21 @@ macro_rules! stereo_constraints {
         /// molecule-backed views.
         /// Semantic readings return independent normal values; None is bottom.
         /// Kindless assertions are vacuous; raw access and mutation retain their payload.
-        /// Derivation, evidence, and comparisons require molecule context.
+        /// Derivation, evidence, and comparisons require molecule context. Kinded derivation
+        /// also requires attached symmetry data; kindless keyed readings remain vacuous.
         /// Views obtained from an Update are read-only; writes raise TypeError.
         #[pyclass]
         pub struct $view {
             pub(crate) storage: $storage,
+            pub(crate) symmetry: Option<Py<GraphSymmetry>>,
         }
 
         impl $view {
             fn read_view<R>(
                 &self,
                 py: Python<'_>,
-                f: impl FnOnce($rust_view<'_>) -> PyResult<R>,
+                keys: impl IntoIterator<Item = $rust_key>,
+                f: impl FnOnce($rust_view<'_>, bool) -> PyResult<R>,
             ) -> PyResult<R> {
                 let $storage::Molecule { owner, counter, id } = &self.storage else {
                     return Err(PyValueError::new_err(concat!(
@@ -1035,7 +932,27 @@ macro_rules! stereo_constraints {
                     .$namespace()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err($id_error))?;
-                f(entity.constraints())
+                let kinded = entity.attributes().configuration.kind().is_some();
+                if kinded {
+                    for key in keys {
+                        if let $rust_key::Topicity(pair) = key {
+                            if pair.first().0 as usize >= entity.ligand_count()
+                                || pair.second().0 as usize >= entity.ligand_count()
+                            {
+                                return Err(PyIndexError::new_err(
+                                    "stereo ligand position out of range",
+                                ));
+                            }
+                        }
+                    }
+                }
+                let view = entity.constraints();
+                if let Some(symmetry) = &self.symmetry {
+                    let symmetry = symmetry.try_borrow(py)?;
+                    f(view.with_symmetry(symmetry.to_rust()), kinded)
+                } else {
+                    f(view, kinded)
+                }
             }
 
             /// Borrow the backing entity's constraints and read through `f` — no clone.
@@ -1088,6 +1005,28 @@ macro_rules! stereo_constraints {
 
         #[pymethods]
         impl $view {
+            /// Attach borrowed symmetry data to a new molecule-backed constraints accessor.
+            /// The source is unchanged; the data/molecule relationship is not validated.
+            fn with_symmetry(&self, py: Python<'_>, symmetry: Py<GraphSymmetry>) -> PyResult<Self> {
+                let $storage::Molecule { owner, counter, id } = &self.storage else {
+                    return Err(PyValueError::new_err(concat!(
+                        stringify!($view),
+                        " requires molecule context"
+                    )));
+                };
+                owner
+                    .try_borrow(py)?
+                    .check_access(*counter, stringify!($view))?;
+                Ok(Self {
+                    storage: $storage::Molecule {
+                        owner: owner.clone_ref(py),
+                        counter: *counter,
+                        id: *id,
+                    },
+                    symmetry: Some(symmetry),
+                })
+            }
+
             /// Read the normalized own assertion; absence is top and None is bottom.
             /// Stored constraints are vacuous when the owning entity has no stereo kind.
             fn asserted(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
@@ -1113,26 +1052,38 @@ macro_rules! stereo_constraints {
                 self.asserted(py, key)
             }
 
-            /// Read the relation projection; None is bottom and undetermined is top.
-            /// Raises ValueError without molecule context.
+            /// Read the derived stereo value as a literal form; kindless records are vacuous.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn derived(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.derived(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
                 })
             }
 
-            /// Read the relation projection with closure; None remains bottom.
-            /// Raises ValueError without molecule context.
+            /// Read derived with closure; stereo completion agrees with derived.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn derived_complete(
                 &self,
                 py: Python<'_>,
                 key: &$key,
             ) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.derived_complete(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
@@ -1140,10 +1091,16 @@ macro_rules! stereo_constraints {
             }
 
             /// Meet the own assertion with derived and additional evidence; None is bottom.
-            /// Raises ValueError without molecule context.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn evidenced(&self, py: Python<'_>, key: &$key) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() && view.asserted(key).is_some() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.evidenced(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
@@ -1151,14 +1108,20 @@ macro_rules! stereo_constraints {
             }
 
             /// Read combined evidence with relation closure; None remains bottom.
-            /// Raises ValueError without molecule context.
+            /// Raises ValueError when required molecule or symmetry context is absent.
             fn evidenced_complete(
                 &self,
                 py: Python<'_>,
                 key: &$key,
             ) -> PyResult<Option<$constraint>> {
                 let key = key.to_rust(py);
-                self.read_view(py, |view| {
+                self.read_view(py, [key], |view, kinded| {
+                    if kinded && self.symmetry.is_none() && view.asserted(key).is_some() {
+                        return Err(PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        )));
+                    }
                     view.evidenced_complete(key)
                         .map(|value| $constraint::from_rust(py, &value))
                         .transpose()
@@ -1166,15 +1129,53 @@ macro_rules! stereo_constraints {
             }
 
             /// Whether complete evidence satisfies every pattern entry.
-            /// Raises ValueError without molecule context, including for empty inputs.
+            /// Requires molecule context. Empty patterns succeed without symmetry data.
             fn satisfies(&self, py: Python<'_>, pattern: &$constraints) -> PyResult<bool> {
-                self.read_view(py, |view| Ok(view.satisfies(&pattern.0)))
+                self.read_view(
+                    py,
+                    pattern.0.iter().map(|entry| entry.key()),
+                    |view, kinded| {
+                        if kinded
+                            && self.symmetry.is_none()
+                            && pattern
+                                .0
+                                .iter()
+                                .next()
+                                .is_some_and(|entry| view.asserted(entry.key()).is_some())
+                        {
+                            return Err(PyValueError::new_err(concat!(
+                                stringify!($view),
+                                " requires symmetry context; use with_symmetry"
+                            )));
+                        }
+                        Ok(view.satisfies(&pattern.0))
+                    },
+                )
             }
 
             /// Whether open evidence is compatible with every entry of other.
-            /// Raises ValueError without molecule context, including for empty inputs.
+            /// Requires molecule context. Empty patterns succeed without symmetry data.
             fn is_compatible(&self, py: Python<'_>, other: &$constraints) -> PyResult<bool> {
-                self.read_view(py, |view| Ok(view.is_compatible(&other.0)))
+                self.read_view(
+                    py,
+                    other.0.iter().map(|entry| entry.key()),
+                    |view, kinded| {
+                        if kinded
+                            && self.symmetry.is_none()
+                            && other
+                                .0
+                                .iter()
+                                .next()
+                                .is_some_and(|entry| view.asserted(entry.key()).is_some())
+                        {
+                            return Err(PyValueError::new_err(concat!(
+                                stringify!($view),
+                                " requires symmetry context; use with_symmetry"
+                            )));
+                        }
+                        Ok(view.is_compatible(&other.0))
+                    },
+                )
             }
 
             pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -1429,28 +1430,6 @@ macro_rules! stereo_constraints {
                 self.read(py, |cs| {
                     Ok(BooleanForm::from_rust(
                         cs.ligand_symmetry(permutation.to_rust()),
-                    ))
-                })
-            }
-
-            /// The fluxionality constraints.
-            pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityForm>> {
-                self.read(py, |cs| {
-                    cs.fluxionalities()
-                        .map(|f| FluxionalityForm::from_rust(py, f))
-                        .collect()
-                })
-            }
-
-            /// The fluxionality `active` value at `permutation` (undetermined if absent).
-            pub(crate) fn fluxionality(
-                &self,
-                py: Python<'_>,
-                permutation: LigandPermutation,
-            ) -> PyResult<BooleanForm> {
-                self.read(py, |cs| {
-                    Ok(BooleanForm::from_rust(
-                        cs.fluxionality(permutation.to_rust()),
                     ))
                 })
             }

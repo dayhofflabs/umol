@@ -53,10 +53,10 @@ use crate::{
         },
         ring::{RingMembershipForm, RingScope},
         stereo::{
-            FluxionalityForm, LigandSymmetryForm, StereoAtomConstraintForm,
-            StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoAtomConstraintsView,
-            StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm,
-            StereoBondConstraintsView, StereogenicityForm, TopicityForm, TopicityRelationForm,
+            LigandSymmetryForm, StereoAtomConstraintForm, StereoAtomConstraintKey,
+            StereoAtomConstraintsForm, StereoAtomConstraintsView, StereoBondConstraintForm,
+            StereoBondConstraintKey, StereoBondConstraintsForm, StereoBondConstraintsView,
+            StereogenicityForm, TopicityForm, TopicityRelationForm,
         },
     },
     correspondence::{Correspondence, MoleculeCorrespondence},
@@ -129,9 +129,11 @@ use crate::{
         StereoAtomViews, StereoBondForm, StereoBondUpdate, StereoBondView, StereoBondViews,
         StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoInconsistency,
         StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoSelection, StereoSite,
-        StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
+        StereoTerm, StereogenicSiteKind, Stereogenicity, TetrahedralConfiguration,
+        TetrahedralStereoForm, Topicity,
     },
     substructure::SubstructureSearchConfig,
+    symmetry::{GraphSymmetry, GraphSymmetryConfig, GraphSymmetryView},
     transaction::{MoleculeEditor, RollbackMethod},
     transform::{
         AddStereoConfig, EnumerateStereoConfig, KekulizeConfig, RemoveStereoConfig,
@@ -212,6 +214,8 @@ mod spin;
 mod stereo;
 #[cfg(feature = "graph")]
 mod substructure;
+#[cfg(feature = "graph")]
+mod symmetry;
 #[cfg(feature = "graph")]
 mod transaction;
 #[cfg(feature = "graph")]
@@ -354,6 +358,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<RingView>()?;
         module.add_class::<RingAtomView>()?;
         module.add_class::<RingBondView>()?;
+        module.add_class::<GraphSymmetry>()?;
+        module.add_class::<GraphSymmetryConfig>()?;
+        module.add_class::<GraphSymmetryView>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;
         module.add_class::<RefinementRounds>()?;
@@ -472,6 +479,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoLigand>()?;
         module.add_class::<Topicity>()?;
         module.add_class::<Stereogenicity>()?;
+        module.add_class::<StereogenicSiteKind>()?;
         module.add_class::<StereoConfigurationForm>()?;
         module.add_class::<StereoConfigurationUpdate>()?;
         module.add_class::<Orientation>()?;
@@ -481,7 +489,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<TopicityRelationForm>()?;
         module.add_class::<StereogenicityForm>()?;
         module.add_class::<LigandSymmetryForm>()?;
-        module.add_class::<FluxionalityForm>()?;
         module.add_class::<TopicityForm>()?;
         module.add_class::<StereoAtomConstraintKey>()?;
         module.add_class::<StereoAtomConstraintForm>()?;

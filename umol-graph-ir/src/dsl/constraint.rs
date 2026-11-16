@@ -37,10 +37,9 @@ use super::stereo::{
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     AromaticValenceForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
-    FluxionalityForm, LigandPermutation, LigandSymmetryForm, MoleculeConstraint,
-    MulticenterValenceForm, OrientedLigandPermutation, RingMembershipForm, RingScope,
-    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
-    TopicityForm,
+    LigandPermutation, LigandSymmetryForm, MoleculeConstraint, MulticenterValenceForm,
+    OrientedLigandPermutation, RingMembershipForm, RingScope, StereoAtomConstraintForm,
+    StereoBondConstraintForm, StereoLigandPair, StereogenicityForm, TopicityForm,
 };
 use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
 use crate::ir::num::NumForm;
@@ -580,34 +579,6 @@ fn read_ligand_symmetry(
     })
 }
 
-fn read_fluxionality(
-    de: &mut EdnStreamDeserializer<'_>,
-    kind: StereoKind,
-) -> Result<FluxionalityForm, EdnError> {
-    let mut permutation = None;
-    let mut active = BooleanForm::Lit(true);
-    read_map(de, |de, key| {
-        match key {
-            "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
-            "active" => active = read_boolean_dsl(de)?.0,
-            other => {
-                return Err(DeError::UnknownField {
-                    key: other.to_string(),
-                    path: vec!["fluxionality".into()],
-                }
-                .into())
-            }
-        }
-        Ok(())
-    })?;
-    let permutation = permutation
-        .ok_or_else(|| DeError::Custom("fluxionality missing :permutation".to_string()))?;
-    Ok(FluxionalityForm {
-        permutation: LigandPermutation(permutation),
-        active,
-    })
-}
-
 fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityForm, EdnError> {
     let mut pair = None;
     let mut value = None;
@@ -673,7 +644,6 @@ macro_rules! read_stereo_constraint_dsl {
             let key = read_single_key_map_header(de)?;
             let constraint = match key.as_str() {
                 "ligand-symmetry" => $constraint::LigandSymmetry(read_ligand_symmetry(de, kind)?),
-                "fluxionality" => $constraint::Fluxionality(read_fluxionality(de, kind)?),
                 "topicity" => $constraint::Topicity(read_topicity(de)?),
                 "stereogenicity" => $constraint::Stereogenicity(read_stereogenicity(de)?),
                 other => {
@@ -1747,9 +1717,9 @@ mod tests {
     use super::*;
     use crate::ir::constraint::{
         AromaticValenceForm, AtomConstraintForm, BondConstraintForm, DativeBondConstraintForm,
-        FluxionalityForm, LigandPermutation, LigandSymmetryForm, MulticenterValenceForm,
-        OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintForm,
-        StereoLigandPair, StereogenicityForm, TopicityForm, TopicityRelationForm,
+        LigandPermutation, LigandSymmetryForm, MulticenterValenceForm, OrientedLigandPermutation,
+        RelationalConstraint, StereoAtomConstraintForm, StereoLigandPair, StereogenicityForm,
+        TopicityForm, TopicityRelationForm,
     };
     use crate::ir::id::{
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
@@ -1811,17 +1781,13 @@ mod tests {
         "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :unexpected 0}}]]}",
         "ligand-symmetry"
     )]
-    #[case::fluxionality(
-        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :unexpected 0}}]]}",
-        "fluxionality"
-    )]
     #[case::topicity("{:stereo-atom [0 [:tetrahedral {:topicity {:pair [0 1] :relation :homotopic :unexpected 0}}]]}", "topicity")]
     #[case::stereogenicity(
-        "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :symmetric :unexpected 0}}]]}",
+        "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :nonstereogenic :unexpected 0}}]]}",
         "stereogenicity"
     )]
     #[case::topicity_complement("{:stereo-atom [0 [:tetrahedral {:topicity {:pair [0 1] :relation {:not-in [:homotopic] :unexpected 0}}}]]}", "relation")]
-    #[case::stereogenicity_complement("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:symmetric] :unexpected 0}}}]]}", "relation")]
+    #[case::stereogenicity_complement("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:nonstereogenic] :unexpected 0}}}]]}", "relation")]
     fn test_read_constraint_dsl_map_keys(
         #[case] source: &str,
         #[case] context: &str,
@@ -1871,7 +1837,7 @@ mod tests {
         ":count"
     )]
     #[case::orientation("{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :proper :orientation :improper}}]]}", ":orientation")]
-    #[case::relation("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:symmetric] :not-in [:stereogenic]}}}]]}", ":not-in")]
+    #[case::relation("{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation {:not-in [:nonstereogenic] :not-in [:stereogenic]}}}]]}", ":not-in")]
     fn test_read_constraint_dsl_duplicate_keys(#[case] source: &str, #[case] key: &str) {
         let expected = EdnError::from(umol_edn::ParseError::DuplicateKey {
             offset: source.rfind(key).unwrap(),
@@ -1939,14 +1905,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fluxionality(
-        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(true) })),
-        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]]}}]]}")]
-    #[case::fluxionality_absent(
-        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])), active: BooleanForm::Lit(false) })),
-        "{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1]] :active false}}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {

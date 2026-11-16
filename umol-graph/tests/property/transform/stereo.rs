@@ -14,7 +14,7 @@
 mod reference;
 mod strategies;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, TestRunner};
@@ -31,10 +31,10 @@ use umol_graph::ops::transform::{
 use umol_graph_core::{AutomorphismAlgorithm, GraphRemapping, Remapping};
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomId, BondConstraintForm, BondConstraintKey, BondId,
-    CisTransStereoForm, Constraint, FrameTransport, Molecule, MoleculeRemapping, NumForm, Reframe,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoTerm, Stereogenicity,
-    TetrahedralStereoForm,
+    CisTransStereoForm, Constraint, FrameTransport, GraphSymmetryConfig, Molecule,
+    MoleculeRemapping, NumForm, Reframe, StereoAtomForm, StereoAtomId, StereoBondForm,
+    StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    StereoTerm, StereogenicSiteKind, Stereogenicity, TetrahedralStereoForm,
 };
 
 use self::reference::{assignments, removed_entries, selected};
@@ -60,15 +60,36 @@ fn test_stereo_perceiver_classify_transport() {
         ..Config::default()
     })
     .run(&stereo_cases(Domain::Undetermined, 0..=4), |case| {
-        let sites = case.sites.iter().map(|info| info.site).collect();
-        let expected: BTreeMap<_, _> = case
+        let sites: Vec<_> = case.sites.iter().map(|info| info.site).collect();
+        let mut expected: Vec<_> = case
             .sites
             .iter()
-            .map(|info| (info.site, info.class))
+            .map(|info| {
+                (
+                    info.site,
+                    match info.class {
+                        Stereogenicity::Stereogenic => StereogenicSiteKind::Constitutional,
+                        Stereogenicity::Prostereogenic => StereogenicSiteKind::Prostereogenic,
+                        Stereogenicity::Nonstereogenic => StereogenicSiteKind::Nonstereogenic,
+                    },
+                )
+            })
             .collect();
+        expected.sort_unstable_by_key(|&(site, _)| site);
         let perception = StereoPerceiver::new(&StereoModel::default());
         prop_assert_eq!(
-            perception.classify(&case.source, &sites, AutomorphismAlgorithm::Nauty, 16),
+            perception.classify(
+                &case.source,
+                &sites,
+                &case
+                    .source
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                        max_classification_trials: 16,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry()
+            ),
             Ok(expected.clone())
         );
         let reframed = case
@@ -77,11 +98,21 @@ fn test_stereo_perceiver_classify_transport() {
             .reframe_by(&case.source.representative_action())
             .unwrap();
         prop_assert_eq!(
-            perception.classify(&reframed, &sites, AutomorphismAlgorithm::Nauty, 16),
+            perception.classify(
+                &reframed,
+                &sites,
+                &reframed
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                        max_classification_trials: 16,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry()
+            ),
             Ok(expected)
         );
         let renamed = renumber(case.source.clone(), &case);
-        let renamed_expected: BTreeMap<_, _> = case
+        let mut renamed_expected: Vec<_> = case
             .sites
             .iter()
             .map(|info| {
@@ -90,13 +121,28 @@ fn test_stereo_perceiver_classify_transport() {
                         StereoSite::Atom(atom) => StereoSite::Atom(case.images[atom.index()]),
                         StereoSite::Bond(bond) => StereoSite::Bond(bond),
                     },
-                    info.class,
+                    match info.class {
+                        Stereogenicity::Stereogenic => StereogenicSiteKind::Constitutional,
+                        Stereogenicity::Prostereogenic => StereogenicSiteKind::Prostereogenic,
+                        Stereogenicity::Nonstereogenic => StereogenicSiteKind::Nonstereogenic,
+                    },
                 )
             })
             .collect();
-        let renamed_sites = renamed_expected.keys().copied().collect();
+        renamed_expected.sort_unstable_by_key(|&(site, _)| site);
+        let renamed_sites: Vec<_> = renamed_expected.iter().map(|&(site, _)| site).collect();
         prop_assert_eq!(
-            perception.classify(&renamed, &renamed_sites, AutomorphismAlgorithm::Nauty, 16),
+            perception.classify(
+                &renamed,
+                &renamed_sites,
+                &renamed
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                        max_classification_trials: 16,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry()
+            ),
             Ok(renamed_expected)
         );
         Ok(())
@@ -133,11 +179,11 @@ fn test_stereo_adder_transform() {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: classes.map(|mask| {
+                stereogenic_site_kinds: classes.map(|mask| {
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
-                        Stereogenicity::Stereogenic,
+                        StereogenicSiteKind::Nonstereogenic,
+                        StereogenicSiteKind::Prostereogenic,
+                        StereogenicSiteKind::Constitutional,
                     ]
                     .into_iter()
                     .enumerate()
@@ -229,11 +275,11 @@ fn test_stereo_adder_transform_relabeling() {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: classes.map(|mask| {
+                stereogenic_site_kinds: classes.map(|mask| {
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
-                        Stereogenicity::Stereogenic,
+                        StereogenicSiteKind::Nonstereogenic,
+                        StereogenicSiteKind::Prostereogenic,
+                        StereogenicSiteKind::Constitutional,
                     ]
                     .into_iter()
                     .enumerate()
@@ -350,7 +396,7 @@ fn test_stereo_adder_transform_evidence() {
                     selection: StereoSelection {
                         sites: Some(BTreeSet::from([info.site])),
                         kinds: Some(BTreeSet::from([info.kind])),
-                        stereogenicities: None,
+                        stereogenic_site_kinds: None,
                     },
                     ..Default::default()
                 },
@@ -398,7 +444,7 @@ fn test_stereo_remover_transform(#[case] mode: RemoveStereoMode) {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
             };
             let removed: BTreeSet<_> = case
                 .sites
@@ -419,7 +465,7 @@ fn test_stereo_remover_transform(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
                     mode,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
             );
             let original = case.source.clone();
@@ -475,11 +521,11 @@ fn test_stereo_remover_transform_classification() {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: Some(
+                stereogenic_site_kinds: Some(
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
-                        Stereogenicity::Stereogenic,
+                        StereogenicSiteKind::Nonstereogenic,
+                        StereogenicSiteKind::Prostereogenic,
+                        StereogenicSiteKind::Constitutional,
                     ]
                     .into_iter()
                     .enumerate()
@@ -547,7 +593,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
             };
             let mut mapped_selection = selection.clone();
             mapped_selection.sites = selection.sites.as_ref().map(|sites| {
@@ -565,7 +611,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
                     mode,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
             )
             .transform(case.source.clone())
@@ -577,7 +623,7 @@ fn test_stereo_remover_transform_relabeling(#[case] mode: RemoveStereoMode) {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection: mapped_selection,
                     mode,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
             )
             .transform(mapped_source)
@@ -618,11 +664,11 @@ fn test_stereo_remover_transform_frames() {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: Some(
+                stereogenic_site_kinds: Some(
                     [
-                        Stereogenicity::Symmetric,
-                        Stereogenicity::Prochiral,
-                        Stereogenicity::Stereogenic,
+                        StereogenicSiteKind::Nonstereogenic,
+                        StereogenicSiteKind::Prostereogenic,
+                        StereogenicSiteKind::Constitutional,
                     ]
                     .into_iter()
                     .enumerate()
@@ -681,7 +727,7 @@ fn test_stereo_enumerator_transform() {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
             };
             let chosen: BTreeSet<_> = case
                 .sites
@@ -747,7 +793,7 @@ fn test_stereo_enumerator_transform() {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
                 case.order.iter().map(|&i| case.sites[i].site).collect(),
             );
@@ -820,7 +866,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                         .filter_map(|(i, kind)| (kinds & (1 << i) != 0).then_some(kind))
                         .collect(),
                 ),
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
             };
             let order: Vec<_> = case.order.iter().map(|&i| case.sites[i].site).collect();
             let actions = case.source.representative_action();
@@ -857,7 +903,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
                 order,
             );
@@ -866,7 +912,7 @@ fn test_stereo_enumerator_transform_transport(#[case] frame: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection: target_selection,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
                 target_order,
             );
@@ -1005,7 +1051,7 @@ fn test_transformer_transform_selection(#[case] atom: bool) {
             let selection = StereoSelection {
                 sites: Some(BTreeSet::from([site])),
                 kinds: Some(BTreeSet::new()),
-                stereogenicities: Some(BTreeSet::new()),
+                stereogenic_site_kinds: Some(BTreeSet::new()),
             };
             let cause = StereoPerceptionError::InvalidSite { site };
             let adder = StereoAdder::with_config(
@@ -1029,7 +1075,7 @@ fn test_transformer_transform_selection(#[case] atom: bool) {
                 EnumerateStereoConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                     selection,
-                    para_stereo_max_iterations: 16,
+                    max_classification_trials: 16,
                 },
                 Vec::new(),
             );
@@ -1155,14 +1201,52 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             StereoPerceptionError::UnsupportedConfiguration { site: info.site }
         };
         let error = EnumerateStereoError::Perception(cause.clone());
+        let classification = match variant {
+            ConfigurationCase::Kindless | ConfigurationCase::SiteKind => {
+                Err(StereoPerceptionError::UnsupportedConfiguration { site: info.site })
+            }
+            ConfigurationCase::SquarePlanar if matches!(info.site, StereoSite::Bond(_)) => {
+                Err(StereoPerceptionError::UnsupportedConfiguration { site: info.site })
+            }
+            ConfigurationCase::SquarePlanar => {
+                let elements = info
+                    .natural
+                    .map(|id| case.source.atom(id).element().clone());
+                let multiplicity = elements
+                    .iter()
+                    .map(|element| elements.iter().filter(|other| *other == element).count())
+                    .max()
+                    .unwrap();
+                Ok(match multiplicity {
+                    1 => StereogenicSiteKind::Constitutional,
+                    2 => StereogenicSiteKind::Configurational,
+                    3 => StereogenicSiteKind::Prostereogenic,
+                    4 => StereogenicSiteKind::Nonstereogenic,
+                    _ => unreachable!(),
+                })
+            }
+            ConfigurationCase::Index | ConfigurationCase::Finite => {
+                Ok(StereogenicSiteKind::Constitutional)
+            }
+            _ => Ok(match info.class {
+                Stereogenicity::Stereogenic => StereogenicSiteKind::Constitutional,
+                Stereogenicity::Prostereogenic => StereogenicSiteKind::Prostereogenic,
+                Stereogenicity::Nonstereogenic => StereogenicSiteKind::Nonstereogenic,
+            }),
+        };
         prop_assert_eq!(
             StereoPerceiver::new(&StereoModel::default()).classify(
                 &source,
-                &BTreeSet::from([info.site]),
-                AutomorphismAlgorithm::Nauty,
-                16
+                &[info.site],
+                &source
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                        max_classification_trials: 16,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry()
             ),
-            Err(cause.clone())
+            classification.clone().map(|kind| vec![(info.site, kind)])
         );
         let selection = StereoSelection {
             sites: Some(BTreeSet::from([info.site])),
@@ -1173,7 +1257,7 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             EnumerateStereoConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: selection.clone(),
-                para_stereo_max_iterations: 16,
+                max_classification_trials: 16,
             },
             vec![info.site],
         );
@@ -1190,32 +1274,57 @@ fn test_transformer_transform_configuration(#[case] variant: ConfigurationCase) 
             RemoveStereoConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: StereoSelection {
-                    stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                    stereogenic_site_kinds: Some(BTreeSet::from([
+                        StereogenicSiteKind::Nonstereogenic,
+                    ])),
                     ..selection.clone()
                 },
                 ..Default::default()
             },
         );
-        prop_assert_eq!(
-            classified.transform_into(&mut input),
-            Err(RemoveStereoError::Perception(cause.clone()))
-        );
-        prop_assert_eq!(
-            classified.transform(source.clone()),
-            Err(RemoveStereoError::Perception(cause))
-        );
-        prop_assert_eq!(
-            classified.transform_iter(&source).collect::<Vec<_>>(),
-            Vec::<Molecule>::new()
-        );
-        prop_assert_eq!(&input, &original);
+        match classification {
+            Ok(kind) => {
+                let expected = if kind == StereogenicSiteKind::Nonstereogenic {
+                    Molecule::from_entries(removed_entries(
+                        &case.entries,
+                        &case.sites,
+                        &BTreeSet::from([info.site]),
+                    ))
+                } else {
+                    source.clone()
+                };
+                prop_assert_eq!(classified.transform(source.clone()), Ok(expected.clone()));
+                prop_assert_eq!(classified.transform_into(&mut input), Ok(()));
+                prop_assert_eq!(&input, &expected);
+                prop_assert_eq!(
+                    classified.transform_iter(&source).collect::<Vec<_>>(),
+                    vec![expected]
+                );
+                input = source.clone();
+            }
+            Err(cause) => {
+                prop_assert_eq!(
+                    classified.transform_into(&mut input),
+                    Err(RemoveStereoError::Perception(cause.clone()))
+                );
+                prop_assert_eq!(
+                    classified.transform(source.clone()),
+                    Err(RemoveStereoError::Perception(cause))
+                );
+                prop_assert_eq!(
+                    classified.transform_iter(&source).collect::<Vec<_>>(),
+                    Vec::<Molecule>::new()
+                );
+                prop_assert_eq!(&input, &original);
+            }
+        }
         let undetermined = StereoRemover::with_config(
             &StereoModel::default(),
             RemoveStereoConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 selection: selection.clone(),
                 mode: RemoveStereoMode::Undetermined,
-                para_stereo_max_iterations: 16,
+                max_classification_trials: 16,
             },
         );
         prop_assert_eq!(undetermined.transform(source.clone()), Ok(source.clone()));

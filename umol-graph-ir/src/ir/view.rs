@@ -24,6 +24,7 @@ mod noncovalent;
 mod readings;
 mod ring;
 mod stereo;
+mod symmetry;
 
 pub use aromatic::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AromaticSystemView,
@@ -57,6 +58,7 @@ pub use stereo::{
     StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,
     StereoBondViewMut, StereoBondViews,
 };
+pub use symmetry::GraphSymmetryView;
 
 #[cfg(test)]
 fn assert_exact_size_by<I, T, U>(mut iterator: I, expected: Vec<U>, mut project: impl FnMut(T) -> U)

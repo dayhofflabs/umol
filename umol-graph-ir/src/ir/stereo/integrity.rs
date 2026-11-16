@@ -187,9 +187,6 @@ fn check_stereo_atom_constraint(
         StereoAtomConstraintForm::LigandSymmetry(value) => {
             check_permutation(entity, ligand_count, value.permutation.permutation.0)
         }
-        StereoAtomConstraintForm::Fluxionality(value) => {
-            check_permutation(entity, ligand_count, value.permutation.0)
-        }
         StereoAtomConstraintForm::Topicity(value) => check_pair(entity, ligand_count, value.pair),
         StereoAtomConstraintForm::Stereogenicity(_) => Ok(()),
     }
@@ -203,9 +200,6 @@ fn check_stereo_bond_constraint(
     match constraint {
         StereoBondConstraintForm::LigandSymmetry(value) => {
             check_permutation(entity, ligand_count, value.permutation.permutation.0)
-        }
-        StereoBondConstraintForm::Fluxionality(value) => {
-            check_permutation(entity, ligand_count, value.permutation.0)
         }
         StereoBondConstraintForm::Topicity(value) => check_pair(entity, ligand_count, value.pair),
         StereoBondConstraintForm::Stereogenicity(_) => Ok(()),

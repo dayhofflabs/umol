@@ -30,7 +30,7 @@ use umol_graph_ir::ir::{
     StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
     StereoLigandPair as GraphIrStereoLigandPair,
     StereoLigandPosition as GraphIrStereoLigandPosition, StereoTerm as GraphIrStereoTerm,
-    Stereogenicity as GraphIrStereogenicity,
+    StereogenicSiteKind as GraphIrStereogenicSiteKind, Stereogenicity as GraphIrStereogenicity,
     TetrahedralConfiguration as GraphIrTetrahedralConfiguration,
     TetrahedralStereoForm as GraphIrTetrahedralStereoForm, Topicity as GraphIrTopicity,
 };
@@ -43,6 +43,7 @@ use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
+use crate::symmetry::GraphSymmetry;
 
 /// A permutation of `0..degree` in one-line (image) notation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -479,6 +480,7 @@ pub enum Topicity {
     Homotopic,
     Enantiotopic,
     Diastereotopic,
+    Distinct,
 }
 
 impl Topicity {
@@ -487,6 +489,7 @@ impl Topicity {
             GraphIrTopicity::Homotopic => Self::Homotopic,
             GraphIrTopicity::Enantiotopic => Self::Enantiotopic,
             GraphIrTopicity::Diastereotopic => Self::Diastereotopic,
+            GraphIrTopicity::Distinct => Self::Distinct,
         }
     }
 
@@ -495,6 +498,7 @@ impl Topicity {
             Self::Homotopic => GraphIrTopicity::Homotopic,
             Self::Enantiotopic => GraphIrTopicity::Enantiotopic,
             Self::Diastereotopic => GraphIrTopicity::Diastereotopic,
+            Self::Distinct => GraphIrTopicity::Distinct,
         }
     }
 }
@@ -505,25 +509,56 @@ impl Topicity {
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Stereogenicity {
-    Symmetric,
-    Prochiral,
+    Nonstereogenic,
+    Prostereogenic,
     Stereogenic,
 }
 
 impl Stereogenicity {
     pub(crate) fn from_rust(ir_value: GraphIrStereogenicity) -> Self {
         match ir_value {
-            GraphIrStereogenicity::Symmetric => Self::Symmetric,
-            GraphIrStereogenicity::Prochiral => Self::Prochiral,
+            GraphIrStereogenicity::Nonstereogenic => Self::Nonstereogenic,
+            GraphIrStereogenicity::Prostereogenic => Self::Prostereogenic,
             GraphIrStereogenicity::Stereogenic => Self::Stereogenic,
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphIrStereogenicity {
         match self {
-            Self::Symmetric => GraphIrStereogenicity::Symmetric,
-            Self::Prochiral => GraphIrStereogenicity::Prochiral,
+            Self::Nonstereogenic => GraphIrStereogenicity::Nonstereogenic,
+            Self::Prostereogenic => GraphIrStereogenicity::Prostereogenic,
             Self::Stereogenic => GraphIrStereogenicity::Stereogenic,
+        }
+    }
+}
+
+/// Classification of a stereo site's role, matching Rust StereogenicSiteKind.
+/// A fieldless, immutable and hashable value, distinct from its Stereogenicity reading.
+#[pyclass(eq, ord, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum StereogenicSiteKind {
+    Constitutional,
+    Configurational,
+    Prostereogenic,
+    Nonstereogenic,
+}
+
+impl StereogenicSiteKind {
+    pub(crate) fn from_rust(value: GraphIrStereogenicSiteKind) -> Self {
+        match value {
+            GraphIrStereogenicSiteKind::Constitutional => Self::Constitutional,
+            GraphIrStereogenicSiteKind::Configurational => Self::Configurational,
+            GraphIrStereogenicSiteKind::Prostereogenic => Self::Prostereogenic,
+            GraphIrStereogenicSiteKind::Nonstereogenic => Self::Nonstereogenic,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphIrStereogenicSiteKind {
+        match self {
+            Self::Constitutional => GraphIrStereogenicSiteKind::Constitutional,
+            Self::Configurational => GraphIrStereogenicSiteKind::Configurational,
+            Self::Prostereogenic => GraphIrStereogenicSiteKind::Prostereogenic,
+            Self::Nonstereogenic => GraphIrStereogenicSiteKind::Nonstereogenic,
         }
     }
 }
@@ -723,6 +758,7 @@ impl StereoAtomUpdate {
     fn constraints(slf: Py<Self>) -> StereoAtomConstraintsView {
         StereoAtomConstraintsView {
             storage: StereoAtomConstraintsStorage::Update(slf),
+            symmetry: None,
         }
     }
 }
@@ -799,6 +835,7 @@ impl StereoBondUpdate {
     fn constraints(slf: Py<Self>) -> StereoBondConstraintsView {
         StereoBondConstraintsView {
             storage: StereoBondConstraintsStorage::Update(slf),
+            symmetry: None,
         }
     }
 }
@@ -1064,8 +1101,8 @@ impl StereoLigandPair {
 
 #[cfg(test)]
 use crate::constraint::stereo::{
-    FluxionalityForm, LigandSymmetryForm, StereoAtomConstraintKey, StereoAtomConstraintsUpdate,
-    StereogenicityForm, TopicityForm, TopicityRelationForm, TopicityRelationLike,
+    LigandSymmetryForm, StereoAtomConstraintKey, StereoAtomConstraintsUpdate, StereogenicityForm,
+    TopicityForm, TopicityRelationForm, TopicityRelationLike,
 };
 use crate::constraint::stereo::{
     StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoAtomConstraintsLike,
@@ -1157,6 +1194,7 @@ macro_rules! stereo_value {
             fn constraints(slf: Py<Self>) -> $view {
                 $view {
                     storage: $storage::Value(slf),
+                    symmetry: None,
                 }
             }
 
@@ -1262,6 +1300,7 @@ macro_rules! stereo_view {
             owner: Py<Molecule>,
             counter: u64,
             id: $rust_id,
+            symmetry: Option<Py<GraphSymmetry>>,
         }
 
         impl $view {
@@ -1273,10 +1312,84 @@ macro_rules! stereo_view {
                     .get(self.id)
                     .ok_or_else(|| PyIndexError::new_err($id_error))
             }
+
+            fn read_with_symmetry<R>(
+                &self,
+                py: Python<'_>,
+                f: impl FnOnce($rust_view<'_>) -> PyResult<R>,
+            ) -> PyResult<R> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
+                let view = self.view(molecule.to_rust())?;
+                let symmetry = self
+                    .symmetry
+                    .as_ref()
+                    .ok_or_else(|| {
+                        PyValueError::new_err(concat!(
+                            stringify!($view),
+                            " requires symmetry context; use with_symmetry"
+                        ))
+                    })?
+                    .try_borrow(py)?;
+                if view.attributes().configuration.kind().is_none() {
+                    return Err(PyValueError::new_err(concat!(
+                        stringify!($view),
+                        " requires a stereo kind"
+                    )));
+                }
+                f(view.with_symmetry(symmetry.to_rust()))
+            }
         }
 
         #[pymethods]
         impl $view {
+            /// Attach borrowed symmetry data to a new accessor, retaining the source.
+            /// The data must describe this molecule; that relationship is not validated.
+            fn with_symmetry(&self, py: Python<'_>, symmetry: Py<GraphSymmetry>) -> PyResult<Self> {
+                self.owner
+                    .try_borrow(py)?
+                    .check_access(self.counter, stringify!($view))?;
+                Ok(Self {
+                    owner: self.owner.clone_ref(py),
+                    counter: self.counter,
+                    id: self.id,
+                    symmetry: Some(symmetry),
+                })
+            }
+
+            /// The raw-input stereogenicity of this record.
+            /// Raises ValueError without attached symmetry data or a stereo kind.
+            fn stereogenicity(&self, py: Python<'_>) -> PyResult<Stereogenicity> {
+                self.read_with_symmetry(py, |view| {
+                    Ok(Stereogenicity::from_rust(view.stereogenicity()))
+                })
+            }
+
+            /// The topicity of two ligand positions in this record's frame.
+            /// Raises ValueError without symmetry or a kind, and IndexError for an unavailable position.
+            fn topicity(&self, py: Python<'_>, a: u32, b: u32) -> PyResult<Topicity> {
+                self.read_with_symmetry(py, |view| {
+                    if a as usize >= view.ligand_count() || b as usize >= view.ligand_count() {
+                        return Err(PyIndexError::new_err("stereo ligand position out of range"));
+                    }
+                    Ok(Topicity::from_rust(view.topicity(
+                        GraphIrStereoLigandPosition(a),
+                        GraphIrStereoLigandPosition(b),
+                    )))
+                })
+            }
+
+            /// Whether an oriented ligand permutation is a symmetry of this record.
+            /// Raises ValueError without symmetry or a kind. Incompatible actions return false.
+            fn ligand_symmetry(
+                &self,
+                py: Python<'_>,
+                permutation: &OrientedLigandPermutation,
+            ) -> PyResult<bool> {
+                let permutation = permutation.to_rust();
+                self.read_with_symmetry(py, |view| Ok(view.ligand_symmetry(permutation)))
+            }
+
             #[getter]
             fn id(&self, py: Python<'_>) -> PyResult<u32> {
                 let molecule = self.owner.try_borrow(py)?;
@@ -1372,6 +1485,10 @@ macro_rules! stereo_view {
                         counter: self.counter,
                         id: self.id,
                     },
+                    symmetry: self
+                        .symmetry
+                        .as_ref()
+                        .map(|symmetry| symmetry.clone_ref(py)),
                 })
             }
 
@@ -1489,6 +1606,7 @@ macro_rules! stereo_views {
                     owner: self.owner.clone_ref(py),
                     counter: self.counter,
                     id,
+                    symmetry: None,
                 })
             }
 
@@ -1521,6 +1639,7 @@ macro_rules! stereo_views {
                         owner: self.owner.clone_ref(py),
                         counter: self.counter,
                         id,
+                        symmetry: None,
                     }))
             }
 
@@ -1543,6 +1662,7 @@ macro_rules! stereo_views {
                         owner: self.owner.clone_ref(py),
                         counter: self.counter,
                         id,
+                        symmetry: None,
                     }))
             }
 
@@ -1589,6 +1709,7 @@ macro_rules! stereo_views {
                     owner: self.owner.clone_ref(py),
                     counter: self.counter,
                     id,
+                    symmetry: None,
                 }))
             }
         }
@@ -1610,8 +1731,7 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
-        AtomForm as GraphIrAtomForm, BondForm as GraphIrBondForm,
-        FluxionalityForm as GraphIrFluxionalityForm, Lattice,
+        AtomForm as GraphIrAtomForm, BondForm as GraphIrBondForm, Lattice,
         LigandSymmetryForm as GraphIrLigandSymmetryForm, MoleculeEntries, Normalize,
         StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
         StereoAtomConstraintKey as GraphIrStereoAtomConstraintKey,
@@ -1756,16 +1876,42 @@ mod tests {
     #[case(GraphIrTopicity::Homotopic)]
     #[case(GraphIrTopicity::Enantiotopic)]
     #[case(GraphIrTopicity::Diastereotopic)]
+    #[case(GraphIrTopicity::Distinct)]
     fn test_topicity_roundtrip(#[case] ir_value: GraphIrTopicity) {
         assert_eq!(Topicity::from_rust(ir_value).to_rust(), ir_value);
     }
 
     #[rstest]
-    #[case(GraphIrStereogenicity::Symmetric)]
-    #[case(GraphIrStereogenicity::Prochiral)]
+    #[case(GraphIrStereogenicity::Nonstereogenic)]
+    #[case(GraphIrStereogenicity::Prostereogenic)]
     #[case(GraphIrStereogenicity::Stereogenic)]
     fn test_stereogenicity_roundtrip(#[case] ir_value: GraphIrStereogenicity) {
         assert_eq!(Stereogenicity::from_rust(ir_value).to_rust(), ir_value);
+    }
+
+    #[rstest]
+    #[case::constitutional(
+        GraphIrStereogenicSiteKind::Constitutional,
+        StereogenicSiteKind::Constitutional
+    )]
+    #[case::configurational(
+        GraphIrStereogenicSiteKind::Configurational,
+        StereogenicSiteKind::Configurational
+    )]
+    #[case::prostereogenic(
+        GraphIrStereogenicSiteKind::Prostereogenic,
+        StereogenicSiteKind::Prostereogenic
+    )]
+    #[case::nonstereogenic(
+        GraphIrStereogenicSiteKind::Nonstereogenic,
+        StereogenicSiteKind::Nonstereogenic
+    )]
+    fn test_stereogenic_site_kind_from_rust(
+        #[case] value: GraphIrStereogenicSiteKind,
+        #[case] expected: StereogenicSiteKind,
+    ) {
+        assert_eq!(StereogenicSiteKind::from_rust(value), expected);
+        assert_eq!(expected.to_rust(), value);
     }
 
     #[rstest]
@@ -2037,12 +2183,12 @@ mod tests {
 
     #[rstest]
     #[case::lit(
-        StereogenicityForm::Lit(Stereogenicity::Prochiral),
-        Some(Stereogenicity::Prochiral)
+        StereogenicityForm::Lit(Stereogenicity::Prostereogenic),
+        Some(Stereogenicity::Prostereogenic)
     )]
     #[case::undetermined(StereogenicityForm::Undetermined(), None)]
     #[case::set(
-        StereogenicityForm::LitSet(FrozenSetItems(BTreeSet::from([Stereogenicity::Symmetric]))),
+        StereogenicityForm::LitSet(FrozenSetItems(BTreeSet::from([Stereogenicity::Nonstereogenic]))),
         None
     )]
     fn test_stereogenicity_form_as_lit(
@@ -2056,8 +2202,8 @@ mod tests {
     #[case(GraphIrStereogenicityForm::Undetermined)]
     #[case(GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic))]
     #[case(GraphIrStereogenicityForm::LitSet(BTreeSet::from([
-        GraphIrStereogenicity::Symmetric,
-        GraphIrStereogenicity::Prochiral,
+        GraphIrStereogenicity::Nonstereogenic,
+        GraphIrStereogenicity::Prostereogenic,
     ])))]
     #[case(GraphIrStereogenicityForm::NotSet(BTreeSet::from([GraphIrStereogenicity::Stereogenic])))]
     fn test_stereogenicity_form_roundtrip(#[case] ir_value: GraphIrStereogenicityForm) {
@@ -2149,76 +2295,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fluxionality_form_new() {
-        Python::attach(|py| {
-            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
-            let value = FluxionalityForm::new(py, permutation, BooleanLike::Lit(false)).unwrap();
-            assert!(value.permutation() == permutation);
-            assert_eq!(
-                value.active.bind(py).borrow().to_rust(),
-                GraphIrBooleanForm::Lit(false)
-            );
-            assert_eq!(
-                value.__repr__(py).unwrap(),
-                "FluxionalityForm(LigandPermutation([1, 0, 2, 3]), BooleanForm.Lit(False))"
-            );
-        });
-    }
-
-    #[rstest]
-    fn test_fluxionality_form_matches() {
-        Python::attach(|py| {
-            let permutation = LigandPermutation::new(Permutation::new(vec![1, 0, 2, 3]).unwrap());
-            let other_permutation =
-                LigandPermutation::new(Permutation::new(vec![0, 1, 2, 3]).unwrap());
-            let wildcard = FluxionalityForm {
-                permutation,
-                active: into_py_variant(py, BooleanForm::Undetermined()).unwrap(),
-            };
-            let active_true = FluxionalityForm {
-                permutation,
-                active: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
-            };
-            let active_false = FluxionalityForm {
-                permutation,
-                active: into_py_variant(py, BooleanForm::Lit(false)).unwrap(),
-            };
-            let other = FluxionalityForm {
-                permutation: other_permutation,
-                active: into_py_variant(py, BooleanForm::Lit(true)).unwrap(),
-            };
-            assert!(wildcard.matches(py, &active_true).unwrap());
-            assert!(!active_true.matches(py, &active_false).unwrap());
-            assert!(!active_true.matches(py, &other).unwrap());
-        });
-    }
-
-    #[rstest]
-    fn test_fluxionality_form_roundtrip() {
-        Python::attach(|py| {
-            for ir_value in [
-                GraphIrFluxionalityForm {
-                    permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[
-                        1, 0, 2, 3,
-                    ])),
-                    active: GraphIrBooleanForm::Lit(false),
-                },
-                GraphIrFluxionalityForm {
-                    permutation: GraphIrLigandPermutation(PermPermutation::identity(4)),
-                    active: GraphIrBooleanForm::Undetermined,
-                },
-            ] {
-                assert_eq!(
-                    FluxionalityForm::from_rust(py, &ir_value)
-                        .unwrap()
-                        .to_rust(py),
-                    ir_value
-                );
-            }
-        });
-    }
-
-    #[rstest]
     fn test_topicity_form_new() {
         Python::attach(|py| {
             let pair = StereoLigandPair::new(0, 2);
@@ -2296,7 +2372,6 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case(GraphIrStereoAtomConstraintForm::LigandSymmetry(GraphIrLigandSymmetryForm { permutation: GraphIrOrientedLigandPermutation { permutation: GraphIrLigandPermutation(PermPermutation::from_image(&[1, 0, 2, 3])), orientation: PermOrientation::Proper }, invariant: GraphIrBooleanForm::Lit(true) }))]
-    #[case(GraphIrStereoAtomConstraintForm::Fluxionality(GraphIrFluxionalityForm { permutation: GraphIrLigandPermutation(PermPermutation::identity(4)), active: GraphIrBooleanForm::Lit(false) }))]
     #[case(GraphIrStereoAtomConstraintForm::Topicity(GraphIrTopicityForm { pair: GraphIrStereoLigandPair::new(GraphIrStereoLigandPosition(0), GraphIrStereoLigandPosition(1)), relation: GraphIrTopicityRelationForm::Lit(GraphIrTopicity::Homotopic) }))]
     #[case(GraphIrStereoAtomConstraintForm::Stereogenicity(GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)))]
     fn test_stereo_atom_constraint_form_roundtrip(#[case] ir_value: GraphIrStereoAtomConstraintForm) {
@@ -2585,6 +2660,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -2625,6 +2701,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let key = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
             let popped = view.pop(py, key).unwrap();
@@ -2658,6 +2735,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             assert_eq!(view.__len__(py).unwrap(), 1);
             let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
@@ -2709,6 +2787,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let keys: Vec<GraphIrStereoAtomConstraintKey> = view
                 .keys(py)
@@ -2744,6 +2823,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let entry = into_py_variant(
                 py,
@@ -2794,6 +2874,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             assert_eq!(
                 view.stereogenicity(py).unwrap().to_rust(),
@@ -2891,6 +2972,7 @@ mod tests {
             .unwrap();
             let view = StereoAtomConstraintsView {
                 storage: StereoAtomConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let own = StereoAtomForm::constraints(value.clone_ref(py));
             view.update(
@@ -2915,6 +2997,7 @@ mod tests {
             .unwrap();
             let view = StereoBondConstraintsView {
                 storage: StereoBondConstraintsStorage::Value(value.clone_ref(py)),
+                symmetry: None,
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -3397,6 +3480,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.__repr__(py).unwrap(), "StereoAtomView(id=0)");
@@ -3410,6 +3494,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(view.site_id(py).unwrap(), 0);
         });
@@ -3422,6 +3507,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(
                 view.ligands(py)
@@ -3446,6 +3532,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(view.kind(py).unwrap(), StereoKind::Tetrahedral);
         });
@@ -3458,6 +3545,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(
                 view.coset(py).unwrap().to_rust(py),
@@ -3473,6 +3561,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
@@ -3508,6 +3597,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             view.set_configuration(py, configuration).unwrap();
             assert_eq!(view.configuration(py).unwrap().to_rust(py), expected);
@@ -3521,6 +3611,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             let stereogenicity = into_py_variant(
                 py,
@@ -3556,6 +3647,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             let mut rust_constraints = GraphIrStereoAtomConstraintsForm::new();
             rust_constraints.extend([GraphIrStereoAtomConstraintForm::Stereogenicity(
@@ -3583,6 +3675,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(0),
+                symmetry: None,
             };
             let dict = view.asdict(py).unwrap();
             let configuration = dict.get_item("configuration").unwrap().unwrap();
@@ -3617,6 +3710,7 @@ mod tests {
                 owner: stereo_atom_molecule(py),
                 counter: 0,
                 id: GraphIrStereoAtomId(5),
+                symmetry: None,
             };
             assert!(view.site_id(py).is_err());
         });
@@ -3629,6 +3723,7 @@ mod tests {
                 owner: stereo_bond_molecule(py),
                 counter: 0,
                 id: GraphIrStereoBondId(0),
+                symmetry: None,
             };
             assert_eq!(view.id(py).unwrap(), 0);
             assert_eq!(view.site_id(py).unwrap(), 0);

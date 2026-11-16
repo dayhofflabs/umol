@@ -3,38 +3,9 @@
 //! StereoAdder creates missing selected tetrahedral/cis-trans entities; StereoRemover
 //! removes selected entities and their source assertions. StereoEnumerator determines
 //! existing selected absolute configurations in the supplied sequence of sites.
-//! All three use StereoPerceiver and intersect site, kind, and stereogenicity filters.
-//! A stored stereo entity may be symmetric or prochiral; its presence does not assert
+//! All three use StereoPerceiver and intersect site, geometry, and stereogenic-site-kind filters.
+//! A stored stereo entity may be nonstereogenic or prostereogenic; its presence does not assert
 //! stereogenicity. Enumeration retains symmetry-equivalent assignments.
-//!
-//! # Examples
-//!
-//! ```
-//! use umol_graph::ops::model::StereoModel;
-//! use umol_graph::ops::stereo::StereoSite;
-//! use umol_graph::ops::transform::{
-//!     AddStereoConfig, RemoveStereoConfig, StereoEnumerator, Transform,
-//! };
-//! use umol_graph_ir::ir::{AtomId, StereoAtomId, StereoKind};
-//! use umol_graph_ir::mol_dsl_concrete;
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let source = mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "Br" "I"]
-//!     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#);
-//! let model = StereoModel::default();
-//! let stereo = source.clone().add_stereo(&model, AddStereoConfig::default())?;
-//! let transformer = StereoEnumerator::new(&model, vec![StereoSite::Atom(AtomId(0))]);
-//! let configurations: Vec<_> = transformer.transform_iter(&stereo)
-//!     .map(|molecule| molecule.stereo_atom(StereoAtomId(0)).attributes().configuration.clone())
-//!     .collect();
-//! assert_eq!(configurations, vec![
-//!     (StereoKind::Tetrahedral, 0).into(),
-//!     (StereoKind::Tetrahedral, 1).into(),
-//! ]);
-//! assert_eq!(stereo.remove_stereo(&model, RemoveStereoConfig::default())?, source);
-//! # Ok(())
-//! # }
-//! ```
 
 mod enumeration;
 
@@ -44,9 +15,9 @@ use std::iter;
 use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomConstraintKey, AtomHandle, BondConstraintKey, BondHandle, ConstitutionColoring, Edits,
-    GraphSymmetryConfig, Molecule, Normalize, RingConfig, StereoAtomHandle, StereoBondHandle,
-    StereoConfigurationForm, StereoCoset, StereoKind, Stereogenicity,
+    AtomConstraintKey, AtomHandle, BondConstraintKey, BondHandle, Edits, GraphSymmetryConfig,
+    Molecule, RingConfig, StereoAtomHandle, StereoBondHandle, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereogenicSiteKind,
 };
 
 use self::enumeration::{AbsoluteStereoAssignments, StereoAssignmentChecks};
@@ -59,9 +30,9 @@ use crate::ops::validate::constraint::ConstraintInvariantsError;
 
 /// Site selection and algorithms for stereo addition.
 ///
-/// Default selects tetrahedral and cis/trans kinds, stereogenic sites only,
-/// and all topology sites. It uses Nauty, RingConfig::default(), and up to
-/// sixteen symmetry refinement iterations when the model enables para stereo.
+/// Default selects tetrahedral and cis/trans geometries, Constitutional and
+/// Configurational sites, and all topology sites. It uses Nauty,
+/// RingConfig::default(), and up to 4096 assignment trials per site classification.
 ///
 /// Construction preserves the supplied selection without checking ids against
 /// a molecule. The executing operation checks ids before indexing or mutation.
@@ -70,7 +41,8 @@ pub struct AddStereoConfig {
     pub selection: StereoSelection,
     pub automorphism_algorithm: AutomorphismAlgorithm,
     pub ring_config: RingConfig,
-    pub para_stereo_max_iterations: u32,
+    /// Assignment-trial limit per site classification; does not limit additions.
+    pub max_classification_trials: u32,
 }
 
 impl Default for AddStereoConfig {
@@ -82,11 +54,14 @@ impl Default for AddStereoConfig {
                     StereoKind::Tetrahedral,
                     StereoKind::CisTrans,
                 ])),
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: Some(BTreeSet::from([
+                    StereogenicSiteKind::Constitutional,
+                    StereogenicSiteKind::Configurational,
+                ])),
             },
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             ring_config: RingConfig::default(),
-            para_stereo_max_iterations: 16,
+            max_classification_trials: GraphSymmetryConfig::default().max_classification_trials,
         }
     }
 }
@@ -106,12 +81,15 @@ pub enum AddStereoError {
 /// model and configuration. New cosets are undetermined.
 /// Existing entities, their frames and configurations,
 /// source assertions, and molecular topology are preserved.
-/// Use the selection's stereogenicities to admit prochiral or symmetric sites;
+/// Use the selection's stereogenic_site_kinds to admit prostereogenic or nonstereogenic sites;
 /// the default admits only stereogenic sites.
 ///
-/// All rejection occurs during planning. Undetermined fields outside the
-/// selected processing scope are retained. Recognition failures and incompatible
-/// selected evidence return AddStereoError. The iterator lazily produces one
+/// All rejection occurs during planning. Site-kind filtering uses all eligible
+/// prospective sites as classification context, so their required recognition fields
+/// must be literal even outside the output selection. Without that filter,
+/// undetermined fields outside the selected processing scope are retained.
+/// Recognition failures and incompatible evidence return AddStereoError.
+/// The iterator lazily produces one
 /// independent result on success and no result on rejection.
 ///
 /// # Semantic properties
@@ -150,7 +128,7 @@ impl StereoAdder {
             &self.config.selection,
             self.config.automorphism_algorithm,
             self.config.ring_config,
-            self.config.para_stereo_max_iterations,
+            self.config.max_classification_trials,
         )?;
         if let Some(&inconsistency) = derivation.inconsistencies.first() {
             return Err(inconsistency.into());
@@ -234,7 +212,7 @@ impl RemoveStereoMode {
 /// Site selection, removal mode, and algorithm for stereo removal.
 ///
 /// Default accepts all configurations and leaves sites, kinds, and
-/// stereogenicities unrestricted. It uses Nauty. One mode applies uniformly
+/// stereogenic_site_kinds unrestricted. It uses Nauty. One mode applies uniformly
 /// to every selected site and kind.
 ///
 /// Construction preserves the supplied selection without checking ids against
@@ -245,7 +223,8 @@ pub struct RemoveStereoConfig {
     pub selection: StereoSelection,
     pub mode: RemoveStereoMode,
     pub automorphism_algorithm: AutomorphismAlgorithm,
-    pub para_stereo_max_iterations: u32,
+    /// Assignment-trial limit per site classification; does not limit removals.
+    pub max_classification_trials: u32,
 }
 
 impl Default for RemoveStereoConfig {
@@ -254,7 +233,7 @@ impl Default for RemoveStereoConfig {
             selection: StereoSelection::default(),
             mode: RemoveStereoMode::All,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            para_stereo_max_iterations: 16,
+            max_classification_trials: GraphSymmetryConfig::default().max_classification_trials,
         }
     }
 }
@@ -268,7 +247,7 @@ pub enum RemoveStereoError {
 
 /// Remove selected stereo entities and their corresponding #T/#C assertions.
 ///
-/// The mode and site/kind selectors apply before stereogenicity is calculated.
+/// The mode and site/kind selectors apply before stereogenic site kinds are calculated.
 /// Classification uses StereoPerceiver with the unchanged molecular context
 /// and is omitted when the class selector is unrestricted. Such removal accepts
 /// kindless, symbolic, and other-geometry records without interpreting them.
@@ -329,14 +308,14 @@ impl StereoRemover {
         if selection.sites.as_ref().is_some_and(BTreeSet::is_empty)
             || selection.kinds.as_ref().is_some_and(BTreeSet::is_empty)
             || selection
-                .stereogenicities
+                .stereogenic_site_kinds
                 .as_ref()
                 .is_some_and(BTreeSet::is_empty)
         {
             return Ok(Edits::new());
         }
 
-        let mut sites: BTreeSet<_> = molecule
+        let mut sites: Vec<_> = molecule
             .stereo_atoms()
             .iter()
             .map(|stereo| {
@@ -365,14 +344,23 @@ impl StereoRemover {
             })
             .map(|(site, _)| site)
             .collect();
-        if let Some(classes) = &selection.stereogenicities {
-            let classifications = self.perception.classify(
-                molecule,
-                &sites,
-                self.config.automorphism_algorithm,
-                self.config.para_stereo_max_iterations,
-            )?;
-            sites.retain(|site| classes.contains(&classifications[site]));
+        if let Some(classes) = &selection.stereogenic_site_kinds {
+            if !sites.is_empty() {
+                let symmetry = molecule
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: self.config.automorphism_algorithm,
+                        max_classification_trials: self.config.max_classification_trials,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry();
+                let classifications = self.perception.classify(molecule, &sites, &symmetry)?;
+                sites.retain(|site| {
+                    let index = classifications
+                        .binary_search_by_key(site, |&(site, _)| site)
+                        .expect("selected site was classified");
+                    classes.contains(&classifications[index].1)
+                });
+            }
         }
 
         let mut edits = Edits::new();
@@ -474,7 +462,7 @@ impl Transformer for StereoRemover {
 /// Site selection and algorithm for stereo enumeration.
 ///
 /// Default selects tetrahedral and cis/trans kinds, all topology sites, and
-/// all stereogenicity values. It uses Nauty. Processing order is supplied
+/// all stereogenic site kinds. It uses Nauty. Processing order is supplied
 /// separately from this configuration.
 ///
 /// Construction preserves the supplied selection without checking ids against
@@ -483,7 +471,8 @@ impl Transformer for StereoRemover {
 pub struct EnumerateStereoConfig {
     pub selection: StereoSelection,
     pub automorphism_algorithm: AutomorphismAlgorithm,
-    pub para_stereo_max_iterations: u32,
+    /// Assignment-trial limit per site classification; does not limit stereoisomer results.
+    pub max_classification_trials: u32,
 }
 
 impl Default for EnumerateStereoConfig {
@@ -495,10 +484,10 @@ impl Default for EnumerateStereoConfig {
                     StereoKind::Tetrahedral,
                     StereoKind::CisTrans,
                 ])),
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
             },
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-            para_stereo_max_iterations: 16,
+            max_classification_trials: GraphSymmetryConfig::default().max_classification_trials,
         }
     }
 }
@@ -632,54 +621,26 @@ impl StereoEnumerator {
                     })
             })
             .collect();
-        if let Some(classes) = &selection.stereogenicities {
+        if let Some(classes) = &selection.stereogenic_site_kinds {
             if classes.is_empty() {
                 configurations.clear();
-            } else {
-                let mut normalized = molecule.clone();
-                for (&site, configuration) in &configurations {
-                    if matches!(
-                        (site, configuration.kind()),
-                        (StereoSite::Atom(_), Some(StereoKind::CisTrans))
-                            | (StereoSite::Bond(_), Some(StereoKind::Tetrahedral))
-                    ) {
-                        return Err(StereoPerceptionError::UnsupportedConfiguration { site }.into());
-                    }
-                    if let Ok(configuration) = configuration.clone().normalize() {
-                        match site {
-                            StereoSite::Atom(atom) => {
-                                let id = normalized
-                                    .stereo_atoms()
-                                    .at(atom)
-                                    .expect("selected stereo atom")
-                                    .id();
-                                normalized
-                                    .stereo_atom_mut(id)
-                                    .attributes_mut()
-                                    .configuration = configuration;
-                            }
-                            StereoSite::Bond(bond) => {
-                                let id = normalized
-                                    .stereo_bonds()
-                                    .at(bond)
-                                    .expect("selected stereo bond")
-                                    .id();
-                                normalized
-                                    .stereo_bond_mut(id)
-                                    .attributes_mut()
-                                    .configuration = configuration;
-                            }
-                        }
-                    }
-                }
-                let sites = configurations.keys().copied().collect();
-                let classifications = StereoPerceiver::new(&self.model).classify(
-                    &normalized,
-                    &sites,
-                    self.config.automorphism_algorithm,
-                    self.config.para_stereo_max_iterations,
-                )?;
-                configurations.retain(|site, _| classes.contains(&classifications[site]));
+            } else if !configurations.is_empty() {
+                let sites: Vec<_> = configurations.keys().copied().collect();
+                let symmetry = molecule
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: self.config.automorphism_algorithm,
+                        max_classification_trials: self.config.max_classification_trials,
+                        ..Default::default()
+                    })
+                    .into_graph_symmetry();
+                let classifications =
+                    StereoPerceiver::new(&self.model).classify(molecule, &sites, &symmetry)?;
+                configurations.retain(|site, _| {
+                    let index = classifications
+                        .binary_search_by_key(site, |&(site, _)| site)
+                        .expect("selected site was classified");
+                    classes.contains(&classifications[index].1)
+                });
             }
         }
         let sites: BTreeSet<_> = configurations.keys().copied().collect();
@@ -700,17 +661,7 @@ impl StereoEnumerator {
                 duplicates,
             });
         }
-        for configuration in configurations.values() {
-            if let Some(kind) = configuration.kind() {
-                if self
-                    .model
-                    .kind_model(kind)
-                    .is_some_and(|model| model.fluxionality)
-                {
-                    return Err(StereoPerceptionError::UnsupportedFluxionality { kind }.into());
-                }
-            }
-        }
+
         let assignments = AbsoluteStereoAssignments::new(ordered.into_iter().map(|site| {
             (
                 site,
@@ -724,10 +675,9 @@ impl StereoEnumerator {
             assignments,
             checks,
             symmetry_config: GraphSymmetryConfig {
-                coloring: ConstitutionColoring::full(),
-                iterate_to_fixpoint: self.model.para_stereo,
-                max_iterations: self.config.para_stereo_max_iterations,
                 automorphism_algorithm: self.config.automorphism_algorithm,
+                max_classification_trials: self.config.max_classification_trials,
+                ..Default::default()
             },
         })
     }
@@ -798,7 +748,7 @@ impl iter::FusedIterator for EnumerateStereoIter {}
 struct StereoEnumeration {
     assignments: AbsoluteStereoAssignments,
     checks: StereoAssignmentChecks,
-    symmetry_config: GraphSymmetryConfig<ConstitutionColoring>,
+    symmetry_config: GraphSymmetryConfig,
 }
 
 impl StereoEnumeration {
@@ -889,6 +839,7 @@ impl StereoEnumeration {
 
 #[cfg(test)]
 mod tests {
+    use umol_graph_ir::ir::StereogenicSiteKind;
     mod adder;
     mod enumerator;
     mod remover;
@@ -910,11 +861,14 @@ mod tests {
                         StereoKind::Tetrahedral,
                         StereoKind::CisTrans,
                     ])),
-                    stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                    stereogenic_site_kinds: Some(BTreeSet::from([
+                        StereogenicSiteKind::Constitutional,
+                        StereogenicSiteKind::Configurational
+                    ])),
                 },
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
                 ring_config: RingConfig::default(),
-                para_stereo_max_iterations: 16,
+                max_classification_trials: 4096,
             },
         );
     }
@@ -972,36 +926,36 @@ mod tests {
                     StereoSite::Bond(BondId(0)),
                 ])),
                 kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])),
             },
             ..Default::default()
         },
         vec![StereoSite::Bond(BondId(0))],
     )]
-    #[case::prochiral(
+    #[case::prostereogenic(
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Prostereogenic])),
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(1))],
     )]
-    #[case::symmetric(
+    #[case::nonstereogenic(
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Nonstereogenic])),
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(2)), StereoSite::Bond(BondId(1))],
     )]
-    #[case::all_stereogenicities(
+    #[case::all_stereogenic_site_kinds(
         AddStereoConfig {
             selection: StereoSelection {
-                stereogenicities: None,
+                stereogenic_site_kinds: None,
                 ..AddStereoConfig::default().selection
             },
             ..Default::default()
@@ -1039,32 +993,32 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(0)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Stereogenic,
+                StereogenicSiteKind::Constitutional,
             ),
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Prochiral,
+                StereogenicSiteKind::Prostereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(2)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Symmetric,
+                StereogenicSiteKind::Nonstereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(3)),
                 StereoKind::SquarePlanar,
-                Stereogenicity::Stereogenic,
+                StereogenicSiteKind::Constitutional,
             ),
             (
                 StereoSite::Bond(BondId(0)),
                 StereoKind::CisTrans,
-                Stereogenicity::Stereogenic,
+                StereogenicSiteKind::Constitutional,
             ),
             (
                 StereoSite::Bond(BondId(1)),
                 StereoKind::CisTrans,
-                Stereogenicity::Symmetric,
+                StereogenicSiteKind::Nonstereogenic,
             ),
         ];
         let selected: Vec<_> = candidates
@@ -1127,11 +1081,11 @@ mod tests {
                 selection: StereoSelection {
                     sites: None,
                     kinds: None,
-                    stereogenicities: None,
+                    stereogenic_site_kinds: None,
                 },
                 mode: RemoveStereoMode::All,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                para_stereo_max_iterations: 16,
+                max_classification_trials: 4096,
             },
         );
     }
@@ -1167,7 +1121,7 @@ mod tests {
             sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(0)),
                 StereoSite::Bond(BondId(1))])),
             kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
-            stereogenicities: None,
+            stereogenic_site_kinds: None,
         },
         vec![StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))],
         vec![StereoSite::Bond(BondId(0))],
@@ -1175,7 +1129,7 @@ mod tests {
     #[case::stereogenic(
         StereoSelection {
             kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
-            stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+            stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])),
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(0)), StereoSite::Bond(BondId(0))],
@@ -1184,7 +1138,7 @@ mod tests {
     #[case::non_stereogenic(
         StereoSelection {
             kinds: Some(BTreeSet::from([StereoKind::Tetrahedral, StereoKind::CisTrans])),
-            stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral])),
+            stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Nonstereogenic, StereogenicSiteKind::Prostereogenic])),
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(1)), StereoSite::Atom(AtomId(2)), StereoSite::Bond(BondId(1))],
@@ -1213,12 +1167,12 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(0)),
                 StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Undetermined),
-                Some(Stereogenicity::Stereogenic),
+                Some(StereogenicSiteKind::Constitutional),
             ),
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                Some(Stereogenicity::Prochiral),
+                Some(StereogenicSiteKind::Prostereogenic),
             ),
             (
                 StereoSite::Atom(AtomId(2)),
@@ -1226,7 +1180,7 @@ mod tests {
                     StereoKind::Tetrahedral,
                     StereoCoset::lit_set([0, 1]),
                 ),
-                Some(Stereogenicity::Symmetric),
+                Some(StereogenicSiteKind::Nonstereogenic),
             ),
             (
                 StereoSite::Atom(AtomId(3)),
@@ -1239,12 +1193,12 @@ mod tests {
             (
                 StereoSite::Bond(BondId(0)),
                 StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Undetermined),
-                Some(Stereogenicity::Stereogenic),
+                Some(StereogenicSiteKind::Constitutional),
             ),
             (
                 StereoSite::Bond(BondId(1)),
                 StereoConfigurationForm::Kinded(StereoKind::CisTrans, StereoCoset::Lit(1)),
-                Some(Stereogenicity::Symmetric),
+                Some(StereogenicSiteKind::Nonstereogenic),
             ),
             (
                 StereoSite::Atom(AtomId(4)),
@@ -1285,10 +1239,10 @@ mod tests {
                         StereoKind::Tetrahedral,
                         StereoKind::CisTrans,
                     ])),
-                    stereogenicities: None,
+                    stereogenic_site_kinds: None,
                 },
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                para_stereo_max_iterations: 16,
+                max_classification_trials: 4096,
             },
         );
     }
@@ -1335,26 +1289,26 @@ mod tests {
                 sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0)),
                     StereoSite::Bond(BondId(0)), StereoSite::Bond(BondId(1))])),
                 kinds: Some(BTreeSet::from([StereoKind::CisTrans])),
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Stereogenic])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Constitutional])),
             },
             ..Default::default()
         },
         vec![StereoSite::Bond(BondId(0))],
     )]
-    #[case::prochiral(
+    #[case::prostereogenic(
         EnumerateStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Prochiral])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Prostereogenic])),
                 ..EnumerateStereoConfig::default().selection
             },
             ..Default::default()
         },
         vec![StereoSite::Atom(AtomId(1))],
     )]
-    #[case::symmetric(
+    #[case::nonstereogenic(
         EnumerateStereoConfig {
             selection: StereoSelection {
-                stereogenicities: Some(BTreeSet::from([Stereogenicity::Symmetric])),
+                stereogenic_site_kinds: Some(BTreeSet::from([StereogenicSiteKind::Nonstereogenic])),
                 ..EnumerateStereoConfig::default().selection
             },
             ..Default::default()
@@ -1390,32 +1344,32 @@ mod tests {
             (
                 StereoSite::Atom(AtomId(0)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Stereogenic,
+                StereogenicSiteKind::Constitutional,
             ),
             (
                 StereoSite::Atom(AtomId(1)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Prochiral,
+                StereogenicSiteKind::Prostereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(2)),
                 StereoKind::Tetrahedral,
-                Stereogenicity::Symmetric,
+                StereogenicSiteKind::Nonstereogenic,
             ),
             (
                 StereoSite::Atom(AtomId(3)),
                 StereoKind::SquarePlanar,
-                Stereogenicity::Stereogenic,
+                StereogenicSiteKind::Constitutional,
             ),
             (
                 StereoSite::Bond(BondId(0)),
                 StereoKind::CisTrans,
-                Stereogenicity::Stereogenic,
+                StereogenicSiteKind::Constitutional,
             ),
             (
                 StereoSite::Bond(BondId(1)),
                 StereoKind::CisTrans,
-                Stereogenicity::Symmetric,
+                StereogenicSiteKind::Nonstereogenic,
             ),
         ];
         let selected: Vec<_> = candidates

@@ -270,7 +270,6 @@ mod tests {
                 },
                 stereo: StereoValidateConfig {
                     automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                    para_stereo_max_iterations: 16,
                     ring_config: Default::default(),
                 },
             }
@@ -305,7 +304,6 @@ mod tests {
             },
             stereo: StereoValidateConfig {
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-                para_stereo_max_iterations: 8,
                 ring_config: Default::default(),
             },
         };

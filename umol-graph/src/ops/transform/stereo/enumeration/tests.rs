@@ -4,8 +4,8 @@ use rstest::{fixture, rstest};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomId, BondConstraintForm, BondId, BooleanForm, CisTransStereoForm,
-    ConstitutionColoring, Constraint, DativeBondConstraintForm, DativeBondId, GraphSymmetryConfig,
-    LigandPermutation, LigandSymmetryForm, Molecule, NumForm, OrientedLigandPermutation, RingScope,
+    Constraint, DativeBondConstraintForm, DativeBondId, GraphSymmetryConfig, LigandPermutation,
+    LigandSymmetryForm, Molecule, NumForm, OrientedLigandPermutation, RingScope,
     StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId,
     StereoConfigurationForm, StereoCoset, StereoKind, StereoLigandPair, StereoLigandPosition,
     StereoTerm, Stereogenicity, StereogenicityForm, TetrahedralStereoForm, Topicity, TopicityForm,
@@ -234,9 +234,8 @@ fn test_stereo_assignment_checks_new_expression(
         checks.is_consistent(
             &molecule,
             &GraphSymmetryConfig {
-                coloring: ConstitutionColoring::full(),
-                iterate_to_fixpoint: false,
-                max_iterations: 16,
+                max_classification_trials: 16,
+                include_constraints: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ),
@@ -303,9 +302,8 @@ fn test_stereo_assignment_checks_is_consistent(
     }))
     .unwrap();
     let config = GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: false,
-        max_iterations: 16,
+        max_classification_trials: 16,
+        include_constraints: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let mut actual = Vec::new();
@@ -386,9 +384,8 @@ fn test_stereo_assignment_checks_is_consistent_logical(mut mixed_stereo: Molecul
     )
     .unwrap();
     let config = GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: false,
-        max_iterations: 16,
+        max_classification_trials: 16,
+        include_constraints: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let mut actual = Vec::new();
@@ -421,8 +418,8 @@ fn test_stereo_assignment_checks_is_consistent_logical(mut mixed_stereo: Molecul
 }
 
 #[rstest]
-#[case::prochiral(Stereogenicity::Prochiral, true)]
-#[case::symmetric(Stereogenicity::Symmetric, false)]
+#[case::prostereogenic(Stereogenicity::Prostereogenic, true)]
+#[case::nonstereogenic(Stereogenicity::Nonstereogenic, false)]
 fn test_stereo_assignment_checks_is_consistent_stereogenicity(
     #[case] asserted: Stereogenicity,
     #[case] expected: bool,
@@ -450,9 +447,8 @@ fn test_stereo_assignment_checks_is_consistent_stereogenicity(
         checks.is_consistent(
             &molecule,
             &GraphSymmetryConfig {
-                coloring: ConstitutionColoring::full(),
-                iterate_to_fixpoint: false,
-                max_iterations: 16,
+                max_classification_trials: 16,
+                include_constraints: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ),
@@ -477,9 +473,8 @@ fn test_stereo_assignment_checks_is_consistent_partial(mut mixed_stereo: Molecul
         checks.is_consistent(
             &candidate,
             &GraphSymmetryConfig {
-                coloring: ConstitutionColoring::full(),
-                iterate_to_fixpoint: false,
-                max_iterations: 16,
+                max_classification_trials: 16,
+                include_constraints: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ),
@@ -516,9 +511,8 @@ fn test_stereo_assignment_checks_is_consistent_frame(
 ) {
     let checks = StereoAssignmentChecks::new(&molecule, &BTreeSet::from([site])).unwrap();
     let config = GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: false,
-        max_iterations: 16,
+        max_classification_trials: 16,
+        include_constraints: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     assert_eq!(checks.is_consistent(&molecule, &config), Ok(true));
@@ -551,12 +545,12 @@ fn test_stereo_assignment_checks_is_consistent_frame(
     ),
     true
 )]
-#[case::atom_symmetric(
+#[case::atom_nonstereogenic(
     Constraint::StereoAtom(
         StereoAtomId(0),
         StereoKind::Tetrahedral,
         StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         ))
     ),
     false
@@ -571,19 +565,19 @@ fn test_stereo_assignment_checks_is_consistent_frame(
     ),
     true
 )]
-#[case::bond_symmetric(
+#[case::bond_nonstereogenic(
     Constraint::StereoBond(
         StereoBondId(0),
         StereoKind::CisTrans,
         StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-            Stereogenicity::Symmetric
+            Stereogenicity::Nonstereogenic
         ))
     ),
     false
 )]
-#[case::atom_topicity(Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Diastereotopic) })), true)]
+#[case::atom_topicity(Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Distinct) })), true)]
 #[case::atom_topicity_mismatch(Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })), false)]
-#[case::bond_topicity(Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Diastereotopic) })), true)]
+#[case::bond_topicity(Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Distinct) })), true)]
 #[case::bond_topicity_mismatch(Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })), false)]
 #[case::atom_symmetry(Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(true) })), true)]
 #[case::atom_symmetry_mismatch(Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Lit(false) })), false)]
@@ -602,9 +596,8 @@ fn test_stereo_assignment_checks_is_consistent_constraint(
         checks.is_consistent(
             &molecule,
             &GraphSymmetryConfig {
-                coloring: ConstitutionColoring::full(),
-                iterate_to_fixpoint: false,
-                max_iterations: 16,
+                max_classification_trials: 16,
+                include_constraints: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ),
@@ -614,7 +607,7 @@ fn test_stereo_assignment_checks_is_consistent_constraint(
 
 #[rstest]
 #[case::stereogenic(Stereogenicity::Stereogenic, true)]
-#[case::symmetric(Stereogenicity::Symmetric, false)]
+#[case::nonstereogenic(Stereogenicity::Nonstereogenic, false)]
 fn test_stereo_assignment_checks_is_consistent_context(
     #[case] asserted: Stereogenicity,
     #[case] expected: bool,
@@ -645,9 +638,8 @@ fn test_stereo_assignment_checks_is_consistent_context(
     }))
     .unwrap();
     let config = GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: false,
-        max_iterations: 16,
+        max_classification_trials: 16,
+        include_constraints: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let mut actual = Vec::new();
@@ -724,9 +716,8 @@ fn test_stereo_assignment_checks_is_consistent_evidence(
         StereoAssignmentChecks::new(&molecule, &BTreeSet::from([StereoSite::Atom(AtomId(0))]))
             .unwrap();
     let config = GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: false,
-        max_iterations: 16,
+        max_classification_trials: 16,
+        include_constraints: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let actual: Vec<_> = (0..2)
@@ -743,12 +734,12 @@ fn test_stereo_assignment_checks_is_consistent_evidence(
 }
 
 #[rstest]
-#[case::prochiral(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
+#[case::prostereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "F" "Cl" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Prochiral)]
-#[case::symmetric(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Prostereogenic)]
+#[case::nonstereogenic(mol_dsl_concrete!(r#"{:atoms ["C" "H" "H" "H" "H"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Symmetric)]
+    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#), Stereogenicity::Nonstereogenic)]
 fn test_stereo_assignment_checks_is_consistent_assignments(
     #[case] mut molecule: Molecule,
     #[case] class: Stereogenicity,
@@ -768,9 +759,8 @@ fn test_stereo_assignment_checks_is_consistent_assignments(
     )])
     .unwrap();
     let config = GraphSymmetryConfig {
-        coloring: ConstitutionColoring::full(),
-        iterate_to_fixpoint: false,
-        max_iterations: 16,
+        max_classification_trials: 16,
+        include_constraints: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     };
     let actual: Vec<_> = assignments
@@ -845,9 +835,8 @@ fn test_stereo_assignment_checks_is_consistent_error(
         checks.is_consistent(
             &molecule,
             &GraphSymmetryConfig {
-                coloring: ConstitutionColoring::full(),
-                iterate_to_fixpoint: false,
-                max_iterations: 16,
+                max_classification_trials: 16,
+                include_constraints: false,
                 automorphism_algorithm: AutomorphismAlgorithm::Nauty,
             }
         ),

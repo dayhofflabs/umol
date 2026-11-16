@@ -124,6 +124,11 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
     where
         Self: 'a;
 
+    type FieldColor<'a>
+        = EntitySpan<T::FieldColor<'a>>
+    where
+        Self: 'a;
+
     fn as_color(&self) -> Self::Color<'_> {
         match self {
             Self::Unchanged(value) => EntitySpan::Unchanged(value.as_color()),
@@ -138,6 +143,23 @@ impl<T: AsColor> AsColor for EntitySpan<T> {
                 }
             }
             Self::Added(value) => EntitySpan::Added(value.as_color()),
+        }
+    }
+
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        match self {
+            Self::Unchanged(value) => EntitySpan::Unchanged(value.as_field_color()),
+            Self::Removed(value) => EntitySpan::Removed(value.as_field_color()),
+            Self::Modified { lhs, rhs } => {
+                let lhs = lhs.as_field_color();
+                let rhs = rhs.as_field_color();
+                if lhs == rhs {
+                    EntitySpan::Unchanged(lhs)
+                } else {
+                    EntitySpan::Modified { lhs, rhs }
+                }
+            }
+            Self::Added(value) => EntitySpan::Added(value.as_field_color()),
         }
     }
 }
@@ -212,14 +234,17 @@ impl FrameTransport for ConstraintSpan {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
 
     use rstest::*;
     use umol_chem::element::Element;
     use umol_perm::{DynPermutation, Permutation};
 
     use super::super::aromatic::AromaticSystemForm;
-    use super::super::atom::AtomForm;
-    use super::super::constraint::{AtomConstraintForm, RelationalConstraint};
+    use super::super::atom::{AtomForm, ElementForm};
+    use super::super::constraint::{
+        AromaticSystemConstraintForm, AtomConstraintForm, RelationalConstraint,
+    };
     use super::super::frame::{
         AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
         NoncovalentBondsFrameAction, StereoAtomsFrameAction, StereoBondsFrameAction,
@@ -397,12 +422,124 @@ mod tests {
         EntitySpan::Added(AromaticSystemForm::default().with_charge(-1)),
         Ordering::Less
     )]
+    #[case::raw_charge(
+        EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(-1)),
+        EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(NumForm::lit_set([-1]))),
+        Ordering::Less
+    )]
+    #[case::modified_raw_charge(
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default().with_charge(-1),
+            rhs: AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])),
+        },
+        EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(-1)),
+        Ordering::Greater
+    )]
+    #[case::modified_constraint(
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default(),
+            rhs: AromaticSystemForm::default()
+                .with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        },
+        EntitySpan::Unchanged(AromaticSystemForm::default()),
+        Ordering::Greater
+    )]
+    #[case::modified_side_order(
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default().with_charge(-1),
+            rhs: AromaticSystemForm::default().with_charge(1),
+        },
+        EntitySpan::Modified {
+            lhs: AromaticSystemForm::default().with_charge(1),
+            rhs: AromaticSystemForm::default().with_charge(-1),
+        },
+        Ordering::Less
+    )]
     fn test_entity_span_as_color(
         #[case] lhs: EntitySpan<AromaticSystemForm>,
         #[case] rhs: EntitySpan<AromaticSystemForm>,
         #[case] expected: Ordering,
     ) {
         assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+        if expected == Ordering::Equal {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
+    }
+
+    #[rstest]
+    #[case::unchanged(
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4))),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C))
+    )]
+    #[case::removed(
+        EntitySpan::Removed(AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4))),
+        EntitySpan::Removed(AtomForm::from_element(Element::C))
+    )]
+    #[case::added(
+        EntitySpan::Added(AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4))),
+        EntitySpan::Added(AtomForm::from_element(Element::C))
+    )]
+    #[case::modified_constraints(
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(3)),
+            rhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        },
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C))
+    )]
+    #[case::modified_fields(
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            rhs: AtomForm::from_element(Element::N).with_constraint(AtomConstraintForm::valence(3)),
+        },
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::from_element(Element::N),
+        }
+    )]
+    #[case::raw_modified(
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::new(ElementForm::lit_set([Element::C])),
+        },
+        EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::new(ElementForm::lit_set([Element::C])),
+        }
+    )]
+    #[case::raw_fields(
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([0]))
+            .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([])))),
+        EntitySpan::Unchanged(AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([0])))
+    )]
+    fn test_entity_span_as_field_color(
+        #[case] input: EntitySpan<AtomForm>,
+        #[case] expected: EntitySpan<AtomForm>,
+    ) {
+        let original = input.clone();
+        let color = input.as_field_color();
+        let expected_color = match &expected {
+            EntitySpan::Unchanged(value) => EntitySpan::Unchanged(value.as_field_color()),
+            EntitySpan::Removed(value) => EntitySpan::Removed(value.as_field_color()),
+            EntitySpan::Added(value) => EntitySpan::Added(value.as_field_color()),
+            EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
+                lhs: lhs.as_field_color(),
+                rhs: rhs.as_field_color(),
+            },
+        };
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 
     #[rstest]

@@ -3024,15 +3024,16 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
-    use umol_perm::MAX_DEGREE;
+    use umol_perm::{Orientation, MAX_DEGREE};
 
     use super::super::boolean::BooleanForm;
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
-        Constraints, DativeBondConstraintForm, FluxionalityForm, LigandPermutation,
+        Constraints, DativeBondConstraintForm, LigandPermutation, LigandSymmetryForm,
         MoleculeConstraint, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
-        RelationalConstraint, StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair,
-        StereogenicityForm, TopicityForm, TopicityRelationForm,
+        OrientedLigandPermutation, RelationalConstraint, StereoAtomConstraintForm,
+        StereoBondConstraintForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+        TopicityRelationForm,
     };
     use super::super::edit::{AtomFieldChange, BondFieldChange};
     use super::super::electrons::ElectronCountsForm;
@@ -4162,10 +4163,7 @@ mod tests {
             id: StereoAtomId(0),
             kind: Some(StereoKind::Tetrahedral),
             old: None,
-            new: Some(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: LigandPermutation(Permutation::identity(3)),
-                active: BooleanForm::Undetermined,
-            })),
+            new: Some(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })),
         }),
     )]
     #[case::bond_old_position(
@@ -4184,10 +4182,7 @@ mod tests {
             id: StereoBondId(0),
             kind: None,
             old: None,
-            new: Some(StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: LigandPermutation(Permutation::identity(3)),
-                active: BooleanForm::Undetermined,
-            })),
+            new: Some(StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined })),
         }),
     )]
     #[case::atom_kind_arity(
@@ -4328,10 +4323,7 @@ mod tests {
             Constraint::StereoBond(
                 StereoBondId(0),
                 StereoKind::CisTrans,
-                StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-                    permutation: LigandPermutation(Permutation::identity(3)),
-                    active: BooleanForm::Undetermined,
-                }),
+                StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(3)), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined }),
             ),
         )))),
         ReactionIntegrityError::StereoPermutationDegree {
@@ -4439,10 +4431,7 @@ mod tests {
         Delta::Constraint(ConstraintDelta::Add(Constraint::StereoBond(
             StereoBondId(0),
             StereoKind::CisTrans,
-            StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: LigandPermutation(Permutation::identity(4)),
-                active: BooleanForm::Undetermined,
-            }),
+            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm { permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::identity(4)), orientation: Orientation::Proper }, invariant: BooleanForm::Undetermined }),
         ))),
     )]
     fn test_reaction_try_new_stereo_domain(#[case] delta: Delta, stereo_domain_lhs: Molecule) {

@@ -96,8 +96,8 @@ fn test_isotope_mass_form_is_compatible(
     TopicityRelationForm::not(Topicity::Enantiotopic),
     true
 )]
-#[case::full_complement(TopicityRelationForm::Undetermined, TopicityRelationForm::not_set([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic]), false)]
-#[case::complement_union(TopicityRelationForm::not(Topicity::Homotopic), TopicityRelationForm::not_set([Topicity::Enantiotopic, Topicity::Diastereotopic]), false)]
+#[case::full_complement(TopicityRelationForm::Undetermined, TopicityRelationForm::not_set([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct]), false)]
+#[case::complement_union(TopicityRelationForm::not(Topicity::Homotopic), TopicityRelationForm::not_set([Topicity::Enantiotopic, Topicity::Diastereotopic, Topicity::Distinct]), false)]
 fn test_topicity_relation_form_is_compatible(
     #[case] a: TopicityRelationForm,
     #[case] b: TopicityRelationForm,
@@ -114,11 +114,11 @@ fn test_topicity_relation_form_is_compatible(
     false
 )]
 #[case::excluded(
-    StereogenicityForm::Lit(Stereogenicity::Symmetric),
-    StereogenicityForm::not(Stereogenicity::Symmetric),
+    StereogenicityForm::Lit(Stereogenicity::Nonstereogenic),
+    StereogenicityForm::not(Stereogenicity::Nonstereogenic),
     false
 )]
-#[case::full_complement(StereogenicityForm::Undetermined, StereogenicityForm::not_set([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]), false)]
+#[case::full_complement(StereogenicityForm::Undetermined, StereogenicityForm::not_set([Stereogenicity::Nonstereogenic, Stereogenicity::Prostereogenic, Stereogenicity::Stereogenic]), false)]
 fn test_stereogenicity_form_is_compatible(
     #[case] a: StereogenicityForm,
     #[case] b: StereogenicityForm,
@@ -826,15 +826,7 @@ proptest! {
         assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
-    #[test]
-    fn test_fluxionality_form_lattice_laws(
-        a in fluxionality_strategy(4),
-        b in fluxionality_strategy(4),
-        c in fluxionality_strategy(4),
-    ) {
-        assert_lattice_laws(&a, &b, &c)?;
-        assert_normalized_lattice_laws(&a, &b, &c)?;
-    }
+
 
     #[test]
     fn test_topicity_form_lattice_laws(

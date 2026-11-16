@@ -1082,40 +1082,38 @@ def test_aromaticity_model_mutation(field, value):
 
 
 @pytest.mark.parametrize(
-    ("scope", "fluxionality"),
+    "scope",
     [
-        (ElementScope.Any(), False),
-        (ElementScope.AllowList([Element("C"), Element("N")]), True),
+        ElementScope.Any(),
+        ElementScope.AllowList([Element("C"), Element("N")]),
     ],
 )
-def test_stereo_kind_model_new(scope, fluxionality):
-    model = StereoKindModel(scope=scope, fluxionality=fluxionality)
+def test_stereo_kind_model_new(scope):
+    model = StereoKindModel(scope=scope)
 
     assert model.scope == scope
     assert model.scope is not scope
-    assert model.fluxionality is fluxionality
-    assert model == StereoKindModel(scope=scope, fluxionality=fluxionality)
+    assert model == StereoKindModel(scope=scope)
 
 
 def test_stereo_kind_model_new_error():
     with pytest.raises(TypeError):
-        StereoKindModel(ElementScope.Any(), False)
+        StereoKindModel(ElementScope.Any())
 
 
 @pytest.mark.parametrize(
     ("model", "expected"),
     [
         (
-            StereoKindModel(scope=ElementScope.Any(), fluxionality=False),
-            "StereoKindModel(scope=ElementScope.Any(), fluxionality=False)",
+            StereoKindModel(scope=ElementScope.Any()),
+            "StereoKindModel(scope=ElementScope.Any())",
         ),
         (
             StereoKindModel(
                 scope=ElementScope.AllowList([Element("C"), Element("N")]),
-                fluxionality=True,
             ),
             "StereoKindModel(scope=ElementScope.AllowList([Element('C'), "
-            "Element('N')]), fluxionality=True)",
+            "Element('N')]))",
         ),
     ],
 )
@@ -1127,11 +1125,10 @@ def test_stereo_kind_model_repr(model, expected):
     ("field", "value"),
     [
         ("scope", ElementScope.AllowList([Element("C")])),
-        ("fluxionality", True),
     ],
 )
 def test_stereo_kind_model_mutation(field, value):
-    model = StereoKindModel(scope=ElementScope.Any(), fluxionality=False)
+    model = StereoKindModel(scope=ElementScope.Any())
 
     with pytest.raises(AttributeError):
         setattr(model, field, value)
@@ -1142,13 +1139,12 @@ def test_stereo_model_default():
 
     assert model.kind_models == {
         StereoKind.Tetrahedral: StereoKindModel(
-            scope=ElementScope.Any(), fluxionality=False
+            scope=ElementScope.Any()
         ),
         StereoKind.CisTrans: StereoKindModel(
-            scope=ElementScope.Any(), fluxionality=False
+            scope=ElementScope.Any()
         ),
     }
-    assert model.para_stereo is False
     assert model.stereo_bond_min_ring_size == 8
     assert model.stereo_bond_e_min_ring_size == 8
     assert model == StereoModel.default()
@@ -1157,35 +1153,33 @@ def test_stereo_model_default():
 def test_stereo_model_new():
     kind_models = {
         StereoKind.Tetrahedral: StereoKindModel(
-            scope=ElementScope.Any(), fluxionality=False
+            scope=ElementScope.Any()
         ),
         StereoKind.CisTrans: StereoKindModel(
-            scope=ElementScope.AllowList([Element("C")]), fluxionality=True
+            scope=ElementScope.AllowList([Element("C")])
         ),
         StereoKind.Axial: StereoKindModel(
-            scope=ElementScope.AllowList([Element("N")]), fluxionality=False
+            scope=ElementScope.AllowList([Element("N")])
         ),
         StereoKind.SquarePlanar: StereoKindModel(
-            scope=ElementScope.AllowList([Element("O")]), fluxionality=True
+            scope=ElementScope.AllowList([Element("O")])
         ),
         StereoKind.TrigonalBipyramidal: StereoKindModel(
-            scope=ElementScope.AllowList([Element("S")]), fluxionality=False
+            scope=ElementScope.AllowList([Element("S")])
         ),
         StereoKind.Octahedral: StereoKindModel(
-            scope=ElementScope.AllowList([Element("Fe")]), fluxionality=True
+            scope=ElementScope.AllowList([Element("Fe")])
         ),
     }
     expected = kind_models.copy()
     model = StereoModel(
         kind_models=kind_models,
-        para_stereo=True,
         stereo_bond_min_ring_size=10,
         stereo_bond_e_min_ring_size=12,
     )
     kind_models.clear()
 
     assert model.kind_models == expected
-    assert model.para_stereo is True
     assert model.stereo_bond_min_ring_size == 10
     assert model.stereo_bond_e_min_ring_size == 12
     for kind, kind_model in expected.items():
@@ -1196,7 +1190,6 @@ def test_stereo_model_new():
 def test_stereo_model_new_ring_size(minimum):
     model = StereoModel(
         kind_models={},
-        para_stereo=False,
         stereo_bond_min_ring_size=minimum,
         stereo_bond_e_min_ring_size=minimum,
     )
@@ -1217,7 +1210,7 @@ def test_stereo_model_new_ring_size_error(field, minimum):
     fields[field] = minimum
 
     with pytest.raises(OverflowError):
-        StereoModel(kind_models={}, para_stereo=False, **fields)
+        StereoModel(kind_models={}, **fields)
 
 
 def test_stereo_model_kind_models():
@@ -1226,7 +1219,6 @@ def test_stereo_model_kind_models():
     assert type(kind_models) is MappingProxyType
     assert StereoModel(
         kind_models=kind_models,
-        para_stereo=model.para_stereo,
         stereo_bond_min_ring_size=8,
         stereo_bond_e_min_ring_size=8,
     ) == model
@@ -1237,10 +1229,10 @@ def test_stereo_model_kind_models():
 
     assert model.kind_models == {
         StereoKind.Tetrahedral: StereoKindModel(
-            scope=ElementScope.Any(), fluxionality=False
+            scope=ElementScope.Any()
         ),
         StereoKind.CisTrans: StereoKindModel(
-            scope=ElementScope.Any(), fluxionality=False
+            scope=ElementScope.Any()
         ),
     }
 
@@ -1248,7 +1240,7 @@ def test_stereo_model_kind_models():
 def test_stereo_model_new_error():
     with pytest.raises(TypeError):
         StereoModel(
-            {}, False, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8
+            {}, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8
         )
 
 
@@ -1264,7 +1256,6 @@ def test_stereo_model_new_field_error(field, value):
     with pytest.raises(TypeError):
         StereoModel(
             kind_models={},
-            para_stereo=False,
             **{field: value},
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=8,
@@ -1276,27 +1267,24 @@ def test_stereo_model_new_field_error(field, value):
     [
         StereoModel(
             kind_models={},
-            para_stereo=False,
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=8,
         ),
         StereoModel(
             kind_models=StereoModel.default().kind_models,
-            para_stereo=False,
             stereo_bond_min_ring_size=8,
             stereo_bond_e_min_ring_size=10,
         ),
         StereoModel(
             kind_models={
                 StereoKind.Tetrahedral: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
+                    scope=ElementScope.Any()
                 ),
                 StereoKind.CisTrans: StereoKindModel(
-                    scope=ElementScope.Any(), fluxionality=False
+                    scope=ElementScope.Any()
                 ),
             },
-            para_stereo=True,
-            stereo_bond_min_ring_size=8,
+            stereo_bond_min_ring_size=10,
             stereo_bond_e_min_ring_size=8,
         ),
     ],
@@ -1314,21 +1302,19 @@ def test_stereo_model_equality(other):
                 kind_models={
                     StereoKind.Octahedral: StereoKindModel(
                         scope=ElementScope.AllowList([Element("Fe")]),
-                        fluxionality=True,
                     ),
                     StereoKind.Tetrahedral: StereoKindModel(
-                        scope=ElementScope.Any(), fluxionality=False
+                        scope=ElementScope.Any()
                     ),
                 },
-                para_stereo=True,
                 stereo_bond_min_ring_size=8,
                 stereo_bond_e_min_ring_size=8,
             ),
             "StereoModel(kind_models={StereoKind.Tetrahedral: "
-            "StereoKindModel(scope=ElementScope.Any(), fluxionality=False), "
+            "StereoKindModel(scope=ElementScope.Any()), "
             "StereoKind.Octahedral: StereoKindModel(scope="
-            "ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, "
-            "para_stereo=True, stereo_bond_min_ring_size=8, "
+            "ElementScope.AllowList([Element('Fe')]))}, "
+            "stereo_bond_min_ring_size=8, "
             "stereo_bond_e_min_ring_size=8)",
         ),
     ],
@@ -1341,7 +1327,6 @@ def test_stereo_model_repr(model, expected):
     ("field", "value"),
     [
         ("kind_models", {}),
-        ("para_stereo", True),
         ("stereo_bond_min_ring_size", 10),
         ("stereo_bond_e_min_ring_size", 10),
     ],
@@ -1425,8 +1410,7 @@ def test_chemistry_model_new(valence):
     )
     stereo = StereoModel(
         kind_models=StereoModel.default().kind_models,
-        para_stereo=True,
-        stereo_bond_min_ring_size=8,
+        stereo_bond_min_ring_size=10,
         stereo_bond_e_min_ring_size=8,
     )
     connectivity = ConnectivityModel.default()
@@ -1502,7 +1486,6 @@ def test_chemistry_model_new_error():
             aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel(
                 kind_models={},
-                para_stereo=False,
                 stereo_bond_min_ring_size=8,
                 stereo_bond_e_min_ring_size=8,
             ),
@@ -1533,8 +1516,7 @@ def test_chemistry_model_equality(other):
                 ),
                 stereo=StereoModel(
                     kind_models=StereoModel.default().kind_models,
-                    para_stereo=True,
-                    stereo_bond_min_ring_size=8,
+                    stereo_bond_min_ring_size=10,
                     stereo_bond_e_min_ring_size=8,
                 ),
             ),
@@ -1547,10 +1529,10 @@ def test_chemistry_model_equality(other):
             "rule=AromaticityRule.Hmo(stabilization_threshold=0.375), "
             "tie_break=AromaticityTieBreak.Strict), "
             "stereo=StereoModel(kind_models={"
-            "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
-            "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="
-            "ElementScope.Any(), fluxionality=False)}, para_stereo=True, "
-            "stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8))",
+            "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any()"
+            "), StereoKind.CisTrans: StereoKindModel(scope="
+            "ElementScope.Any())}, "
+            "stereo_bond_min_ring_size=10, stereo_bond_e_min_ring_size=8))",
         ),
     ],
 )
@@ -1583,7 +1565,6 @@ def test_chemistry_model_repr(model, expected):
             "stereo",
             StereoModel(
                 kind_models={},
-                para_stereo=False,
                 stereo_bond_min_ring_size=8,
                 stereo_bond_e_min_ring_size=8,
             ),

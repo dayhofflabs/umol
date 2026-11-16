@@ -25,8 +25,8 @@ pub(super) fn selected(
         2
     };
     let class = match info.class {
-        Stereogenicity::Symmetric => 1,
-        Stereogenicity::Prochiral => 2,
+        Stereogenicity::Nonstereogenic => 1,
+        Stereogenicity::Prostereogenic => 2,
         Stereogenicity::Stereogenic => 4,
     };
     sites & (1 << index) != 0

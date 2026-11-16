@@ -12,23 +12,19 @@ use umol_graph::ops::model::{
 use super::ElementScope;
 use crate::stereo::StereoKind;
 
-/// Per-kind element eligibility and fluxionality settings.
+/// Per-kind element eligibility settings.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoKindModel {
     scope: ElementScope,
-    fluxionality: bool,
 }
 
 #[pymethods]
 impl StereoKindModel {
     #[new]
-    #[pyo3(signature = (*, scope, fluxionality))]
-    fn new(scope: ElementScope, fluxionality: bool) -> Self {
-        Self {
-            scope,
-            fluxionality,
-        }
+    #[pyo3(signature = (*, scope))]
+    fn new(scope: ElementScope) -> Self {
+        Self { scope }
     }
 
     #[getter]
@@ -36,17 +32,8 @@ impl StereoKindModel {
         self.scope.clone()
     }
 
-    #[getter]
-    fn fluxionality(&self) -> bool {
-        self.fluxionality
-    }
-
     fn __repr__(&self) -> String {
-        format!(
-            "StereoKindModel(scope={}, fluxionality={})",
-            self.scope.__repr__(),
-            if self.fluxionality { "True" } else { "False" },
-        )
+        format!("StereoKindModel(scope={})", self.scope.__repr__())
     }
 }
 
@@ -54,7 +41,6 @@ impl StereoKindModel {
     pub(crate) fn from_rust(model: &GraphStereoKindModel) -> Self {
         Self {
             scope: ElementScope::from_rust(&model.scope),
-            fluxionality: model.fluxionality,
         }
     }
 
@@ -65,7 +51,6 @@ impl StereoKindModel {
     pub(crate) fn to_rust(&self) -> GraphStereoKindModel {
         GraphStereoKindModel {
             scope: self.scope.to_rust(),
-            fluxionality: self.fluxionality,
         }
     }
 }
@@ -84,7 +69,6 @@ const STEREO_KINDS: &[StereoKind] = &[
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoModel {
     kind_models: BTreeMap<StereoKind, StereoKindModel>,
-    para_stereo: bool,
     stereo_bond_min_ring_size: u32,
     stereo_bond_e_min_ring_size: u32,
 }
@@ -92,10 +76,9 @@ pub struct StereoModel {
 #[pymethods]
 impl StereoModel {
     #[new]
-    #[pyo3(signature = (*, kind_models, para_stereo, stereo_bond_min_ring_size, stereo_bond_e_min_ring_size))]
+    #[pyo3(signature = (*, kind_models, stereo_bond_min_ring_size, stereo_bond_e_min_ring_size))]
     fn new(
         kind_models: &Bound<'_, PyMapping>,
-        para_stereo: bool,
         stereo_bond_min_ring_size: u32,
         stereo_bond_e_min_ring_size: u32,
     ) -> PyResult<Self> {
@@ -108,7 +91,6 @@ impl StereoModel {
                     Ok((key.extract()?, value.extract()?))
                 })
                 .collect::<PyResult<_>>()?,
-            para_stereo,
             stereo_bond_min_ring_size,
             stereo_bond_e_min_ring_size,
         })
@@ -126,11 +108,6 @@ impl StereoModel {
             values.set_item(*kind, model.clone())?;
         }
         Ok(PyMappingProxy::new(py, values.as_mapping()))
-    }
-
-    #[getter]
-    fn para_stereo(&self) -> bool {
-        self.para_stereo
     }
 
     #[getter]
@@ -155,8 +132,7 @@ impl StereoModel {
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "StereoModel(kind_models={{{kind_models}}}, para_stereo={}, stereo_bond_min_ring_size={}, stereo_bond_e_min_ring_size={})",
-            if self.para_stereo { "True" } else { "False" },
+            "StereoModel(kind_models={{{kind_models}}}, stereo_bond_min_ring_size={}, stereo_bond_e_min_ring_size={})",
             self.stereo_bond_min_ring_size,
             self.stereo_bond_e_min_ring_size,
         )
@@ -176,7 +152,6 @@ impl StereoModel {
             .collect();
         Self {
             kind_models,
-            para_stereo: model.para_stereo,
             stereo_bond_min_ring_size: model.stereo_bond_min_ring_size,
             stereo_bond_e_min_ring_size: model.stereo_bond_e_min_ring_size,
         }
@@ -193,7 +168,6 @@ impl StereoModel {
         }
         GraphStereoModel {
             kind_models,
-            para_stereo: self.para_stereo,
             stereo_bond_min_ring_size: self.stereo_bond_min_ring_size,
             stereo_bond_e_min_ring_size: self.stereo_bond_e_min_ring_size,
         }
@@ -212,45 +186,35 @@ mod tests {
     #[rstest]
     #[case::any(
         ElementScope::Any {},
-        false,
         StereoKindModel {
             scope: ElementScope::Any {},
-            fluxionality: false,
         }
     )]
     #[case::allow_list(
         ElementScope::AllowList {
             elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
         },
-        true,
         StereoKindModel {
             scope: ElementScope::AllowList {
                 elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
             },
-            fluxionality: true,
         }
     )]
-    fn test_stereo_kind_model_new(
-        #[case] scope: ElementScope,
-        #[case] fluxionality: bool,
-        #[case] expected: StereoKindModel,
-    ) {
-        assert_eq!(StereoKindModel::new(scope, fluxionality), expected);
+    fn test_stereo_kind_model_new(#[case] scope: ElementScope, #[case] expected: StereoKindModel) {
+        assert_eq!(StereoKindModel::new(scope), expected);
     }
 
     #[rstest]
     #[case::any(
-        StereoKindModel::new(ElementScope::Any {}, false),
-        "StereoKindModel(scope=ElementScope.Any(), fluxionality=False)"
+        StereoKindModel::new(ElementScope::Any {}),
+        "StereoKindModel(scope=ElementScope.Any())"
     )]
     #[case::allow_list(
         StereoKindModel::new(
             ElementScope::AllowList {
                 elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
-            },
-            true,
-        ),
-        "StereoKindModel(scope=ElementScope.AllowList([Element('C'), Element('N')]), fluxionality=True)"
+            }),
+        "StereoKindModel(scope=ElementScope.AllowList([Element('C'), Element('N')]))"
     )]
     fn test_stereo_kind_model_repr(#[case] model: StereoKindModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -260,21 +224,17 @@ mod tests {
     #[case::any(
         GraphStereoKindModel {
             scope: GraphElementScope::Any,
-            fluxionality: false,
         },
-        StereoKindModel::new(ElementScope::Any {}, false)
+        StereoKindModel::new(ElementScope::Any {})
     )]
     #[case::allow_list(
         GraphStereoKindModel {
             scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]),
-            fluxionality: true,
         },
         StereoKindModel::new(
             ElementScope::AllowList {
                 elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
-            },
-            true,
-        )
+            })
     )]
     fn test_stereo_kind_model_from_rust(
         #[case] model: GraphStereoKindModel,
@@ -285,22 +245,18 @@ mod tests {
 
     #[rstest]
     #[case::any(
-        StereoKindModel::new(ElementScope::Any {}, false),
+        StereoKindModel::new(ElementScope::Any {}),
         GraphStereoKindModel {
             scope: GraphElementScope::Any,
-            fluxionality: false,
         }
     )]
     #[case::allow_list(
         StereoKindModel::new(
             ElementScope::AllowList {
                 elements: TupleItems(vec![ChemElement::C.into(), ChemElement::N.into()]),
-            },
-            true,
-        ),
+            }),
         GraphStereoKindModel {
             scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]),
-            fluxionality: true,
         }
     )]
     fn test_stereo_kind_model_to_rust(
@@ -318,14 +274,13 @@ mod tests {
                 kind_models: BTreeMap::from([
                     (
                         StereoKind::Tetrahedral,
-                        StereoKindModel::new(ElementScope::Any {}, false),
+                        StereoKindModel::new(ElementScope::Any {}),
                     ),
                     (
                         StereoKind::CisTrans,
-                        StereoKindModel::new(ElementScope::Any {}, false),
+                        StereoKindModel::new(ElementScope::Any {}),
                     ),
                 ]),
-                para_stereo: false,
                 stereo_bond_min_ring_size: 8,
                 stereo_bond_e_min_ring_size: 8,
             }
@@ -338,19 +293,17 @@ mod tests {
         StereoModel { kind_models: BTreeMap::from([
                 (
                     StereoKind::Tetrahedral,
-                    StereoKindModel::new(ElementScope::Any {}, false),
+                    StereoKindModel::new(ElementScope::Any {}),
                 ),
                 (
                     StereoKind::Octahedral,
                     StereoKindModel::new(
                         ElementScope::AllowList {
                             elements: TupleItems(vec![ChemElement::Fe.into()]),
-                        },
-                        true,
-                    ),
+                        }),
                 ),
-            ]), para_stereo: true, stereo_bond_min_ring_size: 8, stereo_bond_e_min_ring_size: 8 },
-        "StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.Octahedral: StereoKindModel(scope=ElementScope.AllowList([Element('Fe')]), fluxionality=True)}, para_stereo=True, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8)"
+            ]), stereo_bond_min_ring_size: 8, stereo_bond_e_min_ring_size: 8 },
+        "StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any()), StereoKind.Octahedral: StereoKindModel(scope=ElementScope.AllowList([Element('Fe')]))}, stereo_bond_min_ring_size=8, stereo_bond_e_min_ring_size=8)"
     )]
     fn test_stereo_model_repr(#[case] model: StereoModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -362,30 +315,23 @@ mod tests {
             kind_models: [
                 Some(GraphStereoKindModel {
                     scope: GraphElementScope::Any,
-                    fluxionality: false,
                 }),
                 Some(GraphStereoKindModel {
                     scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-                    fluxionality: true,
                 }),
                 Some(GraphStereoKindModel {
                     scope: GraphElementScope::AllowList(vec![ChemElement::N]),
-                    fluxionality: false,
                 }),
                 Some(GraphStereoKindModel {
                     scope: GraphElementScope::AllowList(vec![ChemElement::O]),
-                    fluxionality: true,
                 }),
                 Some(GraphStereoKindModel {
                     scope: GraphElementScope::AllowList(vec![ChemElement::S]),
-                    fluxionality: false,
                 }),
                 Some(GraphStereoKindModel {
                     scope: GraphElementScope::AllowList(vec![ChemElement::Fe]),
-                    fluxionality: true,
                 }),
             ],
-            para_stereo: true,
             stereo_bond_min_ring_size: 10,
             stereo_bond_e_min_ring_size: 12,
         };
@@ -396,55 +342,39 @@ mod tests {
                 kind_models: BTreeMap::from([
                     (
                         StereoKind::Tetrahedral,
-                        StereoKindModel::new(ElementScope::Any {}, false),
+                        StereoKindModel::new(ElementScope::Any {}),
                     ),
                     (
                         StereoKind::CisTrans,
-                        StereoKindModel::new(
-                            ElementScope::AllowList {
-                                elements: TupleItems(vec![ChemElement::C.into()]),
-                            },
-                            true,
-                        ),
+                        StereoKindModel::new(ElementScope::AllowList {
+                            elements: TupleItems(vec![ChemElement::C.into()]),
+                        }),
                     ),
                     (
                         StereoKind::Axial,
-                        StereoKindModel::new(
-                            ElementScope::AllowList {
-                                elements: TupleItems(vec![ChemElement::N.into()]),
-                            },
-                            false,
-                        ),
+                        StereoKindModel::new(ElementScope::AllowList {
+                            elements: TupleItems(vec![ChemElement::N.into()]),
+                        }),
                     ),
                     (
                         StereoKind::SquarePlanar,
-                        StereoKindModel::new(
-                            ElementScope::AllowList {
-                                elements: TupleItems(vec![ChemElement::O.into()]),
-                            },
-                            true,
-                        ),
+                        StereoKindModel::new(ElementScope::AllowList {
+                            elements: TupleItems(vec![ChemElement::O.into()]),
+                        }),
                     ),
                     (
                         StereoKind::TrigonalBipyramidal,
-                        StereoKindModel::new(
-                            ElementScope::AllowList {
-                                elements: TupleItems(vec![ChemElement::S.into()]),
-                            },
-                            false,
-                        ),
+                        StereoKindModel::new(ElementScope::AllowList {
+                            elements: TupleItems(vec![ChemElement::S.into()]),
+                        }),
                     ),
                     (
                         StereoKind::Octahedral,
-                        StereoKindModel::new(
-                            ElementScope::AllowList {
-                                elements: TupleItems(vec![ChemElement::Fe.into()]),
-                            },
-                            true,
-                        ),
+                        StereoKindModel::new(ElementScope::AllowList {
+                            elements: TupleItems(vec![ChemElement::Fe.into()]),
+                        }),
                     ),
                 ]),
-                para_stereo: true,
                 stereo_bond_min_ring_size: 10,
                 stereo_bond_e_min_ring_size: 12,
             }
@@ -457,55 +387,39 @@ mod tests {
             kind_models: BTreeMap::from([
                 (
                     StereoKind::Tetrahedral,
-                    StereoKindModel::new(ElementScope::Any {}, false),
+                    StereoKindModel::new(ElementScope::Any {}),
                 ),
                 (
                     StereoKind::CisTrans,
-                    StereoKindModel::new(
-                        ElementScope::AllowList {
-                            elements: TupleItems(vec![ChemElement::C.into()]),
-                        },
-                        true,
-                    ),
+                    StereoKindModel::new(ElementScope::AllowList {
+                        elements: TupleItems(vec![ChemElement::C.into()]),
+                    }),
                 ),
                 (
                     StereoKind::Axial,
-                    StereoKindModel::new(
-                        ElementScope::AllowList {
-                            elements: TupleItems(vec![ChemElement::N.into()]),
-                        },
-                        false,
-                    ),
+                    StereoKindModel::new(ElementScope::AllowList {
+                        elements: TupleItems(vec![ChemElement::N.into()]),
+                    }),
                 ),
                 (
                     StereoKind::SquarePlanar,
-                    StereoKindModel::new(
-                        ElementScope::AllowList {
-                            elements: TupleItems(vec![ChemElement::O.into()]),
-                        },
-                        true,
-                    ),
+                    StereoKindModel::new(ElementScope::AllowList {
+                        elements: TupleItems(vec![ChemElement::O.into()]),
+                    }),
                 ),
                 (
                     StereoKind::TrigonalBipyramidal,
-                    StereoKindModel::new(
-                        ElementScope::AllowList {
-                            elements: TupleItems(vec![ChemElement::S.into()]),
-                        },
-                        false,
-                    ),
+                    StereoKindModel::new(ElementScope::AllowList {
+                        elements: TupleItems(vec![ChemElement::S.into()]),
+                    }),
                 ),
                 (
                     StereoKind::Octahedral,
-                    StereoKindModel::new(
-                        ElementScope::AllowList {
-                            elements: TupleItems(vec![ChemElement::Fe.into()]),
-                        },
-                        true,
-                    ),
+                    StereoKindModel::new(ElementScope::AllowList {
+                        elements: TupleItems(vec![ChemElement::Fe.into()]),
+                    }),
                 ),
             ]),
-            para_stereo: true,
             stereo_bond_min_ring_size: 10,
             stereo_bond_e_min_ring_size: 12,
         };
@@ -516,30 +430,23 @@ mod tests {
                 kind_models: [
                     Some(GraphStereoKindModel {
                         scope: GraphElementScope::Any,
-                        fluxionality: false,
                     }),
                     Some(GraphStereoKindModel {
                         scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-                        fluxionality: true,
                     }),
                     Some(GraphStereoKindModel {
                         scope: GraphElementScope::AllowList(vec![ChemElement::N]),
-                        fluxionality: false,
                     }),
                     Some(GraphStereoKindModel {
                         scope: GraphElementScope::AllowList(vec![ChemElement::O]),
-                        fluxionality: true,
                     }),
                     Some(GraphStereoKindModel {
                         scope: GraphElementScope::AllowList(vec![ChemElement::S]),
-                        fluxionality: false,
                     }),
                     Some(GraphStereoKindModel {
                         scope: GraphElementScope::AllowList(vec![ChemElement::Fe]),
-                        fluxionality: true,
                     }),
                 ],
-                para_stereo: true,
                 stereo_bond_min_ring_size: 10,
                 stereo_bond_e_min_ring_size: 12,
             }

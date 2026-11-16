@@ -807,8 +807,16 @@ pub(crate) struct AromaticSystemColor<'a> {
     constraints: &'a AromaticSystemConstraintsForm,
 }
 
+/// The field color of [`AromaticSystemForm`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct AromaticSystemFieldColor<'a> {
+    charge: &'a NumForm,
+    unpaired_electrons: &'a UnpairedElectronsForm,
+}
+
 impl AsColor for AromaticSystemForm {
     type Color<'a> = AromaticSystemColor<'a>;
+    type FieldColor<'a> = AromaticSystemFieldColor<'a>;
 
     fn as_color(&self) -> Self::Color<'_> {
         AromaticSystemColor {
@@ -817,10 +825,19 @@ impl AsColor for AromaticSystemForm {
             constraints: &self.constraints,
         }
     }
+
+    fn as_field_color(&self) -> Self::FieldColor<'_> {
+        AromaticSystemFieldColor {
+            charge: &self.charge,
+            unpaired_electrons: &self.unpaired_electrons,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+    use std::hash::{DefaultHasher, Hash, Hasher};
     use std::ptr;
 
     use pretty_assertions::assert_eq;
@@ -2152,5 +2169,79 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(lhs.as_color() == rhs.as_color(), expected);
+        if expected {
+            let mut lhs_hash = DefaultHasher::new();
+            let mut rhs_hash = DefaultHasher::new();
+            lhs.as_color().hash(&mut lhs_hash);
+            rhs.as_color().hash(&mut rhs_hash);
+            assert_eq!(lhs_hash.finish(), rhs_hash.finish());
+        }
+    }
+
+    #[rstest]
+    #[case::charge_priority(
+        AromaticSystemForm::default().with_charge(-1).with_unpaired_electrons((1_u8, 2_u8)),
+        AromaticSystemForm::default().with_charge(1),
+        Ordering::Less
+    )]
+    #[case::electron_priority(
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        AromaticSystemForm::default().with_unpaired_electrons((1_u8, 2_u8)),
+        Ordering::Less
+    )]
+    #[case::constraint(
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(4)),
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        Ordering::Less
+    )]
+    #[case::raw_charge(
+        AromaticSystemForm::default().with_charge(-1),
+        AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])),
+        Ordering::Less
+    )]
+    #[case::positional_electrons(
+        AromaticSystemForm::from_electrons(vec![2, 1, 1]),
+        AromaticSystemForm::from_electrons(vec![1, 2, 1]),
+        Ordering::Equal
+    )]
+    fn test_aromatic_system_form_as_color_order(
+        #[case] lhs: AromaticSystemForm,
+        #[case] rhs: AromaticSystemForm,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(lhs.as_color().cmp(&rhs.as_color()), expected);
+    }
+
+    #[rstest]
+    #[case::empty(AromaticSystemForm::default(), AromaticSystemForm::default())]
+    #[case::constraint(
+        AromaticSystemForm::from_electrons(vec![2, 1, 1]).with_charge(-1).with_constraint(AromaticSystemConstraintForm::electron_count(4)),
+        AromaticSystemForm::from_electrons(vec![1, 2, 1]).with_charge(-1)
+    )]
+    #[case::contradiction(
+        AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([]))),
+        AromaticSystemForm::default()
+    )]
+    #[case::raw_fields(
+        AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8)).with_constraint(AromaticSystemConstraintForm::electron_count(NumForm::lit_set([4]))),
+        AromaticSystemForm::default().with_charge(NumForm::lit_set([-1])).with_unpaired_electrons((1_u8, 2_u8))
+    )]
+    fn test_aromatic_system_form_as_field_color(
+        #[case] input: AromaticSystemForm,
+        #[case] expected: AromaticSystemForm,
+    ) {
+        let original = input.clone();
+        let color = input.as_field_color();
+        let expected_color = AromaticSystemFieldColor {
+            charge: &expected.charge,
+            unpaired_electrons: &expected.unpaired_electrons,
+        };
+        assert_eq!(color, expected_color);
+        let mut actual_hash = DefaultHasher::new();
+        let mut expected_hash = DefaultHasher::new();
+        color.hash(&mut actual_hash);
+        expected_color.hash(&mut expected_hash);
+        assert_eq!(actual_hash.finish(), expected_hash.finish());
+        assert_eq!(input, original);
     }
 }

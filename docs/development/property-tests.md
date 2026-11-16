@@ -28,7 +28,7 @@ The semantic assertion and the evidence supporting it are different things:
 | --- | --- |
 | Semantic property | A quantified assertion about public behavior. It is part of the API contract and is independent of any particular generator. |
 | Operational domain | The class of inputs or states over which one execution of the property is meaningful: raw values, normalized values, valid DSL values, malformed reactions, simple graphs, multigraphs, and so on. |
-| Validation method | The means used to check the assertion: direct expected result, definition-level reference implementation, comparison between implementations, transformation relation, bounded exhaustive collection, or literature result. |
+| Validation method | The means used to check the assertion: direct expected result, independent definition-level calculation, comparison between implementations, transformation relation, bounded exhaustive collection, or literature result. |
 | Evidence scope | The actual generated distribution, size bound, checked-in collection, or set of named examples over which the validation ran. |
 | Property test | Executable code combining an operational domain, a validation method, and an assertion. |
 | Regression case | A retained input known to have violated a property. It preserves a discovered example but does not define the property. |
@@ -71,7 +71,7 @@ The appropriate claims are:
 | --- | --- |
 | Generated inputs | “Generatively validated over …” |
 | Every member of a finite domain | “Exhaustively checked for every … through …” |
-| Simple reference implementation | “Checked against a definition-level implementation over …” |
+| Independent definition-level calculation | “Checked against a definition-level implementation over …” |
 | Independent implementation | “Cross-validated against … over …” |
 | Related executions | “Validated under relabeling / reversal / roundtrip / composition …” |
 | Published examples | “Checked against the results reported for …” |
@@ -166,7 +166,7 @@ Property modules should explain:
 
 - which public properties they validate;
 - the operational domains generated in that module;
-- the role of any definition-level or independent reference;
+- the method and independence of any alternative calculation used for checking;
 - why apparently overlapping properties are distinct.
 
 The test implementation need not duplicate the complete public statement.
@@ -183,7 +183,7 @@ Organize a property suite along three independent axes:
 | --- | --- |
 | Semantic property | Subject and operation modules |
 | Operational domain | Domain-specific strategy modules |
-| Validation method | Operation-local reference support, exhaustive support, captured results, or literature fixtures |
+| Validation method | Operation-local independent calculations, exhaustive enumeration, captured results, or literature fixtures |
 
 The property modules are the executable inventory. Their hierarchy should make the public subject
 and operation visible without reproducing the production source tree mechanically. Uniform law
@@ -210,11 +210,24 @@ module obscures the asserted properties.
 - Keep raw, normalized, ground, structurally valid, semantically valid, and deliberately malformed
   domains distinct. A strategy's name and documentation must say which domain it emits.
 
-### Reference and fixture support
+### Independent calculations and fixtures
 
-- Keep definition-level reference implementations independent of the optimized production path and
+- Keep definition-level calculations independent of the optimized production path and
   separate from data generation.
-- Locate reference support with the operation it validates. Do not accumulate unrelated references
+- Name modules, types, functions and tests for what they compute or check, including the method
+  where it distinguishes the calculation: for example, exhaustive_atom_remappings or
+  binary_coset_action. Do not introduce names such as reference, oracle or regression that describe
+  a role in development history. The same rule applies to code copied from experiments. A term
+  used colloquially in a discussion does not settle a code name or justify an additional
+  implementation.
+- Retain an auxiliary calculation only for an ongoing correctness check of a stated property of
+  the current operation. A past experiment or agreement with a previous implementation does not
+  justify keeping it. Code used only to establish expected values once belongs in `scratch/`;
+  retain the explicit inputs, expected values and necessary provenance in the permanent tests.
+- A check of an auxiliary calculation against explicit expected values checks that calculation.
+  Tests of the production operation must exercise the production operation. Do not count checks
+  of an auxiliary calculation alone as tests of the production operation.
+- Locate checking code with the operation it validates. Do not accumulate unrelated calculations
   in a global helper module.
 - Preserve the provenance of captured and literature results. Checked-in captured output must not
   make the external producer a runtime test dependency.
@@ -417,6 +430,32 @@ claim. The suite directly checks reflexivity and symmetry of `normalized_eq`, wh
 composition checks the mapped `framed_eq_under` relation on a restricted atom-reordering domain.
 The coherent pipeline property stage systematizes the remaining `framed_eq` and cross-quotient
 laws.
+
+### Graph symmetry and stereo readings
+
+Graph-symmetry properties state the input representation directly. Preparation and queries
+preserve raw storage; a literal and a singleton set may have different colors. There is no
+normalization-invariance law for the symmetry-derived stereo keys. Canonicalization has its
+own normalized-input laws and always includes constraints; graph symmetry tests both settings
+of include_constraints independently.
+
+Exact fixtures cover chirality, proper and star orbits, stereogenicity, topicity and ligand
+symmetry. Bounded exhaustive atom-remapping calculations check the production readings, with
+explicit frame actions and scope. Relabeling and compatible-frame properties state their
+configuration domain, rather than extending a literal/finite-domain result to arbitrary
+symbolic forms.
+
+Keyed stereo properties require literal derived values at the requested keys, kindless vacuity,
+completion agreement, evidence as the meet of assertion and derivation, normalized output forms
+and preservation of the supplied molecule. Missing context, bottom assertions and empty patterns
+have separate contract cases. Own-assertion and unrelated projection normalization properties
+remain in place.
+
+Site-kind properties concern the batch over the complete candidate context. They cover
+independence from valid stored coset assignments, record-ID ordering, omission of kindless
+records, both empty-result cases, frame/relabeling behavior in the stated domain and caller-owned
+results. Classification budgets are part of the operational domain, including conservative
+retention when confirmation reaches its limit.
 
 ### Frame transport and reframing
 

@@ -2,12 +2,12 @@
 //!
 //! Four explicit terminal ligands are labeled H, F, Cl, Br, or I. The independent
 //! reference uses label equality: four distinct Th ligands are stereogenic, one
-//! equal pair is prochiral, and other partitions are symmetric. Ct is stereogenic
+//! equal pair is prostereogenic, and other partitions are nonstereogenic. Ct is stereogenic
 //! exactly when each endpoint's two labels differ. Recognition selects the exact
 //! expected frame and open coset; classification is independent of the supplied
 //! binary coset domain. Both queries preserve their input.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::iter;
 
 use proptest::prelude::*;
@@ -16,8 +16,9 @@ use umol_graph::ops::model::StereoModel;
 use umol_graph::ops::stereo::{StereoDerivation, StereoPerceiver, StereoSelection, StereoSite};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, BondId, Molecule, MoleculeEntries, RingConfig, StereoAtomForm,
-    StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind, Stereogenicity,
+    AtomForm, AtomId, BondForm, BondId, GraphSymmetryConfig, Molecule, MoleculeEntries, RingConfig,
+    StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    StereogenicSiteKind,
 };
 
 proptest! {
@@ -29,11 +30,11 @@ proptest! {
     ) {
         let distinct = labels.into_iter().collect::<BTreeSet<_>>().len();
         let class = match distinct {
-            4 => Stereogenicity::Stereogenic,
-            3 => Stereogenicity::Prochiral,
-            _ => Stereogenicity::Symmetric,
+            4 => StereogenicSiteKind::Constitutional,
+            3 => StereogenicSiteKind::Prostereogenic,
+            _ => StereogenicSiteKind::Nonstereogenic,
         };
-        let selected: BTreeSet<_> = [Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]
+        let selected: BTreeSet<_> = [StereogenicSiteKind::Nonstereogenic, StereogenicSiteKind::Prostereogenic, StereogenicSiteKind::Constitutional]
             .into_iter().enumerate().filter_map(|(i, class)| (classes & (1 << i) != 0).then_some(class)).collect();
         let elements = [Element::H, Element::F, Element::Cl, Element::Br, Element::I];
         let molecule = Molecule::from_entries(MoleculeEntries {
@@ -52,7 +53,7 @@ proptest! {
         };
         prop_assert_eq!(perception.recognize(&molecule, &StereoSelection {
             sites: Some(BTreeSet::from([StereoSite::Atom(AtomId(0))])),
-            kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), stereogenicities: Some(selected),
+            kinds: Some(BTreeSet::from([StereoKind::Tetrahedral])), stereogenic_site_kinds: Some(selected),
         }, AutomorphismAlgorithm::Nauty, RingConfig::default(), 16), Ok(expected));
         prop_assert_eq!(&molecule, &original);
 
@@ -60,8 +61,15 @@ proptest! {
         editor.add_stereo_atom(AtomId(0), &ligands, StereoAtomForm::new(StereoKind::Tetrahedral, coset));
         let stored = editor.finish().unwrap();
         let original = stored.clone();
-        prop_assert_eq!(perception.classify(&stored, &BTreeSet::from([StereoSite::Atom(AtomId(0))]),
-            AutomorphismAlgorithm::Nauty, 16), Ok(BTreeMap::from([(StereoSite::Atom(AtomId(0)), class)])));
+        let symmetry = stored.graph_symmetry(&GraphSymmetryConfig {
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            max_classification_trials: 16,
+            ..Default::default()
+        }).into_graph_symmetry();
+        prop_assert_eq!(
+            perception.classify(&stored, &[StereoSite::Atom(AtomId(0))], &symmetry),
+            Ok(vec![(StereoSite::Atom(AtomId(0)), class)])
+        );
         prop_assert_eq!(stored, original);
     }
 
@@ -72,9 +80,11 @@ proptest! {
             Just(StereoCoset::Lit(1)), Just(StereoCoset::lit_set([0, 1]))],
     ) {
         let class = if labels[0] != labels[1] && labels[2] != labels[3] {
-            Stereogenicity::Stereogenic
-        } else { Stereogenicity::Symmetric };
-        let selected: BTreeSet<_> = [Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic]
+            StereogenicSiteKind::Constitutional
+        } else if labels[0] != labels[1] || labels[2] != labels[3] {
+            StereogenicSiteKind::Prostereogenic
+        } else { StereogenicSiteKind::Nonstereogenic };
+        let selected: BTreeSet<_> = [StereogenicSiteKind::Nonstereogenic, StereogenicSiteKind::Prostereogenic, StereogenicSiteKind::Constitutional]
             .into_iter().enumerate().filter_map(|(i, class)| (classes & (1 << i) != 0).then_some(class)).collect();
         let elements = [Element::H, Element::F, Element::Cl, Element::Br, Element::I];
         let molecule = Molecule::from_entries(MoleculeEntries {
@@ -97,7 +107,7 @@ proptest! {
         };
         prop_assert_eq!(perception.recognize(&molecule, &StereoSelection {
             sites: Some(BTreeSet::from([StereoSite::Bond(BondId(0))])),
-            kinds: Some(BTreeSet::from([StereoKind::CisTrans])), stereogenicities: Some(selected),
+            kinds: Some(BTreeSet::from([StereoKind::CisTrans])), stereogenic_site_kinds: Some(selected),
         }, AutomorphismAlgorithm::Nauty, RingConfig::default(), 16), Ok(expected));
         prop_assert_eq!(&molecule, &original);
 
@@ -105,8 +115,15 @@ proptest! {
         editor.add_stereo_bond(BondId(0), &ligands, StereoBondForm::new(StereoKind::CisTrans, coset));
         let stored = editor.finish().unwrap();
         let original = stored.clone();
-        prop_assert_eq!(perception.classify(&stored, &BTreeSet::from([StereoSite::Bond(BondId(0))]),
-            AutomorphismAlgorithm::Nauty, 16), Ok(BTreeMap::from([(StereoSite::Bond(BondId(0)), class)])));
+        let symmetry = stored.graph_symmetry(&GraphSymmetryConfig {
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            max_classification_trials: 16,
+            ..Default::default()
+        }).into_graph_symmetry();
+        prop_assert_eq!(
+            perception.classify(&stored, &[StereoSite::Bond(BondId(0))], &symmetry),
+            Ok(vec![(StereoSite::Bond(BondId(0)), class)])
+        );
         prop_assert_eq!(stored, original);
     }
 }

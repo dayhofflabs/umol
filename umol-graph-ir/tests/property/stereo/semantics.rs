@@ -7,11 +7,12 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondForm, ConstitutionColoring, GraphSymmetryConfig, Lattice,
-    LigandPermutation, Molecule, MoleculeEntries, StereoAtomForm, StereoAtomId,
-    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition,
+    AtomForm, AtomId, BondForm, GraphSymmetryConfig, Lattice, LigandPermutation, Molecule,
+    MoleculeEntries, StereoAtomForm, StereoAtomId, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoLigandPosition,
+    Stereogenicity,
 };
+use umol_perm::PermutationGroup;
 
 use crate::strategies::{element_strategy, ligand_symmetry_strategy, permutation_strategy};
 
@@ -50,7 +51,7 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_symmetry_is_stereogenic(
+    fn test_stereo_atom_view_stereogenicity(
         elements in prop::collection::vec(element_strategy(), 4),
         coset in prop_oneof![
             Just(StereoCoset::Undetermined),
@@ -58,6 +59,16 @@ proptest! {
             Just(StereoCoset::lit_set([0, 1])),
         ],
     ) {
+        let expected = PermutationGroup::symmetric(4).elements().iter()
+            .filter(|permutation| (0..4).all(|position| {
+                elements[position] == elements[permutation.apply(position)]
+            }))
+            .all(|permutation| {
+                let image = array::from_fn(|position| permutation.apply(position));
+                (0..2).all(|index| {
+                    super::exhaustive::binary_coset_action(StereoKind::Tetrahedral, index, &image) == Some(index)
+                })
+            });
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: iter::once(AtomForm::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomForm::from_element))
@@ -74,21 +85,13 @@ proptest! {
             )],
             ..Default::default()
         });
-        let graph = molecule.graph_symmetry(&GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: true,
-            max_iterations: 16,
+        let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-        });
-        let symmetry = molecule.stereo_atom_symmetry(&graph, StereoAtomId(0));
-        let expected = symmetry.group().elements().iter().all(|operation| {
-            let image = array::from_fn(|position| operation.permutation().apply(position));
-            (0..2).all(|index| {
-                super::reference::binary_coset_action(StereoKind::Tetrahedral, index, &image) == Some(index)
-            })
-        });
+            ..Default::default()
+        }).into_graph_symmetry();
+        let stereo = molecule.stereo_atom(StereoAtomId(0)).with_symmetry(&symmetry);
 
-        prop_assert_eq!(symmetry.is_stereogenic(), expected);
+        prop_assert_eq!(stereo.stereogenicity() == Stereogenicity::Stereogenic, expected);
     }
 
     #[test]

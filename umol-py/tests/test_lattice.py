@@ -121,7 +121,7 @@ def test_lattice_meet(left, right, expected):
                 [
                     StereoAtomConstraintForm.Stereogenicity(
                         StereogenicityForm.LitSet(
-                            {Stereogenicity.Symmetric, Stereogenicity.Stereogenic}
+                            {Stereogenicity.Nonstereogenic, Stereogenicity.Stereogenic}
                         )
                     )
                 ]
@@ -129,7 +129,7 @@ def test_lattice_meet(left, right, expected):
             StereoAtomConstraintsForm(
                 [
                     StereoAtomConstraintForm.Stereogenicity(
-                        StereogenicityForm.NotSet({Stereogenicity.Prochiral})
+                        StereogenicityForm.NotSet({Stereogenicity.Prostereogenic})
                     )
                 ]
             ),
@@ -427,17 +427,17 @@ def test_entity_form_is_undetermined(source):
         (
             StereoAtomConstraintsForm,
             StereoAtomConstraintForm.Stereogenicity,
-            StereogenicityForm.NotSet({Stereogenicity.Prochiral}),
+            StereogenicityForm.NotSet({Stereogenicity.Prostereogenic}),
             StereogenicityForm.Lit(Stereogenicity.Stereogenic),
-            StereogenicityForm.Lit(Stereogenicity.Prochiral),
+            StereogenicityForm.Lit(Stereogenicity.Prostereogenic),
             False,
         ),
         (
             StereoBondConstraintsForm,
             StereoBondConstraintForm.Stereogenicity,
-            StereogenicityForm.NotSet({Stereogenicity.Prochiral}),
+            StereogenicityForm.NotSet({Stereogenicity.Prostereogenic}),
             StereogenicityForm.Lit(Stereogenicity.Stereogenic),
-            StereogenicityForm.Lit(Stereogenicity.Prochiral),
+            StereogenicityForm.Lit(Stereogenicity.Prostereogenic),
             False,
         ),
     ],
