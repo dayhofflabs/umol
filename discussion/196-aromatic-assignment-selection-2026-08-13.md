@@ -4,7 +4,8 @@ Status: **Completed** (2026-08-15) — A0–A6 implemented and verified; the cor
 instrument served and was deleted per plan. Successor work: doc 194 S5d.
 Date: 2026-08-13
 Relates: [174](174-aromatic-hydrogen-resolution-2026-07-31.md),
-[194](194-constraint-assertion-semantics-2026-08-10.md)
+[194](194-constraint-assertion-semantics-2026-08-10.md),
+[247](247-aromatic-system-bonds-2026-11-16.md)
 
 ## Defect
 

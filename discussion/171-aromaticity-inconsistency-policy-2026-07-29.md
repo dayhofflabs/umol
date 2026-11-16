@@ -3,7 +3,8 @@
 Status: Completed
 Date: 2026-07-29
 Relates: [166](166-molecule-ops-2026-07-27.md),
-[177](177-nomenclature-guide-2026-07-31.md)
+[177](177-nomenclature-guide-2026-07-31.md),
+[247](247-aromatic-system-bonds-2026-11-16.md)
 
 Aromatic input that the chemistry model declines currently leaves projections behind with no relation
 to project from. This document states the problem, the resolver policy that follows from
