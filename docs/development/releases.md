@@ -26,9 +26,9 @@ file through `--notes-file`; do not accumulate older release sections.
 ## Versions and verification
 
 Bump the workspace version, all internal dependency requirements and workspace
-package entries in the root and checked-in fuzz Cargo.lock files together. Check
-the auxiliary workspaces with locked metadata as well. Update maintained dependency
-examples and release references, including the whitepaper listings. Preserve historical
+package entries in the root Cargo.lock together. Update any other tracked lockfiles
+that pin workspace packages. Update maintained dependency examples and release
+references, including the whitepaper listings. Preserve historical
 discussion versions and unrelated external dependency versions. The Python project
 version is inherited from Cargo through maturin.
 

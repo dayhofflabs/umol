@@ -1,6 +1,6 @@
 # 249 — 0.11 release preparation
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-16
 Relates: [237](237-release-0-10-scope-2026-10-15.md),
 [246](246-stereo-derived-readings-2026-11-12.md),
@@ -14,10 +14,12 @@ preparation changes, verify the whitepaper listings against the current API,
 propose corrections to existing manuscript and README claims, replace the
 release notes, update versions and record a reusable release procedure.
 
-The author retains manuscript text and README edits. The proposals below have
-not been applied to main.tex or README.md. Included listing corrections are
-authorized; the author separately authorized the corresponding test-harness
-updates. No Git mutation or publication is part of this preparation.
+The author reviewed and applied the manuscript text changes. Included listing
+corrections and the corresponding test-harness updates were authorized separately.
+The agreed README changes were applied after the author's explicit request.
+The initial proposals below are historical review input, not pending patches or
+a verbatim record of the author's final wording. Git mutations remained
+author-controlled; no publication was performed during preparation.
 
 The explicit import-repair proposal in discussion 248 is outside 0.11. This
 release retains Python 3.9 support, Rust 1.87, the existing ABI configuration and
@@ -29,16 +31,16 @@ wheel runners to latest Ubuntu is deferred to the 0.12 cycle.
 - Updated the workspace version to 0.11.0, all 41 internal dependency requirements
   across 11 member manifests, and all 19 workspace package entries in Cargo.lock.
   Locked offline metadata agrees; external lockfile package entries are unchanged.
-  Also updated 21 workspace package entries across the three checked-in fuzz
-  lockfiles; locked offline metadata passes for those auxiliary workspaces too.
+  The three auxiliary fuzz lockfiles are ignored local files, not tracked release
+  files; their local refresh and metadata checks are not release changes.
 - Rebuilt the Python extension from this checkout with the repository Python
   3.13.18 environment. The installed distribution is umol-py 0.11.0.
 - The full Python suite passed: 3,577 passed and two skipped.
 - The whitepaper driver passed all 12 Rust listings (13 Rust test cases) and all
   30 Python/data test cases. It tests the external paper's included files, using
   local crate patches and the rebuilt Python extension.
-- All 19 current README Python blocks and all 18 blocks in the proposed shorter
-  README executed successfully. The composition examples received the first,
+- Both the prior 19-block README and the final 18-block README executed
+  successfully. The composition examples received the first,
   second and host inputs that their surrounding text explicitly assumes.
 - Verified that the release workflow's 19 publication targets match the workspace
   and occur in dependency order. No workflow or Python support-policy files were
@@ -57,7 +59,8 @@ The living release guide now records that procedure.
 
 ## Whitepaper listing and harness corrections applied
 
-The manuscript repository is ~/Documents/paper/umol. Its main.tex is unchanged.
+The manuscript repository is ~/Documents/paper/umol. Its main.tex was edited by
+the author; the listing and harness corrections below were applied separately.
 
 - listings/chemistry-model.py and listings/chemistry-model.rs now put phosphorus
   patterns under localized valence three and fluorine patterns under one.
@@ -69,18 +72,18 @@ The manuscript repository is ~/Documents/paper/umol. Its main.tex is unchanged.
   field, and the chemistry-model harness imports ValenceContradiction from
   ops::valence.
 
-No new-feature inventory is proposed for the whitepaper. The text corrections
-below address material it already discusses: the version, registry indexing,
-stereo-kind versus configuration readings, entity terminology, and canonical
-comparison of descriptions containing constraints. The glossary correction also
-avoids implying that storing a stereo entity asserts stereogenicity.
+No new-feature inventory was added to the whitepaper. The author updated both
+version references, registry indexing, stereo-kind versus configuration readings,
+and projection/export descriptions. The glossary now permits nonstereogenic
+stereo sites and omits the blanket cascading-removal statement. The obsolete
+canonicalization-color sentence was removed. The optional class-to-kind table
+renames and the longer canonicalization rewrite in the initial proposal were
+not required and were not applied.
 
-## Proposed manuscript text changes
+## Initial manuscript text proposal
 
-The following compact diff is against main.tex and is for the author to merge.
-It does not add sections for the new stereo operations or other release features.
-A full-context patch is also available in scratch/0.11-release/whitepaper-proposal.patch;
-the proposal itself is preserved below independently of that temporary file.
+The following compact diff records the initial proposal, before the section-by-section
+review and the author's edits described above. It is retained as review history.
 
 ```diff
 --- a/main.tex
@@ -129,19 +132,18 @@ the proposal itself is preserved below independently of that temporary file.
 +\texttt{\#C} & cis/trans stereo kind \\
 ```
 
-## README review and proposed changes
+## README review and applied changes
 
 Agreed: remove the 33-line stereo/symmetry addition made after v0.10.0. It
 teaches selection defaults, batch classification, auxiliary-data attachment and
 lifecycle details in the introductory README. Those contracts already belong in
 the linked API guide, while the release notes cover the new operations and
-migration. The proposal removes the block without expanding adjacent sections.
+migration. The applied change removes the block without expanding adjacent sections.
 
-Keep the phosphorus/fluorine registry-key correction already present in README:
-it is needed for the existing chemistry-model example to execute. Apart from
+The phosphorus/fluorine registry-key correction was retained in README because
+the existing chemistry-model example needs it to execute. Apart from
 removing the stereo block, the compact diff below only bumps the release version,
-the preceding-release baseline and the three Rust dependency examples. A
-full-context patch is available in scratch/0.11-release/README-proposal.patch.
+the preceding-release baseline and the three Rust dependency examples.
 
 ```diff
 --- a/README.md
@@ -195,13 +197,13 @@ full-context patch is available in scratch/0.11-release/README-proposal.patch.
 +umol-io = { version = "0.11.0", features = ["depiction"] }
 ```
 
-## Remaining author actions
+## Closeout — 2026-11-16
 
-Review and merge the manuscript and README proposals, then rebuild the paper and
-refresh docs/umol-whitepaper.pdf. The current distributed PDF has not been
-replaced with a document that still contains the old text and version.
+The manuscript corrections, listing and harness updates, README changes, version
+updates and latest-release-only notes are complete. The manuscript source changes
+are committed in its separate repository. The distributed docs/umol-whitepaper.pdf
+matches the current manuscript main.pdf byte for byte and contains version 0.11.0.
 
-After the release changes are merged, the author can create and push v0.11.0 and
-dispatch the release workflow. Publication and its remote verification have not
-occurred. This record stays In Progress while the author-owned release work is
-outstanding.
+This completed record covers preparation and local verification. The release PR,
+its CI gates, merge, v0.11.0 tag, workflow dispatch and publication verification
+follow the release guide. Publication has not occurred.

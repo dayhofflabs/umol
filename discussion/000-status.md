@@ -28,8 +28,8 @@ the statuses recorded here remain authoritative.
 ## Current frontier
 
 - [249 — 0.11 release preparation](249-release-0-11-preparation-2026-11-16.md)
-  records completed local preparation and verification, with author-owned
-  manuscript/README proposals and the distributed PDF refresh still outstanding.
+  records completed preparation and local verification. Release CI and publication
+  follow the release workflow.
 - [237 — 0.10 release scope](237-release-0-10-scope-2026-10-15.md) records the
   completed implementation scope and author-owned whitepaper updates.
   Further 231 work and PR 29 are excluded from 0.10.
@@ -297,4 +297,4 @@ the statuses recorded here remain authoritative.
 | [246-stereo-derived-readings-2026-11-12.md](246-stereo-derived-readings-2026-11-12.md)                         | Completed     | 2026-11-15   | |
 | [247-aromatic-system-bonds-2026-11-16.md](247-aromatic-system-bonds-2026-11-16.md)                             | Informational | 2026-11-16   | |
 | [248-explicit-import-repair-2026-11-16.md](248-explicit-import-repair-2026-11-16.md)                           | Proposed      | 2026-11-16   | Deferred beyond 0.11; settle repair interfaces and fix semantics before planning. |
-| [249-release-0-11-preparation-2026-11-16.md](249-release-0-11-preparation-2026-11-16.md)                         | In Progress   | 2026-11-16   | Author review/merge of manuscript proposal, README merge and distributed PDF refresh before release. |
+| [249-release-0-11-preparation-2026-11-16.md](249-release-0-11-preparation-2026-11-16.md)                         | Completed     | 2026-11-16   | |
