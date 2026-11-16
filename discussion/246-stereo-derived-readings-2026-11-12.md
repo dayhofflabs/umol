@@ -2,7 +2,8 @@
 
 Status: Completed
 Date: 2026-11-12
-Relates: [245](245-canonical-eq-cost-2026-11-12.md)
+Relates: [245](245-canonical-eq-cost-2026-11-12.md),
+[249](249-release-0-11-preparation-2026-11-16.md)
 
 ## Purpose
 
@@ -4315,3 +4316,67 @@ The completed trial fixtures and measurements precede the port. New required tes
 before their production changes; the existing late-written cases retain their actual history.
 No remaining stage is deferred: the shared colors, migrated consumers, fluxionality removal,
 keyed readings and Python surface are all part of this work.
+
+## Addendum, 2026-11-16 — Verification of issue 43
+
+The exact reproducer in [GitHub issue 43](https://github.com/dayhofflabs/umol/issues/43)
+was replayed against commit 9ee511580b0c7a426ba67ff65489cfbc9543e376 through the current
+Rust-backed Python operations, using CPython 3.13.18 from umol-py/.venv.
+
+**Correction to the earlier trial record.** The Results section identifies
+1-chloro-1-fluoropropane as the molecule of issue 43. That is an analogous fixture. The
+issue's actual molecule is HO–CH₂–CH₂–CH(OH)(O⁻), with three carbon sites numbered 0, 1 and 2,
+seven explicit ordinary hydrogens, and literal oxygen lone-pair counts:
+
+```edn
+{
+  :atoms ["C" "C" "C" "O#n2" "O#n2" "O#c-#n3"
+          "H" "H" "H" "H" "H" "H" "H"]
+  :bonds [[0 1 "1"] [1 2 "1"] [0 3 "1"] [2 4 "1"] [2 5 "1"]
+          [0 6 "1"] [0 7 "1"] [1 8 "1"] [1 9 "1"] [2 10 "1"]
+          [3 11 "1"] [4 12 "1"]]
+}
+```
+
+The molecule was parsed with MoleculeDefaults.concrete() and processed with
+StereoModel.default(). Both add_stereo_into and add_stereo were checked under two selections:
+the issue's restriction to carbon sites 0–2 and Tetrahedral kind, retaining the current default
+site-kind filter; and AddStereoConfig() without overrides. The current default site-kind
+filter admits Constitutional and Configurational. Enumeration selected the existing
+non-ground tetrahedral records in ascending site order, matching the issue's procedure.
+
+The original report explicitly distinguishes add-only idempotency from stability across
+enumeration: add(add(m)) == add(m) already held. Its failure was that assigning the existing
+center caused the next addition to introduce CH₂ records. The current results below hold for
+both first-round assignments, both addition methods and both selections:
+
+| Check | Reported at b0e648cc1d3cc7588f82d5699e06e9e5af79d295 | Verified at 9ee511580b0c7a426ba67ff65489cfbc9543e376 |
+| --- | --- | --- |
+| Sites after first addition | [2] | [2] |
+| Add-only idempotency | true | true |
+| First enumeration outputs | 2 | 2 |
+| Sites after addition to either assigned product | [0, 1, 2] | [2] |
+| Second enumeration outputs per assigned product | 4 | 1 |
+| Distinct canonical second-round products | 1 | 1 |
+| Stereo records in that canonical product | 3 | 1 |
+| Canonical product equals the original assigned product's canonical form | false | true |
+
+The second addition now preserves exact structural equality with its assigned input before
+canonicalization. Repeating addition preserves that equality, and the second enumeration
+returns exactly the original assigned product. The check therefore establishes stability of
+the reported sequence without relying on canonicalization to remove extra records.
+
+As a separate check of the selection, allowing all site kinds produced candidate records at
+all three carbon sites. For each assigned product, the batch classified sites 0 and 1 as
+Prostereogenic and site 2 as Constitutional. The default filter excludes both CH₂ records;
+assigning the genuine center does not promote them into the selected site kinds.
+
+The existing focused Python addition tests also passed: 18 passed, 16 deselected.
+
+```text
+source umol-py/.venv/bin/activate && \
+  pytest -q umol-py/tests/test_molecule_stereo.py -k 'add_stereo'
+```
+
+This verification resolves the reported add → enumerate → add instability for the exact
+issue molecule. It required no implementation or permanent-test changes.
