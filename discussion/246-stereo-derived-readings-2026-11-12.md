@@ -23,11 +23,11 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g and S5a-S5f are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g and S5a-S5g are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
 generator filter, FieldColor names, the three derived stereo-view readings and the batch
-stereogenic-site classification and its Rust/Python operation consumers. The workspace and S5g's
-correctness checks are green; its measured query and setup costs require discussion before S6.
+stereogenic-site classification and its Rust/Python operation consumers. S5g's acceptance and
+performance gate is complete with the accepted algorithm and tradeoffs recorded below. S6a is next.
 
 ## Starting state
 
@@ -3432,7 +3432,7 @@ cargo +nightly fmt --all -- --check
 git diff --check
 ```
 
-#### S5g — Query and operation gate
+#### S5g — Query and operation gate **Done**
 
 - **Module:** the graph-IR, graph and Python consumers and their tests and benchmarks.
 - **Check:** run the previously written graph-IR and graph acceptance suites, their explicitly
@@ -3443,7 +3443,7 @@ git diff --check
   separately from unchanged canonicalization costs. Resolve discrepancies before S6.
 - **Kind:** verification (green). `[dep: S5f]`
 
-**Gate evidence, 2026-11-15. Acceptance passes; performance discussion remains open.**
+**Initial gate evidence, 2026-11-15, before the accepted corrections below.**
 The initial measurements used revision 332315029. No production or benchmark source was
 changed for those measurements. The correctness gates passed with 27,511 workspace
 tests/doctests and 9 ignored,
@@ -3453,10 +3453,10 @@ profile with their default case counts. Python was rebuilt and tested in umol-py
 with CPython 3.13.18. Workspace Clippy passed for all targets with -D warnings.
 Both the transform and constraint_readings benchmark targets linked.
 
-The fixed molecule-reading workload has a material cost increase: 5.730 → 107.434 µs on the
-eight-atom meso input, despite setup decreasing from 5.382 to 2.671 µs. The old auxiliary
-stored proper/star orbit labels and a chirality result. The present auxiliary stores the
-Constitution graph, adapter, refined partition and cell indices. proper_orbit_of and
+At this initial checkpoint, the fixed molecule-reading workload has a material cost increase:
+5.730 → 107.434 µs on the eight-atom meso input, despite setup decreasing from 5.382 to 2.671 µs.
+The old auxiliary stored proper/star orbit labels and a chirality result. The then-current
+auxiliary stores the Constitution graph, adapter, refined partition and cell indices. proper_orbit_of and
 star_orbit_of each test every candidate atom through the corresponding pair predicate.
 Requesting both vectors for every atom repeats those searches; differing constitution cells
 still exit cheaply. Setup-only improvements therefore do not establish an improvement in
@@ -3468,8 +3468,8 @@ costs more on the coupled examples: inositol is 642.897 µs instead of the old l
 38.652 µs. That comparison changes the calculation from Stereogenicity to the complete
 StereogenicSiteKind batch; the implementation cost of the new contract is nevertheless real.
 Inositol's enumeration setup and complete transforms inherit that batch cost. No workload
-frequencies or overall speedup are inferred from this collection. These costs require discussion
-before S6; this record does not mark the S5g performance gate complete.
+frequencies or overall speedup are inferred from this collection. These costs required the
+follow-up discussion and corrections recorded below before completing the S5g performance gate.
 
 **Protocol and continuity.** All table values are median microseconds. A cell with two values
 is baseline → current, followed by current/baseline; values below 1× are faster. Old setup can
@@ -3482,15 +3482,15 @@ it is not compared with the retired local-group construction or cached-getter gr
 Each of the 116 selected keys ran once with 100 samples, 0.5 s warm-up, 1.5 s measurement and
 100,000 resamples. The five timing batches took 276.299 seconds in total. They comprise 24
 fixed-reading/setup keys, 10 core operation keys, 36 remaining operation keys, 23 other setup
-keys, and 23 new-workload keys. The core batch was inspected after the fixed-reading batch;
-no optimization/remeasurement loop followed. The other artificial disconnected-component
+keys, and 23 new-workload keys. The core batch was inspected after the fixed-reading batch.
+The other artificial disconnected-component
 stress cases in the parent transform benchmark were outside the timed filters.
 
-The 408 saved baseline estimate files are unchanged: 268 pre-246 records (215 canonicalization,
+The 408 saved baseline estimate files were unchanged: 268 pre-246 records (215 canonicalization,
 51 active operation records and two retired-name aliases), 24 pre-246-colors records and
 116 pre-246-readings records. The path/hash manifest SHA-256 is
 014941c1bb3111caa1052767504dd9282458a78c984d1fb0df6ee3c1210ee2bb.
-Current estimates use s5g-2026-11-15-332315029. The measured transform executable SHA-256 is
+Initial estimates use s5g-2026-11-15-332315029. The measured transform executable SHA-256 is
 f1738faf94569d93ff3573ea918c1a9d569938da77f63fd1118a27ad7012e116.
 
 The operation comparison has 46 remaining matching IDs after retiring the five sites_* inputs
@@ -3776,7 +3776,7 @@ bounded batches, taking 261.350 seconds in total. The protocol remains 100 sampl
 s5g-final-2026-11-15 and the transform executable SHA-256 is
 c9ecbdcd3e7b9c41a447294ef6255d798a6247f39e9841685acc5a183a981e02.
 The four changed Rust source/test hashes were unchanged throughout the measurements, and
-all 408 saved baseline estimate hashes remain unchanged.
+all 408 saved baseline estimate hashes were verified unchanged at that point.
 
 The following tables preserve every final median in microseconds. Their workloads, query
 counts, preparation boundaries and baseline caveats are the same as in the initial tables
@@ -3887,6 +3887,23 @@ protocol, using label s5g-equality-2026-11-15. Molecule equality is 12.676 micro
 two shared-path workloads, not a rerun of all 215 canonicalization keys. The canonical
 minimum-search functions, direct full-color reads and upfront normalization are unchanged.
 
+**Final acceptance, 2026-11-15.** After cleaning the build output, one workspace run with the
+graph-IR/graph property features and graph conformance feature explicitly enabled passed
+32,542 tests/doctests with 10 ignored. That total includes 802 graph-IR/graph property cases
+and 4,219 graph conformance cases. Python was rebuilt in umol-py/.venv with CPython 3.13.18;
+all 3,431 Python tests passed with 2 skipped. The four source/test hashes still match the
+frozen implementation used for the final measurements. The full change was reviewed against
+the accepted scope; formatting and diff checks pass. S5g is complete; S6a remains unimplemented.
+
+```text
+source umol-py/.venv/bin/activate && cargo test --locked --workspace \
+  --features umol-graph-ir/proptest,umol-graph/proptest,umol-graph/conformance -- --quiet
+source umol-py/.venv/bin/activate && maturin develop --locked --manifest-path umol-py/Cargo.toml
+source umol-py/.venv/bin/activate && pytest -q umol-py/tests
+cargo +nightly fmt --all -- --check
+git diff --check
+```
+
 ### S6 — Keyed readings and the Python symmetry surface
 
 S6a changes the Rust keyed behavior and can leave its Python consumers red until S6b supplies
@@ -3983,9 +4000,9 @@ stage boundary.
 
 ### Stage gates
 
-S4f, S4g and S5b-S5f are complete. The workspace and S5g acceptance checks pass; its
-performance gate remains open for the measured query and setup costs. S6 ends green with keyed and Python parity complete. No later stage is
-used to repair an earlier stage's compilation.
+S4f, S4g and S5b-S5g are complete. S5g's acceptance and performance gate passes with the
+accepted tradeoffs recorded above. S6 ends green with keyed and Python parity complete.
+No later stage is used to repair an earlier stage's compilation.
 
 During implementation, run the tests of the affected crate/subitem, then the stage gate; do not
 repeat unrelated full suites for a documentation-only subitem. Explicit feature-gated targets
@@ -4011,10 +4028,9 @@ source umol-py/.venv/bin/activate && pytest -q umol-py/tests
 
 ### Critical path
 
-S0-S3, S4a-S4e and S5a have implementation records. S4f is integrated and its standalone gate
-passes. The remaining path is:
+S0-S5 are complete. The remaining path is:
 
-S5d -> S5e -> S5f -> S5g -> S6a -> S6b -> S7a -> S7b -> S7c.
+S6a -> S6b -> S7a -> S7b -> S7c.
 
 S4f replaces the selector after S4e's measurements; S4g applies the later approved names and
 the repository-required color-test corrections. The single Constitution search and narrower

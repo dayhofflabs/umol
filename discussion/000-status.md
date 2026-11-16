@@ -291,4 +291,4 @@ the statuses recorded here remain authoritative.
 | [243-stereo-site-assertions-2026-11-07.md](243-stereo-site-assertions-2026-11-07.md)                                 | Completed     | 2026-11-09   | |
 | [244-reaction-span-canonicalization-2026-11-09.md](244-reaction-span-canonicalization-2026-11-09.md)             | Completed     | 2026-11-12   | |
 | [245-canonical-eq-cost-2026-11-12.md](245-canonical-eq-cost-2026-11-12.md)                                     | Completed     | 2026-11-12   | |
-| [246-stereo-derived-readings-2026-11-12.md](246-stereo-derived-readings-2026-11-12.md)                         | In Progress   | 2026-11-15   | Discuss S5g query and setup costs. |
+| [246-stereo-derived-readings-2026-11-12.md](246-stereo-derived-readings-2026-11-12.md)                         | In Progress   | 2026-11-15   | Implement S6a keyed readings. |
