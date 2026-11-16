@@ -41,7 +41,7 @@ pub struct GraphSymmetry {
     adapter: AutomorphismAdapter,
     partition: OrderedPartition,
     cell_indices: Vec<u32>,
-    automorphisms: Option<AutomorphismOutput>,
+    automorphisms: Option<Box<AutomorphismOutput>>,
     config: GraphSymmetryConfig,
 }
 
@@ -143,7 +143,7 @@ impl Molecule {
             let partition = OrderedPartition::from_descriptors(&descriptors);
             let automorphisms = partition
                 .first_non_singleton_entity_cell(adapter.source_node_count)
-                .map(|_| automorphisms);
+                .map(|_| Box::new(automorphisms));
             (partition, automorphisms)
         };
         let cell_indices = partition.cell_indices(adapter.graph().node_count());

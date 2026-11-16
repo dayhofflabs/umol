@@ -567,10 +567,10 @@ impl RingSet {
 pub struct RingViews {
     molecule: Py<Molecule>,
     counter: u64,
-    storage: Option<RingStorage>,
+    storage: Option<RingSetStorage>,
 }
 
-enum RingStorage {
+enum RingSetStorage {
     Owned(GraphIrRingSet),
     Borrowed(Py<RingSet>),
 }
@@ -585,7 +585,7 @@ impl RingViews {
         Ok(Self {
             molecule,
             counter,
-            storage: Some(RingStorage::Owned(rings)),
+            storage: Some(RingSetStorage::Owned(rings)),
         })
     }
 
@@ -612,8 +612,8 @@ impl RingViews {
         molecule.check_access(self.counter, accessor)?;
         let molecule = molecule.to_rust();
         match storage {
-            RingStorage::Owned(rings) => f(rings, molecule),
-            RingStorage::Borrowed(owner) => f(&owner.try_borrow(py)?.0, molecule),
+            RingSetStorage::Owned(rings) => f(rings, molecule),
+            RingSetStorage::Borrowed(owner) => f(&owner.try_borrow(py)?.0, molecule),
         }
     }
 }
@@ -628,7 +628,7 @@ impl RingViews {
         Ok(Self {
             molecule,
             counter,
-            storage: Some(RingStorage::Borrowed(rings)),
+            storage: Some(RingSetStorage::Borrowed(rings)),
         })
     }
 
@@ -714,8 +714,8 @@ impl RingViews {
             .take()
             .ok_or_else(|| ConsumedError::new_err("RingViews has been consumed"))?
         {
-            RingStorage::Owned(rings) => Ok(RingSet(rings)),
-            RingStorage::Borrowed(owner) => Ok(RingSet(owner.try_borrow(py)?.0.clone())),
+            RingSetStorage::Owned(rings) => Ok(RingSet(rings)),
+            RingSetStorage::Borrowed(owner) => Ok(RingSet(owner.try_borrow(py)?.0.clone())),
         }
     }
 

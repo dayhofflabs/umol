@@ -670,7 +670,7 @@ fn stereogenicity_relation_inline(i: &mut &str) -> PResult<StereogenicityForm> {
     }
 }
 
-/// Parse one `#p`/`#f`/`#o`/`#g` predicate for `kind`. Atom and bond share the
+/// Parse one `#p`/`#o`/`#g` predicate for `kind`. Atom and bond share the
 /// grammar; the macro emits a parser per constraint type.
 macro_rules! stereo_predicate_parser {
     ($name:ident, $constraint:ident) => {
@@ -790,8 +790,8 @@ fn fmt_stereogenicity_relation(
 }
 
 /// Render one stereo constraint as its inline predicate. `~` is emitted for a
-/// `#p`/`#f` permutation equal to the kind involution (matching the involution's
-/// orientation for `#p`); otherwise explicit cycles.
+/// `#p` permutation equal to the kind involution with matching orientation;
+/// otherwise explicit cycles.
 macro_rules! stereo_constraint_fmt {
     ($name:ident, $constraint:ident) => {
         fn $name(f: &mut fmt::Formatter<'_>, c: &$constraint, kind: StereoKind) -> fmt::Result {
