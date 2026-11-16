@@ -17,9 +17,10 @@ use super::bond::BondView;
 use super::constraints::{StereoAtomConstraintsView, StereoBondConstraintsView};
 use super::ligand::StereoLigandView;
 use crate::ir::{
-    OrientedLigandPermutation, StereoAtomConstraintForm, StereoAtomConstraintKey,
-    StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintKey,
-    StereoBondConstraintsForm, StereoCoset, Stereogenicity, Topicity,
+    BooleanForm, LigandSymmetryForm, OrientedLigandPermutation, StereoAtomConstraintForm,
+    StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoBondConstraintForm,
+    StereoBondConstraintKey, StereoBondConstraintsForm, StereoCoset, Stereogenicity,
+    StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 /// Namespace accessor for stereo-atom views on a `Molecule`.
@@ -127,10 +128,15 @@ pub struct StereoAtomView<'a> {
 impl<'a> StereoAtomView<'a> {
     /// Constraint reading of this stereo atom: the container's read API
     /// (asserted side, meanings intact) plus the keyed accessors. Mutation
-    /// stays on the stored container.
+    /// stays on the stored container. Attached graph-symmetry data is carried
+    /// into the constraints view.
     #[inline]
     pub fn constraints(&self) -> StereoAtomConstraintsView<'a> {
-        StereoAtomConstraintsView::new(self.molecule, self.id)
+        let view = StereoAtomConstraintsView::new(self.molecule, self.id);
+        match self.symmetry {
+            Some(symmetry) => view.with_symmetry(symmetry),
+            None => view,
+        }
     }
 
     /// View of the stereo site atom.
@@ -315,10 +321,15 @@ pub struct StereoBondView<'a> {
 impl<'a> StereoBondView<'a> {
     /// Constraint reading of this stereo bond: the container's read API
     /// (asserted side, meanings intact) plus the keyed accessors. Mutation
-    /// stays on the stored container.
+    /// stays on the stored container. Attached graph-symmetry data is carried
+    /// into the constraints view.
     #[inline]
     pub fn constraints(&self) -> StereoBondConstraintsView<'a> {
-        StereoBondConstraintsView::new(self.molecule, self.id)
+        let view = StereoBondConstraintsView::new(self.molecule, self.id);
+        match self.symmetry {
+            Some(symmetry) => view.with_symmetry(symmetry),
+            None => view,
+        }
     }
 
     /// View of the stereo site bond.
@@ -1013,14 +1024,36 @@ pub(crate) fn stereo_atom_asserted_constraints(
     &molecule.stereo_atom(id).attributes().constraints
 }
 
-/// Derived side of one stereo-atom constraint key: always vacuous.
+/// Derived side of one stereo-atom constraint key.
 pub(crate) fn stereo_atom_derived_constraint(
-    _molecule: &Molecule,
-    _id: StereoAtomId,
+    molecule: &Molecule,
+    id: StereoAtomId,
+    symmetry: Option<&GraphSymmetry>,
     key: StereoAtomConstraintKey,
     _complete: bool,
 ) -> Option<StereoAtomConstraintForm> {
-    Some(StereoAtomConstraintForm::undetermined(key))
+    let stereo = molecule.stereo_atom(id);
+    if stereo.attributes().configuration.kind().is_none() {
+        return Some(StereoAtomConstraintForm::undetermined(key));
+    }
+    let stereo = stereo.with_symmetry(symmetry.expect("stereo view has symmetry data"));
+    Some(match key {
+        StereoAtomConstraintKey::Stereogenicity => StereoAtomConstraintForm::Stereogenicity(
+            StereogenicityForm::Lit(stereo.stereogenicity()),
+        ),
+        StereoAtomConstraintKey::Topicity(pair) => {
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair,
+                relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+            })
+        }
+        StereoAtomConstraintKey::LigandSymmetry(permutation) => {
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                permutation,
+                invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+            })
+        }
+    })
 }
 
 /// Stored constraint container of the stereo bond `id`.
@@ -1031,14 +1064,36 @@ pub(crate) fn stereo_bond_asserted_constraints(
     &molecule.stereo_bond(id).attributes().constraints
 }
 
-/// Derived side of one stereo-bond constraint key: always vacuous.
+/// Derived side of one stereo-bond constraint key.
 pub(crate) fn stereo_bond_derived_constraint(
-    _molecule: &Molecule,
-    _id: StereoBondId,
+    molecule: &Molecule,
+    id: StereoBondId,
+    symmetry: Option<&GraphSymmetry>,
     key: StereoBondConstraintKey,
     _complete: bool,
 ) -> Option<StereoBondConstraintForm> {
-    Some(StereoBondConstraintForm::undetermined(key))
+    let stereo = molecule.stereo_bond(id);
+    if stereo.attributes().configuration.kind().is_none() {
+        return Some(StereoBondConstraintForm::undetermined(key));
+    }
+    let stereo = stereo.with_symmetry(symmetry.expect("stereo view has symmetry data"));
+    Some(match key {
+        StereoBondConstraintKey::Stereogenicity => StereoBondConstraintForm::Stereogenicity(
+            StereogenicityForm::Lit(stereo.stereogenicity()),
+        ),
+        StereoBondConstraintKey::Topicity(pair) => {
+            StereoBondConstraintForm::Topicity(TopicityForm {
+                pair,
+                relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+            })
+        }
+        StereoBondConstraintKey::LigandSymmetry(permutation) => {
+            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                permutation,
+                invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+            })
+        }
+    })
 }
 
 #[cfg(test)]

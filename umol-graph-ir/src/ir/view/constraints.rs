@@ -4,7 +4,8 @@
 //! Typed getters and iterators borrow raw storage. The six keyed readers return
 //! normalized owned forms: `None` is bottom, and `Some(undetermined(key))` is
 //! top, including absent evidence. These are the same result semantics as meet.
-//! `asserted` reads own assertions; `derived` projects present relations.
+//! `asserted` reads own assertions; `derived` projects present relations or
+//! computes stereo readings with attached graph-symmetry data.
 //! `evidenced` meets those readings and applicable incident-bond evidence.
 //! `asserted_complete` closes top own assertions for overlay keys;
 //! `derived_complete` closes absent overlays. `evidenced_complete` applies
@@ -17,7 +18,10 @@
 //! # Semantic properties
 //!
 //! Readings do not mutate storage. Normalizing a molecule successfully preserves
-//! its readings in the same ring context. Contradiction in a contributing source
+//! own assertions and non-symmetry projections in the same ring context.
+//! Symmetry-derived stereo keys read the supplied forms directly; their values
+//! need not be invariant under molecule normalization. Evidence is the meet of
+//! the own assertion and derivation. Contradiction in a contributing source
 //! yields bottom; unrelated fields do not participate in the reading.
 //! Successful participant reframing preserves the atom and bond stereo readings.
 
@@ -39,7 +43,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::molecule::Molecule;
+use super::super::molecule::{GraphSymmetry, Molecule};
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::stereo::{CisTransStereoForm, TetrahedralStereoForm};
@@ -463,7 +467,7 @@ macro_rules! constraints_view {
         }
     }};
     ($view:ident, $entity:literal, $id:ty, $form:ty, $key:ty, $container:ty,
-     $asserted:path, $derived:path $(, kind: $entity_view:ident)?) => {
+     $asserted:path, $derived:path $(, kind: $entity_view:ident, $symmetry:ident)?) => {
         #[doc = concat!("Constraint reading of one ", $entity, ": the asserted side under")]
         #[doc = "the container's read API, and both sides under the keyed accessors."]
         /// Keyed readings use the owning entity's semantics. Typed getters and iteration
@@ -472,12 +476,24 @@ macro_rules! constraints_view {
         pub struct $view<'a> {
             molecule: &'a Molecule,
             id: $id,
+            $($symmetry: Option<&'a GraphSymmetry>,)?
         }
 
         impl<'a> $view<'a> {
             pub(crate) fn new(molecule: &'a Molecule, id: $id) -> Self {
-                Self { molecule, id }
+                Self { molecule, id, $($symmetry: None,)? }
             }
+
+            $(
+            /// Attach borrowed graph-symmetry data for the derived readings.
+            ///
+            /// The data must describe the unchanged molecule for meaningful results. That
+            /// relationship is not validated; mismatched context has no specified result.
+            pub fn with_symmetry(mut self, $symmetry: &'a GraphSymmetry) -> Self {
+                self.$symmetry = Some($symmetry);
+                self
+            }
+            )?
 
             /// The normalized own assertion: absence is top; contradiction is `None`.
             pub fn asserted(&self, key: $key) -> Option<$form> {
@@ -490,35 +506,46 @@ macro_rules! constraints_view {
                 constraints_view!(@asserted self, key, asserted_complete, $form, $asserted $(, $entity_view)?)
             }
 
-            /// The derived side of `key`, obtained by projection from present
-            /// relations only; vacuous on absence and wherever the entity kind
-            /// defines no projection.
+            /// The derived side of `key`, obtained from present relations or
+            /// attached graph-symmetry data. A kindless stereo entity is vacuous;
+            /// a kinded one returns the raw-input stereo reading as a literal form.
+            ///
+            /// # Panics
+            ///
+            /// Panics for a kinded stereo entity without attached symmetry data,
+            /// or for a topicity key with an unavailable ligand position.
             pub fn derived(&self, key: $key) -> Option<$form> {
-                $derived(self.molecule, self.id, key, false)
+                $derived(self.molecule, self.id, $(self.$symmetry,)? key, false)
             }
 
             /// The derived side of `key` under the closure; agrees with
             /// [`Self::derived`] wherever no absence cell exists.
+            /// The same context and position requirements apply as in [`Self::derived`].
             pub fn derived_complete(&self, key: $key) -> Option<$form> {
-                $derived(self.molecule, self.id, key, true)
+                $derived(self.molecule, self.id, $(self.$symmetry,)? key, true)
             }
 
-            /// Meet of the own assertion and relation projection; None is bottom.
+            /// Meet of the own assertion and derivation; None is bottom.
+            /// A bottom own assertion returns immediately. Otherwise, the context
+            /// and position requirements of [`Self::derived`] apply.
             pub fn evidenced(&self, key: $key) -> Option<$form> {
                 meet_readings(self.asserted(key)?, self.derived(key)?)
             }
 
             /// Evidence closed only where it is top; None remains bottom.
+            /// A bottom own assertion returns immediately. Otherwise, the context
+            /// and position requirements of [`Self::derived`] apply.
             pub fn evidenced_complete(&self, key: $key) -> Option<$form> {
                 let asserted = self.asserted(key)?;
-                let derived = $derived(self.molecule, self.id, key, asserted.is_undetermined())?;
+                let derived = $derived(self.molecule, self.id, $(self.$symmetry,)? key, asserted.is_undetermined())?;
                 meet_readings(asserted, derived)
             }
 
             /// Whether this entity's constraint reading satisfies `pattern`:
             /// every pattern entry is refined by [`Self::evidenced_complete`]
             /// at its key. An internally conflicted key satisfies nothing; an
-            /// empty pattern is satisfied.
+            /// empty pattern is satisfied. Evaluated keys have the context and
+            /// position requirements of [`Self::derived`].
             pub fn satisfies(&self, pattern: &$container) -> bool {
                 pattern.iter().all(|entry| {
                     self.evidenced_complete(entry.key())
@@ -528,10 +555,10 @@ macro_rules! constraints_view {
 
             /// Whether `other` is compatible with this entity's constraint
             /// reading: for every key of `other`, a meet with
-            /// [`Self::evidenced`] exists. A key on which this entity
-            /// carries nothing constrains nothing; an internally conflicted
-            /// key is compatible with nothing; an empty `other` is
-            /// compatible.
+            /// [`Self::evidenced`] exists. Top evidence at a key constrains
+            /// nothing; an internally conflicted key is compatible with nothing;
+            /// an empty `other` is compatible. Evaluated keys have the context
+            /// and position requirements of [`Self::derived`].
             pub fn is_compatible(&self, other: &$container) -> bool {
                 other.iter().all(|entry| {
                     self.evidenced(entry.key())
@@ -607,7 +634,7 @@ constraints_view!(
     StereoAtomConstraintsForm,
     stereo_atom_asserted_constraints,
     stereo_atom_derived_constraint,
-    kind: stereo_atom
+    kind: stereo_atom, symmetry
 );
 
 constraints_view!(
@@ -619,7 +646,7 @@ constraints_view!(
     StereoBondConstraintsForm,
     stereo_bond_asserted_constraints,
     stereo_bond_derived_constraint,
-    kind: stereo_bond
+    kind: stereo_bond, symmetry
 );
 
 // The stored containers' typed read API, inherited per entity kind with its

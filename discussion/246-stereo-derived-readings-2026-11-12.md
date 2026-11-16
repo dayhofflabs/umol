@@ -23,12 +23,13 @@ This document records
 - the one definition of the colors that the readings and canonicalization share, and
 - how the readings are computed.
 
-S4f, S4g, S5a-S5g and S6a are implemented. The reviewed S4/S5 semantics, interfaces and names are
+S4f, S4g, S5a-S5g and S6a-S6b are implemented. The reviewed S4/S5 semantics, interfaces and names are
 settled. Main has the selected Constitution search, flat auxiliary representation, narrower
 generator filter, FieldColor names, the three derived stereo-view readings and the batch
 stereogenic-site classification and its Rust/Python operation consumers. S5g's acceptance and
 performance gate is complete with the accepted algorithm and tradeoffs recorded below.
-S6a removes fluxionality across Rust, DSL and Python; S6b is next.
+S6a removes fluxionality across Rust, DSL and Python. S6b adds the attached-data stereo
+constraint views and literal keyed derivation. S6c's Python symmetry and context surface is next.
 
 ## Starting state
 
@@ -3986,7 +3987,7 @@ cargo +nightly fmt --all -- --check
 git diff --check
 ```
 
-#### S6b — Stereo constraint views and keyed readings
+#### S6b — Stereo constraint views and keyed readings **Done**
 
 - **Module:** `ir::view::constraints`, `ir::view::stereo`, their tests and
   `umol-graph-ir/benches/constraint_readings.rs`.
@@ -4009,6 +4010,113 @@ git diff --check
 - **Gate:** run the affected tests and property cases, build the benchmark and measure the new
   keyed workloads. Recheck graph consumers if the shared view plumbing changes.
 - **Kind:** breaking; Rust green, Python keyed consumers migrate in S6c. `[dep: S6a]`
+
+**Implementation, 2026-11-15.** StereoAtomConstraintsView.with_symmetry and
+StereoBondConstraintsView.with_symmetry attach borrowed GraphSymmetry data. Each stereo
+view carries its attached data through constraints(). The existing constraint-view macro
+emits the optional symmetry field only for those two stereo views; the other view layouts
+are unchanged. The existing stereo derived-constraint functions now wrap stereogenicity,
+topicity and ligand_symmetry in literal forms. No symmetry algorithm, molecule storage,
+normalization step, cache or additional abstraction is introduced.
+
+Kindless records return top at the requested key without requiring data. Kinded derivation
+requires attached data and uses the existing caller-error panic. Own assertions and typed
+storage queries retain their meanings. Evidence remains the meet of assertion and derivation;
+a bottom assertion and an empty comparison pattern retain their existing short circuits.
+Both stereo completion variants agree with their uncompleted readings. The rustdoc states
+the raw-input contract and removes the symmetry-derived normalization-invariance claim.
+
+The specified transition from the old vacuous derived readings is:
+
+| Fixture and key | Before | After |
+| --- | --- | --- |
+| CHFClBr, stereogenicity | Undetermined | Lit(Stereogenic) |
+| CHFClBr, topicity(0, 1) | Undetermined | Lit(Distinct) |
+| CHFClBr, identity ligand symmetry | Undetermined | Lit(true) |
+| C(F)(Cl)=C(F)(Cl), stereogenicity | Undetermined | Lit(Stereogenic) |
+| C(F)(Cl)=C(F)(Cl), topicity(0, 2) | Undetermined | Lit(Homotopic) |
+| C(F)(Cl)=C(F)(Cl), end-exchange ligand symmetry | Undetermined | Lit(true) |
+
+Unit cases also specify false ligand symmetry for an unachievable ligand swap. For each
+key, they cover absent, matching and conflicting assertions, both include_constraints
+settings, direct constraints-view attachment and propagation from the stereo view, all six
+readings, both comparisons and exact preservation of the molecule. Missing-context cases
+exercise derived, derived_complete, evidenced, evidenced_complete, satisfies and
+is_compatible. Separate bottom-assertion cases exercise the context-free short circuits.
+The unit and property red runs failed only on the two absent with_symmetry methods before
+production changes; the focused green runs passed 379 unit cases and four property tests.
+
+| Existing coverage | Disposition |
+| --- | --- |
+| Own-assertion, asserted_complete and raw container/getter cases | Retained; ordered with the source methods. |
+| Kindless keyed evidence and comparisons | Retained as vacuous readings without attached data. |
+| Kinded vacuous derivation/evidence assertions | Replaced by the literal-value, meet, comparison and missing-context cases above. |
+| prop_stereo_constraints_view_normalization | Replaced by the raw-form reading contract: literals at their keys, vacuity without a kind, completion agreement, evidence as meet, normalized outputs and molecule preservation. Ligand counts match generated kinds so generated topicity keys address available positions. |
+| prop_constraint_readings_normalization | Keeps normalization invariance for all unrelated readings and stereo own assertions. Symmetry-derived stereo readings use the raw contract instead. |
+| Reframing and numeric evidence properties | Unchanged. |
+
+**Keyed workload measurements, 2026-11-15.** The baseline follows S6a at f6f75b5b6;
+the after build contains S6b. One sampled pass was run for each build with the ordinary
+bench profile, rustc 1.99.1 (58cf8f9c3), on arm64 macOS. Both use Nauty,
+max_classification_trials = 4096 and include_constraints = false. Correctness tests exercise
+both constraints settings. Each workload has 100 samples, 0.2 seconds warm-up,
+0.6 seconds measurement and 100,000 resamples. No compilation or test run overlapped the
+timing passes. The timed expressions are identical; the only harness edit between builds
+uses field shorthand when preparing the pattern outside timing.
+
+The fixtures are the existing connected molecules in constraint_readings.rs:
+
+- CHFClBr: five explicit atoms, four bonds, one tetrahedral record; pair (0, 1),
+  identity permutation.
+- CH(F)(Cl)-CH2-CH3 (chlorofluoropropane): eight stored atom vertices, seven bonds,
+  two tetrahedral records; query the CH2 record, pair (2, 3), identity permutation.
+- C(F)(Cl)=C(F)(Cl) (cis_trans): six atoms, five bonds, one cis/trans record;
+  pair (0, 2), end exchange [2, 3, 0, 1].
+
+All own constraint containers are empty. GraphSymmetry and a matching three-key literal
+pattern are prepared outside timing. Each derived/evidenced workload evaluates one key;
+each comparison evaluates that pattern. Medians below are nanoseconds, before / after;
+the baseline is named pre-246-keyed and the after sample s6b-keyed-2026-11-15.
+
+| Workload | CHFClBr before / after (ns) | CH₂ before / after (ns) | Cis/trans before / after (ns) |
+| --- | ---: | ---: | ---: |
+| derived/stereogenicity | 2.34 / 17.31 | 2.34 / 1,876.77 | 2.34 / 6,695.22 |
+| derived/topicity | 2.37 / 9.23 | 2.37 / 726.87 | 2.38 / 2,996.69 |
+| derived/ligand_symmetry | 3.17 / 278.84 | 3.17 / 404.84 | 3.22 / 4,179.78 |
+| evidenced/stereogenicity | 11.06 / 25.03 | 11.11 / 1,885.87 | 11.11 / 6,688.34 |
+| evidenced/topicity | 11.21 / 17.15 | 11.19 / 733.80 | 11.27 / 3,023.86 |
+| evidenced/ligand_symmetry | 12.35 / 288.13 | 12.27 / 413.88 | 12.39 / 4,177.36 |
+| satisfies | 16.00 / 466.77 | 16.00 / 3,243.21 | 16.03 / 14,336.07 |
+| is_compatible | 37.69 / 344.06 | 37.56 / 3,114.40 | 37.42 / 14,190.61 |
+
+Before S6b, derived constructs top and evidenced meets it with the absent own assertion.
+The matching literal pattern fails satisfies at its first key and is compatible with top
+at all keys. After S6b, the three keys run the existing graph-derived computations;
+satisfies and is_compatible both accept the matching pattern and evaluate all three keys.
+These measurements quantify that added work. Symmetry construction remains outside these
+prepared-query timings and is measured separately in S5g.
+
+The two added public symbols are the approved with_symmetry methods. Existing constructors,
+typed getters, container iteration, key types and errors are unchanged. Python attachment and
+its missing-context ValueError mapping remain S6c; no Python build or test run is claimed
+for this subitem.
+
+**Gate.** Graph-IR and graph passed 22,619 tests/doctests with 8 ignored, including
+801 property tests and 4,219 conformance cases. The 24 keyed workloads were built and
+measured before and after. Formatting and diff checks passed. The complete diff was reviewed
+against S6b's scope and the approved public surface.
+
+```text
+CARGO_TARGET_DIR=/Users/dr/.cargo-target cargo test --locked \
+  -p umol-graph-ir -p umol-graph --all-features
+CARGO_TARGET_DIR=/Users/dr/.cargo-target cargo bench --locked \
+  -p umol-graph-ir --bench constraint_readings --no-run
+<bench executable> '^stereo_keyed_readings/(chfclbr|chlorofluoropropane|cis_trans)/' \
+  --bench --sample-size 100 --warm-up-time 0.2 --measurement-time 0.6 \
+  --nresamples 100000 --noplot --save-baseline <sample name above>
+cargo +nightly fmt --all -- --check
+git diff --check
+```
 
 #### S6c — Python symmetry data, view and readings
 

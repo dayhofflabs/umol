@@ -9,12 +9,13 @@ use criterion::Criterion;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     ArithExpr, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId,
-    BondForm, BondId, GraphSymmetryConfig, Lattice, LigandPermutation, Molecule, MoleculeEntries,
-    Normalize, NumForm, OrientedLigandPermutation, StereoAtomConstraintForm,
-    StereoAtomConstraintKey, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
-    StereoBondConstraintKey, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandKind, StereoLigandPosition, Stereogenicity,
-    StereogenicityForm,
+    BondForm, BondId, BooleanForm, GraphSymmetryConfig, Lattice, LigandPermutation,
+    LigandSymmetryForm, Molecule, MoleculeEntries, Normalize, NumForm, OrientedLigandPermutation,
+    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoAtomForm,
+    StereoAtomId, StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm,
+    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm,
+    TopicityForm, TopicityRelationForm,
 };
 use umol_graph_ir::mol_dsl_concrete;
 use umol_perm::{Orientation, Permutation};
@@ -155,13 +156,12 @@ macro_rules! stereo_readings {
                 )),
                 _ => top.clone(),
             };
-            let reading = molecule.$entity($id).constraints();
+            let symmetry = molecule
+                .graph_symmetry(&GraphSymmetryConfig::default())
+                .into_graph_symmetry();
+            let reading = molecule.$entity($id).with_symmetry(&symmetry).constraints();
             assert_eq!(reading.asserted(key), expected);
             assert_eq!(reading.asserted_complete(key), expected);
-            assert_eq!(reading.evidenced(key), expected);
-            assert_eq!(reading.evidenced_complete(key), expected);
-            assert_eq!(reading.derived(key), top);
-            assert_eq!(reading.derived_complete(key), top);
             let prefix = format!("stereo_readings/{}/{group}/{name}", $name);
             macro_rules! reading {
                 ($method:ident) => {
@@ -172,6 +172,7 @@ macro_rules! stereo_readings {
                         || {
                             black_box(&molecule)
                                 .$entity($id)
+                                .with_symmetry(black_box(&symmetry))
                                 .constraints()
                                 .$method(black_box(key))
                         },
@@ -297,6 +298,62 @@ fn derived_stereo_readings(criterion: &mut Criterion, allocations: bool) {
             &format!("stereo_derived_readings/{name}/ligand_symmetry"),
             || black_box(black_box(stereo).ligand_symmetry(black_box(permutation))),
         );
+        let pair =
+            StereoLigandPair::new(StereoLigandPosition(pair[0]), StereoLigandPosition(pair[1]));
+        let pattern = StereoAtomConstraintsForm::from(vec![
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                stereo.stereogenicity(),
+            )),
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair,
+                relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+            }),
+            StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                permutation,
+                invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+            }),
+        ]);
+        for (key_name, key) in [
+            ("stereogenicity", StereoAtomConstraintKey::Stereogenicity),
+            ("topicity", StereoAtomConstraintKey::Topicity(pair)),
+            (
+                "ligand_symmetry",
+                StereoAtomConstraintKey::LigandSymmetry(permutation),
+            ),
+        ] {
+            measure(
+                criterion,
+                allocations,
+                &format!("stereo_keyed_readings/{name}/derived/{key_name}"),
+                || black_box(stereo).constraints().derived(black_box(key)),
+            );
+            measure(
+                criterion,
+                allocations,
+                &format!("stereo_keyed_readings/{name}/evidenced/{key_name}"),
+                || black_box(stereo).constraints().evidenced(black_box(key)),
+            );
+        }
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_keyed_readings/{name}/satisfies"),
+            || {
+                black_box(stereo)
+                    .constraints()
+                    .satisfies(black_box(&pattern))
+            },
+        );
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_keyed_readings/{name}/is_compatible"),
+            || {
+                black_box(stereo)
+                    .constraints()
+                    .is_compatible(black_box(&pattern))
+            },
+        );
     }
     let molecule = mol_dsl_concrete!(
         r#"{
@@ -332,6 +389,60 @@ fn derived_stereo_readings(criterion: &mut Criterion, allocations: bool) {
         allocations,
         "stereo_derived_readings/cis_trans/ligand_symmetry",
         || black_box(black_box(stereo).ligand_symmetry(black_box(permutation))),
+    );
+    let name = "cis_trans";
+    let pair = StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2));
+    let pattern = StereoBondConstraintsForm::from(vec![
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(stereo.stereogenicity())),
+        StereoBondConstraintForm::Topicity(TopicityForm {
+            pair,
+            relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+        }),
+        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation,
+            invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+        }),
+    ]);
+    for (key_name, key) in [
+        ("stereogenicity", StereoBondConstraintKey::Stereogenicity),
+        ("topicity", StereoBondConstraintKey::Topicity(pair)),
+        (
+            "ligand_symmetry",
+            StereoBondConstraintKey::LigandSymmetry(permutation),
+        ),
+    ] {
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_keyed_readings/{name}/derived/{key_name}"),
+            || black_box(stereo).constraints().derived(black_box(key)),
+        );
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_keyed_readings/{name}/evidenced/{key_name}"),
+            || black_box(stereo).constraints().evidenced(black_box(key)),
+        );
+    }
+    measure(
+        criterion,
+        allocations,
+        &format!("stereo_keyed_readings/{name}/satisfies"),
+        || {
+            black_box(stereo)
+                .constraints()
+                .satisfies(black_box(&pattern))
+        },
+    );
+    measure(
+        criterion,
+        allocations,
+        &format!("stereo_keyed_readings/{name}/is_compatible"),
+        || {
+            black_box(stereo)
+                .constraints()
+                .is_compatible(black_box(&pattern))
+        },
     );
 }
 
@@ -430,6 +541,65 @@ fn chfclbr_readings(criterion: &mut Criterion, allocations: bool) {
     measure(criterion, allocations, "chfclbr/stereogenicity", || {
         black_box(stereo).stereogenicity()
     });
+    let name = "chfclbr";
+    let permutation = OrientedLigandPermutation {
+        permutation: LigandPermutation(Permutation::identity(4)),
+        orientation: Orientation::Proper,
+    };
+    let pair = StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1));
+    let pattern = StereoAtomConstraintsForm::from(vec![
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(stereo.stereogenicity())),
+        StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair,
+            relation: TopicityRelationForm::Lit(stereo.topicity(pair.first(), pair.second())),
+        }),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation,
+            invariant: BooleanForm::Lit(stereo.ligand_symmetry(permutation)),
+        }),
+    ]);
+    for (key_name, key) in [
+        ("stereogenicity", StereoAtomConstraintKey::Stereogenicity),
+        ("topicity", StereoAtomConstraintKey::Topicity(pair)),
+        (
+            "ligand_symmetry",
+            StereoAtomConstraintKey::LigandSymmetry(permutation),
+        ),
+    ] {
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_keyed_readings/{name}/derived/{key_name}"),
+            || black_box(stereo).constraints().derived(black_box(key)),
+        );
+        measure(
+            criterion,
+            allocations,
+            &format!("stereo_keyed_readings/{name}/evidenced/{key_name}"),
+            || black_box(stereo).constraints().evidenced(black_box(key)),
+        );
+    }
+    measure(
+        criterion,
+        allocations,
+        &format!("stereo_keyed_readings/{name}/satisfies"),
+        || {
+            black_box(stereo)
+                .constraints()
+                .satisfies(black_box(&pattern))
+        },
+    );
+    measure(
+        criterion,
+        allocations,
+        &format!("stereo_keyed_readings/{name}/is_compatible"),
+        || {
+            black_box(stereo)
+                .constraints()
+                .is_compatible(black_box(&pattern))
+        },
+    );
+
     measure(
         criterion,
         allocations,

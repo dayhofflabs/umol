@@ -1,20 +1,24 @@
 //! Reading normality, normalization invariance, and meet composition on raw forms.
-//! Molecule cases compare public readings across successful whole normalization;
-//! numeric cases independently normalize sources before computing their meet.
+//! Non-symmetry readings and stereo own assertions are compared across normalization.
+//! Stereo derived readings use raw forms and compose with assertions through meet.
+//! Numeric cases independently normalize sources before computing their meet.
 //! Container/view equality checks own assertions except for kindless stereo entities,
 //! whose assertions are independently required to be top despite their raw payload;
 //! container unit cases independently cover raw contradictions and closure of absence.
-//! Reframing invariance checks stereo readings on generated molecules whose stored
+//! Reframing invariance checks atom and bond stereo projections on molecules whose stored
 //! participant orders change, independently of the fixed-frame normalization law.
 
 use proptest::prelude::*;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, BondConstraintKey, BondForm, BondId,
-    Lattice, Molecule, MoleculeEntries, Normalize, NumForm, Reframe, RingConfig, RingModel,
-    StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId, StereoLigand,
-    StereoLigandKind,
+    BooleanForm, GraphSymmetryConfig, Lattice, LigandPermutation, Molecule, MoleculeEntries,
+    Normalize, NumForm, OrientedLigandPermutation, Reframe, RingConfig, RingModel,
+    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomId, StereoBondConstraintForm,
+    StereoBondConstraintKey, StereoBondId, StereoLigand, StereoLigandKind, StereoLigandPair,
+    StereoLigandPosition, StereogenicityForm, TopicityRelationForm,
 };
+use umol_perm::{Orientation, Permutation};
 
 use super::strategies::{
     molecule_with_constraints_strategy, raw_num_form_strategy, raw_stereo_atom_form_strategy,
@@ -22,15 +26,12 @@ use super::strategies::{
 };
 
 macro_rules! check_readings {
-    ($before:expr, $after:expr, $stored:expr, $key:expr $(, $kindless:expr, $form:ty)?) => {{
+    ($before:expr, $after:expr, $stored:expr, $key:expr) => {{
         let before = $before;
         let after = $after;
         let key = $key;
         let stored = $stored;
         let expected = (stored.asserted(key), stored.asserted_complete(key));
-        $(let expected = if $kindless {
-            (Some(<$form>::undetermined(key)), Some(<$form>::undetermined(key)))
-        } else { expected };)?
         prop_assert_eq!(before.asserted(key), expected.0);
         prop_assert_eq!(before.asserted_complete(key), expected.1);
         let original = [
@@ -97,43 +98,148 @@ proptest! {
                 for entry in entity.constraints().iter() { check_readings!(entity.constraints(), normal.noncovalent_bond(entity.id()).constraints(), &entity.attributes().constraints, entry.key()); }
             }
             for entity in molecule.stereo_atoms().iter() {
-                for entry in entity.constraints().iter() { check_readings!(entity.constraints(), normal.stereo_atom(entity.id()).constraints(), &entity.attributes().constraints, entry.key(), entity.attributes().configuration.kind().is_none(), StereoAtomConstraintForm); }
+                let before = entity.constraints();
+                let after = normal.stereo_atom(entity.id()).constraints();
+                for entry in before.iter() {
+                    let key = entry.key();
+                    let stored = &entity.attributes().constraints;
+                    let expected = if entity.attributes().configuration.kind().is_none() {
+                        (Some(StereoAtomConstraintForm::undetermined(key)), Some(StereoAtomConstraintForm::undetermined(key)))
+                    } else {
+                        (stored.asserted(key), stored.asserted_complete(key))
+                    };
+                    prop_assert_eq!(before.asserted(key), expected.0.clone());
+                    prop_assert_eq!(before.asserted_complete(key), expected.1.clone());
+                    prop_assert_eq!(after.asserted(key), expected.0);
+                    prop_assert_eq!(after.asserted_complete(key), expected.1);
+                    for value in [before.asserted(key), before.asserted_complete(key)].into_iter().flatten() {
+                        prop_assert_eq!(value.clone().normalize(), Ok(value));
+                    }
+                }
             }
             for entity in molecule.stereo_bonds().iter() {
-                for entry in entity.constraints().iter() { check_readings!(entity.constraints(), normal.stereo_bond(entity.id()).constraints(), &entity.attributes().constraints, entry.key(), entity.attributes().configuration.kind().is_none(), StereoBondConstraintForm); }
+                let before = entity.constraints();
+                let after = normal.stereo_bond(entity.id()).constraints();
+                for entry in before.iter() {
+                    let key = entry.key();
+                    let stored = &entity.attributes().constraints;
+                    let expected = if entity.attributes().configuration.kind().is_none() {
+                        (Some(StereoBondConstraintForm::undetermined(key)), Some(StereoBondConstraintForm::undetermined(key)))
+                    } else {
+                        (stored.asserted(key), stored.asserted_complete(key))
+                    };
+                    prop_assert_eq!(before.asserted(key), expected.0.clone());
+                    prop_assert_eq!(before.asserted_complete(key), expected.1.clone());
+                    prop_assert_eq!(after.asserted(key), expected.0);
+                    prop_assert_eq!(after.asserted_complete(key), expected.1);
+                    for value in [before.asserted(key), before.asserted_complete(key)].into_iter().flatten() {
+                        prop_assert_eq!(value.clone().normalize(), Ok(value));
+                    }
+                }
             }
         }
     }
 
     #[test]
-    fn prop_stereo_constraints_view_normalization(
+    fn prop_stereo_constraints_view_readings(
         atom in raw_stereo_atom_form_strategy(),
         bond in raw_stereo_bond_form_strategy(),
+        include_constraints in any::<bool>(),
     ) {
+        let degree = atom.configuration.kind().map_or(4, |kind| kind.degree());
         let molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 6],
-            bonds: [(0, 1), (0, 2), (0, 3), (0, 4), (1, 4), (1, 5)]
-                .into_iter().map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1))).collect(),
-            stereo_atoms: vec![(AtomId(0), (1..=4)
-                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(), atom)],
+            atoms: vec![AtomForm::from_element(Element::C); (degree + 1).max(6)],
+            bonds: (1..=degree).map(|other| (AtomId(0), AtomId(other as u32), BondForm::from_order(1)))
+                .chain([(AtomId(1), AtomId(4), BondForm::from_order(1)),
+                        (AtomId(1), AtomId(5), BondForm::from_order(1))]).collect(),
+            stereo_atoms: vec![(AtomId(0), (1..=degree)
+                .map(|id| StereoLigand::new(AtomId(id as u32), StereoLigandKind::Atom)).collect(), atom)],
             stereo_bonds: vec![(BondId(0), [2, 3, 4, 5].into_iter()
                 .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(), bond)],
             ..Default::default()
         });
-        if let Ok(normal) = molecule.clone().normalize() {
-            let atom = molecule.stereo_atom(StereoAtomId(0));
-            let bond = molecule.stereo_bond(StereoBondId(0));
-            for entry in atom.constraints().iter() {
-                check_readings!(atom.constraints(), normal.stereo_atom(atom.id()).constraints(),
-                    &atom.attributes().constraints, entry.key(),
-                    atom.attributes().configuration.kind().is_none(), StereoAtomConstraintForm);
+        let original = molecule.clone();
+        let symmetry = molecule.graph_symmetry(&GraphSymmetryConfig {
+            include_constraints,
+            ..Default::default()
+        }).into_graph_symmetry();
+        let stereo = molecule.stereo_atom(StereoAtomId(0));
+        let view = stereo.constraints().with_symmetry(&symmetry);
+        let keys = view.iter().map(|entry| entry.key()).chain([
+            StereoAtomConstraintKey::Stereogenicity,
+            StereoAtomConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
+            StereoAtomConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(stereo.ligand_count())),
+                orientation: Orientation::Proper,
+            }),
+        ]);
+        for key in keys {
+            let derived = view.derived(key);
+            if stereo.attributes().configuration.kind().is_none() {
+                let top = Some(StereoAtomConstraintForm::undetermined(key));
+                prop_assert_eq!(&derived, &top);
+                prop_assert_eq!(view.asserted(key), top);
+            } else {
+                match (key, &derived) {
+                    (StereoAtomConstraintKey::Stereogenicity, Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(_)))) => {},
+                    (StereoAtomConstraintKey::Topicity(pair), Some(StereoAtomConstraintForm::Topicity(value))) => {
+                        prop_assert_eq!(value.pair, pair);
+                        prop_assert!(matches!(value.relation, TopicityRelationForm::Lit(_)));
+                    },
+                    (StereoAtomConstraintKey::LigandSymmetry(permutation), Some(StereoAtomConstraintForm::LigandSymmetry(value))) => {
+                        prop_assert_eq!(value.permutation, permutation);
+                        prop_assert!(matches!(value.invariant, BooleanForm::Lit(_)));
+                    },
+                    _ => prop_assert!(false, "derived reading must be literal at its key"),
+                }
             }
-            for entry in bond.constraints().iter() {
-                check_readings!(bond.constraints(), normal.stereo_bond(bond.id()).constraints(),
-                    &bond.attributes().constraints, entry.key(),
-                    bond.attributes().configuration.kind().is_none(), StereoBondConstraintForm);
+            prop_assert_eq!(view.derived_complete(key), derived.clone());
+            let expected = view.asserted(key).and_then(|asserted| derived.as_ref().and_then(|value| asserted.meet(value)));
+            prop_assert_eq!(view.evidenced(key), expected.clone());
+            prop_assert_eq!(view.evidenced_complete(key), expected);
+            for value in [derived, view.evidenced(key)].into_iter().flatten() {
+                prop_assert_eq!(value.clone().normalize(), Ok(value));
             }
         }
+        let stereo = molecule.stereo_bond(StereoBondId(0));
+        let view = stereo.constraints().with_symmetry(&symmetry);
+        let keys = view.iter().map(|entry| entry.key()).chain([
+            StereoBondConstraintKey::Stereogenicity,
+            StereoBondConstraintKey::Topicity(StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1))),
+            StereoBondConstraintKey::LigandSymmetry(OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::identity(stereo.ligand_count())),
+                orientation: Orientation::Proper,
+            }),
+        ]);
+        for key in keys {
+            let derived = view.derived(key);
+            if stereo.attributes().configuration.kind().is_none() {
+                let top = Some(StereoBondConstraintForm::undetermined(key));
+                prop_assert_eq!(&derived, &top);
+                prop_assert_eq!(view.asserted(key), top);
+            } else {
+                match (key, &derived) {
+                    (StereoBondConstraintKey::Stereogenicity, Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(_)))) => {},
+                    (StereoBondConstraintKey::Topicity(pair), Some(StereoBondConstraintForm::Topicity(value))) => {
+                        prop_assert_eq!(value.pair, pair);
+                        prop_assert!(matches!(value.relation, TopicityRelationForm::Lit(_)));
+                    },
+                    (StereoBondConstraintKey::LigandSymmetry(permutation), Some(StereoBondConstraintForm::LigandSymmetry(value))) => {
+                        prop_assert_eq!(value.permutation, permutation);
+                        prop_assert!(matches!(value.invariant, BooleanForm::Lit(_)));
+                    },
+                    _ => prop_assert!(false, "derived reading must be literal at its key"),
+                }
+            }
+            prop_assert_eq!(view.derived_complete(key), derived.clone());
+            let expected = view.asserted(key).and_then(|asserted| derived.as_ref().and_then(|value| asserted.meet(value)));
+            prop_assert_eq!(view.evidenced(key), expected.clone());
+            prop_assert_eq!(view.evidenced_complete(key), expected);
+            for value in [derived, view.evidenced(key)].into_iter().flatten() {
+                prop_assert_eq!(value.clone().normalize(), Ok(value));
+            }
+        }
+        prop_assert_eq!(molecule, original);
     }
 
     #[test]
