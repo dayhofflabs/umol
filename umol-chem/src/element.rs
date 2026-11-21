@@ -1193,7 +1193,7 @@ mod tests {
 
     #[rstest]
     #[case::h(Element::H, "H", 1, 1, 1.008, 1, 1, 1, 1, 1)]
-    #[case::he(Element::He, "He", 2, 4, 4.0026, 1, 32, 18, 8, 0)]
+    #[case::he(Element::He, "He", 2, 4, 4.002602, 1, 32, 18, 8, 0)]
     fn test_element_properties(
         #[case] element: Element,
         #[case] symbol: &str,
