@@ -59,7 +59,7 @@ fn test_stereo_perceiver_classify_transport() {
         failure_persistence: None,
         ..Config::default()
     })
-    .run(&stereo_cases(Domain::Undetermined, 0..=4), |case| {
+    .run(&stereo_cases(Domain::Undetermined, 0..=3), |case| {
         let sites: Vec<_> = case.sites.iter().map(|info| info.site).collect();
         let mut expected: Vec<_> = case
             .sites

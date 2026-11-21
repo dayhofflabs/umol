@@ -766,12 +766,10 @@ mod vf2 {
                     return i;
                 }
             }
-            for i in 0..self.query.node_count() {
-                if self.mapping[i].is_none() {
-                    return i;
-                }
-            }
-            unreachable!()
+            self.mapping
+                .iter()
+                .position(Option::is_none)
+                .expect("incomplete mapping has an unmapped query node")
         }
 
         fn feasible(
