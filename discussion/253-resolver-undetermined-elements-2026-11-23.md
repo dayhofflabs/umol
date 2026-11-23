@@ -1,6 +1,6 @@
 # 253 — Undetermined elements in resolution
 
-Status: Proposed
+Status: In Progress
 Date: 2026-11-23
 Relates: [operations guide](../docs/development/operations.md),
 [data types guide](../docs/development/data-types.md)
@@ -469,7 +469,7 @@ and the [property-test guide](../docs/development/property-tests.md).
 
 ### S0 — Baseline, predicates, and shared vocabulary
 
-#### S0a — Record the resolver baseline
+#### S0a — Record the resolver baseline (done)
 
 `umol-graph/benches/resolve.rs`. Additive (green). [dep: none]
 
@@ -480,6 +480,44 @@ registry atom-typing models. Use the existing `smiles_roundtrip/resolve` and
 existing harness. Record the expected determined molecules outside timing and keep parsing, raising,
 resolver construction and cloning outside the timed operation. Record the revision, model,
 build profile, benchmark IDs and batching so S5a can repeat the comparison.
+
+Measured the resolver at `70ed9b1adbe3beaf87f8e8a3564f32e2006c56b0` with the S0a
+benchmark harness, using rustc 1.99.1, Cargo's optimized bench profile with debug info,
+and Criterion 0.8.1 on an Apple M1 Pro running macOS 15.7.3. Both backends used
+`MostSaturated`, natural isotope completion and journal rollback. The counts backend used
+the SMILES valence table. Atom typing used the default registry. Both used the remaining
+chemistry and resolver defaults.
+
+Each cell gives the Criterion slope estimate in µs per `Resolver::resolve_into` call,
+with its 95% confidence interval. The benchmark ID is the column's group prefix followed
+by the case name. The prefixes are `smiles_roundtrip/resolve/` and
+`valence_readings/typing_resolve/`, respectively.
+
+| Case | SMILES counts (µs) | Registry atom typing (µs) |
+| --- | ---: | ---: |
+| `charged` (ammonium) | 1.046 (1.044–1.049) | 1.354 (1.350–1.358) |
+| `branched` | 7.085 (7.030–7.182) | 11.636 (11.593–11.695) |
+| `chain_64` | 58.116 (58.060–58.171) | 115.054 (114.395–116.320) |
+| `aromatic_fused` (naphthalene) | 25.570 (25.510–25.640) | 30.517 (30.330–30.860) |
+| `tetra_four` | 4.421 (4.408–4.435) | 5.613 (5.587–5.643) |
+| `alkene_four` | 5.069 (5.051–5.089) | 6.429 (6.411–6.448) |
+
+Both models returned `Determined` and matched the six expected molecules in
+[`resolve.rs`](../umol-graph/benches/resolve.rs), including the aromatic system and stereo
+frames. Parsing, raising, resolver construction and these assertions run before timing.
+`iter_batched_ref` with `BatchSize::SmallInput` clones each input before the timer starts
+and drops the mutated molecules and returned reports afterward.
+
+The raw samples and estimates are saved locally under the Criterion baseline name `s0a`.
+From the workspace root, S5a can compare the same IDs with this command for each policy.
+The original run used `--save-baseline s0a` in place of `--baseline s0a`.
+
+```sh
+CRITERION_HOME="$PWD/scratch/253-resolver-baseline/criterion" \
+  cargo bench --locked --offline -p umol-graph --bench resolve -- \
+  '^(smiles_roundtrip/resolve|valence_readings/typing_resolve)/(charged|branched|chain_64|aromatic_fused|tetra_four|alkene_four)$' \
+  --baseline s0a --warm-up-time 3 --measurement-time 5 --sample-size 100 --noplot
+```
 
 #### S0b — Wildcard predicates on the eight entity forms
 
