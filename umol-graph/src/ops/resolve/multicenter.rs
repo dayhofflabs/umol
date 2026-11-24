@@ -8,6 +8,7 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
+use super::WildcardPolicy;
 use crate::ops::validate::{
     DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
 };
@@ -41,6 +42,20 @@ impl MulticenterBondsResolver {
         &self,
         molecule: &Molecule,
     ) -> Solution<Edits, MulticenterBondsContradiction> {
+        match self.plan_resolve_with_policy(molecule, None) {
+            Solution::Determined((edits, _)) => Solution::Determined(edits),
+            Solution::Underdetermined(()) => Solution::Underdetermined(Edits::new()),
+            Solution::Contradictory(cause) => Solution::Contradictory(cause),
+        }
+    }
+
+    /// A completed plan also reports whether the resulting fields satisfy the supplied policy.
+    /// Insufficient incidence evidence yields Underdetermined before defaults are planned.
+    pub(super) fn plan_resolve_with_policy(
+        &self,
+        molecule: &Molecule,
+        wildcards: Option<WildcardPolicy>,
+    ) -> Solution<(Edits, bool), MulticenterBondsContradiction, ()> {
         let mut underdetermined = false;
         for atom in molecule.atoms().ids() {
             match IncidenceConstraintInvariantsValidator
@@ -60,15 +75,17 @@ impl MulticenterBondsResolver {
             }
         }
         if underdetermined {
-            return Solution::Underdetermined(Edits::new());
+            return Solution::Underdetermined(());
         }
 
+        let mut admissible = true;
         let mut charges = Vec::new();
         let mut unpaired_electrons = Vec::new();
         for bond_id in molecule.multicenter_bonds().ids() {
             let bond = molecule.multicenter_bond(bond_id).attributes();
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
-            if matches!(bond.charge, NumForm::Undetermined) {
+            let default_charge = bond.charge.is_undetermined();
+            if default_charge {
                 charges.push((
                     MulticenterBondHandle::Id(bond_id),
                     NumForm::Undetermined,
@@ -79,6 +96,13 @@ impl MulticenterBondsResolver {
                 selected_unpaired_electrons = UnpairedElectronsForm::closed_shell();
             } else {
                 selected_unpaired_electrons.high_spin_complete();
+            }
+            if let Some(policy) = wildcards {
+                admissible = admissible
+                    && (bond.electrons.is_ground()
+                        || (policy == WildcardPolicy::Admit && bond.is_wildcard()))
+                    && (default_charge || bond.charge.is_ground())
+                    && selected_unpaired_electrons.is_ground();
             }
             if !bond
                 .unpaired_electrons
@@ -98,7 +122,7 @@ impl MulticenterBondsResolver {
         if !unpaired_electrons.is_empty() {
             edits.modify_multicenter_bond_unpaired_electrons(unpaired_electrons);
         }
-        Solution::Determined(edits)
+        Solution::Determined((edits, admissible))
     }
 
     /// Resolves the molecule, consuming its storage without a recovery journal.
@@ -157,7 +181,7 @@ mod tests {
         AtomConstraintForm, AtomId, Edit, Edits, MoleculeApplyError, MulticenterBondId,
         MulticenterValenceForm, RollbackMethod, TransactionError,
     };
-    use umol_graph_ir::mol_dsl;
+    use umol_graph_ir::{mol_dsl, multicenter_dsl};
 
     use super::*;
 
@@ -307,6 +331,11 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#m*"]}"#),
         Solution::Determined(Edits::new()),
     )]
+    #[case::entailed(
+        mol_dsl!(r#"{:atoms ["B#m1" "H#m0" "B#m1"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "[1,0,1]#c0#u0#s1"}]}"#),
+        Solution::Determined(Edits::new()),
+    )]
     fn test_multicenter_bonds_resolver_plan_resolve_constraints(
         #[case] mut molecule: Molecule,
         #[case] expected: Solution<Edits, MulticenterBondsContradiction>,
@@ -314,6 +343,17 @@ mod tests {
         let original = molecule.clone();
         let resolver = MulticenterBondsResolver::new();
         assert_eq!(resolver.plan_resolve(&molecule), expected);
+        for policy in [WildcardPolicy::Strict, WildcardPolicy::Admit] {
+            let aggregate = match &expected {
+                Solution::Determined(edits) => Solution::Determined((edits.clone(), true)),
+                Solution::Underdetermined(_) => Solution::Underdetermined(()),
+                Solution::Contradictory(cause) => Solution::Contradictory(cause.clone()),
+            };
+            assert_eq!(
+                resolver.plan_resolve_with_policy(&molecule, Some(policy)),
+                aggregate
+            );
+        }
         assert_eq!(molecule, original);
         assert_eq!(
             resolver.resolve(molecule.clone()),
@@ -330,6 +370,48 @@ mod tests {
             Ok(expected.map(|_| ()))
         );
         assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::literal("[1,0,1]", "[1,0,1]#c0#u0#s1", true, true)]
+    #[case::wildcard("*", "*#c0#u0#s1", false, true)]
+    #[case::partial_spin("*#u2", "*#c0#u2#s3", false, true)]
+    #[case::charge_variable("*#c?charge", "*#c?charge#u0#s1", false, false)]
+    #[case::spin_variable("[1,0,1]#s?mult", "[1,0,1]#c0#s?mult", false, false)]
+    fn test_multicenter_bonds_resolver_plan_resolve_with_policy(
+        #[case] input: &str,
+        #[case] resolved: &str,
+        #[case] strict: bool,
+        #[case] admit: bool,
+    ) {
+        let mut molecule = mol_dsl!(
+            r#"{:atoms ["B" "H" "B" "H" "B"]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"} {:atoms [2 3 4] :attrs "[1,0,1]"}]}"#
+        );
+        let mut expected = molecule.clone();
+        let id = MulticenterBondId(0);
+        *molecule.multicenter_bond_mut(id).attributes_mut() = multicenter_dsl!(input);
+        *expected.multicenter_bond_mut(id).attributes_mut() = multicenter_dsl!(resolved);
+        *expected
+            .multicenter_bond_mut(MulticenterBondId(1))
+            .attributes_mut() = multicenter_dsl!("[1,0,1]#c0#u0#s1");
+        let resolver = MulticenterBondsResolver::new();
+        for (policy, admissible) in [
+            (WildcardPolicy::Strict, strict),
+            (WildcardPolicy::Admit, admit),
+        ] {
+            let Solution::Determined((edits, actual)) =
+                resolver.plan_resolve_with_policy(&molecule, Some(policy))
+            else {
+                panic!("the molecule has no multicenter-valence assertion");
+            };
+            assert_eq!(actual, admissible);
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Determined(edits.clone())
+            );
+            assert_eq!(molecule.clone().apply(edits), Ok(expected.clone()));
+        }
     }
 
     #[rstest]

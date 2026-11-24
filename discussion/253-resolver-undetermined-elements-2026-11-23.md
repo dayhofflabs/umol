@@ -619,7 +619,7 @@ needs an open order and preserve an independently established contradiction. Tes
 through both dispatch branches. Extend `test_valence_resolver_admit` with `*C(O)C` under both
 sources and entailed, blocked and contradictory assertions.
 
-### S2 — Aromatic, stereo and bond phase outcomes
+### S2 — Aromatic, stereo and bond phase outcomes (done)
 
 #### S2a — Aromatic selection and retained systems (done)
 
@@ -672,7 +672,7 @@ kind assertion. Only an undetermined coset or kind qualifies for wildcard admiss
 scope failures with the default policy and `Keep`, as well as existing `Remove` behavior.
 Keep automatic discovery with `StereoAdder`.
 
-#### S2d — Bond defaults and the remaining bond kinds
+#### S2d — Bond defaults and the remaining bond kinds (done)
 
 `umol-graph/src/ops/resolve/{bonds,multicenter}.rs`. Additive phase
 accounting (green). [dep: S0b, S0d]
