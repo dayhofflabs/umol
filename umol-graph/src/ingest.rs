@@ -390,7 +390,7 @@ mod tests {
     };
     use crate::ops::resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, StereoFailurePolicy,
-        StereoResolveConfig,
+        StereoResolveConfig, WildcardPolicy,
     };
     use crate::ops::stereo::{StereoContradiction, StereoInconsistency};
     use crate::ops::valence::{
@@ -1951,6 +1951,7 @@ mod tests {
                     ..AromaticityResolveConfig::default()
                 },
                 stereo: StereoResolveConfig::default(),
+                wildcards: WildcardPolicy::Strict,
             },
         )
         .unwrap();
@@ -2554,6 +2555,7 @@ mod tests {
                     ..AromaticityResolveConfig::default()
                 },
                 stereo: StereoResolveConfig::default(),
+                wildcards: WildcardPolicy::Strict,
             },
         )
         .unwrap();

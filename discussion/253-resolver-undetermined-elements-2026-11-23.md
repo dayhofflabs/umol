@@ -683,8 +683,8 @@ while planning defaults. Preserve the scoped standalone return contracts, includ
 `Edits` returned by `BondsResolver::plan_resolve`. Keep `#m` checks and distinguish a blocked
 reading from a conflict. Include retained dative orders and noncovalent kinds in aggregate
 bond accounting. Inspect those stores directly when populated. Distinguish an open dative
-order, which `Admit` permits when unused, from a surviving symbolic order, which still
-blocks publication. Valence accounts for uses of the dative order.
+order, which `Admit` permits when unused, from a surviving symbolic order, which leaves the
+result underdetermined. Valence accounts for uses of the dative order.
 
 Test a bond with an open principal field and independently completed charge/spin, partially
 specified spin, a residual non-wildcard field, and a `#m` assertion with complete or insufficient
@@ -722,13 +722,13 @@ report. Assert matching strict stereo outcomes on both routes and standalone suc
 Check later contradictions despite an unresolved isotope, and exclude an open stereo row removed
 by a failure policy from the final decision.
 
-#### S3b — Expose the policy through the aggregate config
+#### S3b — Expose the policy through the aggregate config (done)
 
 `umol-graph/src/ops/resolve.rs`, Rust `ResolveConfig` literals across the workspace, and
 `umol-py/src/resolve.rs`. Breaking Rust struct-literal change (red→green within the subitem).
 [dep: S0d, S3a]
 
-Add `wildcards: WildcardPolicy` after `isotope` on `ResolveConfig`. `Resolver::with_config`
+Add `wildcards: WildcardPolicy` as the last field of `ResolveConfig`. `Resolver::with_config`
 passes the chosen policy to the isotope, valence and stereo constructors and uses it for the aggregate
 phase outcomes. `Resolver::new` and `ResolveConfig::default` select `Strict`. Migrate exhaustive
 literals in the same change, including the aggregate constructor tests, molecule and reaction
@@ -751,9 +751,9 @@ reports where requested, and restored receivers on rejection.
 - Resolve the six-membered `*#a1` ring under `Admit` with permissive Hückel and Daylight
   models. Expect the six-atom system under the former and a contradiction under the latter's
   default failure policy. Exercise the S2c stereo cases with concrete surrounding atoms.
-  A strict aggregate rejects a surviving open coset.
-  `Admit` publishes it when the required work succeeds. Cover an input that gains its first
-  wildcard during resolution.
+  A surviving open coset leaves the result underdetermined under `Strict`.
+  Under `Admit`, the determined molecule retains the coset when the required work succeeds.
+  Cover an input that gains its first wildcard during resolution.
 - Check access to caller-altered intermediate results at the point of use. Exercise these
   consumers and inconsistent phase settings on the aggregate. Assert absence of panics. Normal
   configurations retain the full outcome, report and rollback assertions.
@@ -816,9 +816,9 @@ Include `C#h*` and the isotope-labeled wildcard in molecule tests.
 and `umol-py/tests/`. Additive (green). [dep: S3b, S3c]
 
 Bind and export `WildcardPolicy.Strict` and `WildcardPolicy.Admit` with `from_rust` and
-`to_rust`. Add `wildcards=WildcardPolicy.Strict` to the keyword-only `ResolveConfig` constructor
+`to_rust`. Append `wildcards=WildcardPolicy.Strict` to the keyword-only `ResolveConfig` constructor
 and its read-only getter. Preserve `ResolveConfig.default()` for the default repr and place
-`wildcards` after `isotope` in the non-default repr.
+`wildcards` last in the non-default repr.
 
 Exercise the Rust/Python conversions, default equality and repr in the binding and config tests.
 Update `test_import.py` (including `__all__`) and `test_class_constructor_signatures.py`.

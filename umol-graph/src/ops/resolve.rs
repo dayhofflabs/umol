@@ -66,6 +66,8 @@ pub struct ResolveConfig {
     pub isotope: IsotopePolicy,
     pub aromaticity: AromaticityResolveConfig,
     pub stereo: StereoResolveConfig,
+    /// Admission of wildcard entities across all phases. Defaults to Strict.
+    pub wildcards: WildcardPolicy,
 }
 
 bitflags! {
@@ -117,8 +119,8 @@ impl ResolveState {
 /// Resolution discharges valence, donated-pair, and accepted-pair assertions when
 /// they match their independent derived readings, including on already concrete atoms.
 /// Every phase plan applies to its input and preserves molecule integrity. Both routes
-/// check that invariant before publishing and agree on chemistry outcomes and determined
-/// molecules for the same input and configuration.
+/// check integrity and give the same outcome and determined molecule for the same input
+/// and configuration.
 /// Each phase discharges only the entity assertions its results realize.
 /// Other assertions and the molecule-level constraint list are preserved,
 /// except for removals requested by failure policies and their reference compaction.
@@ -234,14 +236,10 @@ impl<'a> Resolver<'a> {
 
     pub fn with_config(model: &'a ChemistryModel, config: ResolveConfig) -> Self {
         Self {
-            isotope: IsotopeResolver::with_config(config.isotope, WildcardPolicy::Strict),
-            valence: ValenceResolver::new(&model.valence),
+            isotope: IsotopeResolver::with_config(config.isotope, config.wildcards),
+            valence: ValenceResolver::with_config(&model.valence, config.wildcards),
             aromaticity: AromaticityResolver::with_config(&model.aromaticity, config.aromaticity),
-            stereo: StereoResolver::with_config(
-                &model.stereo,
-                config.stereo,
-                WildcardPolicy::Strict,
-            ),
+            stereo: StereoResolver::with_config(&model.stereo, config.stereo, config.wildcards),
             bonds: BondsResolver::new(),
             multicenter_bonds: MulticenterBondsResolver::new(),
             tie_break: model.valence.tie_break,
@@ -332,8 +330,7 @@ impl<'a> Resolver<'a> {
             Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(cause) => return Ok(Solution::Contradictory(cause)),
         };
-        let (edits, constitution_determined) =
-            self.plan_constitution(isotopic, &state, WildcardPolicy::Strict);
+        let (edits, constitution_determined) = self.plan_constitution(isotopic, &state);
         editor
             .apply(edits)
             .expect("constitution plan applies to its input");
@@ -373,8 +370,7 @@ impl<'a> Resolver<'a> {
                 }
                 Err(error) => return Ok(Err(error)),
             };
-            let (edits, constitution_determined) =
-                self.plan_constitution(isotopic, &state, WildcardPolicy::Strict);
+            let (edits, constitution_determined) = self.plan_constitution(isotopic, &state);
             transaction.apply(edits)?;
             let working = transaction.probe()?;
             Ok(Ok(
@@ -457,7 +453,7 @@ impl<'a> Resolver<'a> {
             Solution::Underdetermined(_) => None,
             Solution::Contradictory(cause) => return Solution::Contradictory(cause.into()),
         };
-        let policy = Some(WildcardPolicy::Strict);
+        let policy = Some(self.config.wildcards);
         let (bonds, bonds_determined) = self.bonds.plan_resolve_with_policy(molecule, policy);
         let multicenter = self
             .multicenter_bonds
@@ -720,12 +716,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn plan_constitution(
-        &self,
-        molecule: &Molecule,
-        state: &ResolveState,
-        wildcards: WildcardPolicy,
-    ) -> (Edits, bool) {
+    fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> (Edits, bool) {
+        let wildcards = self.config.wildcards;
         let mut edits = self
             .aromaticity
             .plan_discharge(molecule, &state.aromatic_systems);
@@ -855,9 +847,10 @@ mod tests {
         StereoLigand, StereoLigandKind, Stereogenicity, StereogenicityForm,
     };
     use umol_graph_ir::{atom_dsl, bond_dsl, mol_dsl, mol_dsl_concrete};
+    use umol_io::smiles::SmilesIoConfig;
 
     use super::*;
-    use crate::ingest::ingest_smiles;
+    use crate::ingest::{ingest_smiles, ingest_smiles_unresolved, ingest_smiles_unresolved_with};
     use crate::ops::aromaticity::{AromaticityError, AromaticityInconsistency};
     use crate::ops::model::{
         AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
@@ -925,6 +918,7 @@ mod tests {
                 isotope: IsotopePolicy::Strict,
                 aromaticity: AromaticityResolveConfig::default(),
                 stereo: StereoResolveConfig::default(),
+                wildcards: WildcardPolicy::Strict,
             }
         );
     }
@@ -957,25 +951,41 @@ mod tests {
                 stereo_atom_failure: StereoFailurePolicy::Keep,
                 ..StereoResolveConfig::default()
             },
+            wildcards: WildcardPolicy::Strict,
         },
         mol_dsl_concrete!(r#"{:atoms ["C#h4#T+"]}"#)
     )]
+    #[case::admit(
+        ResolveConfig { wildcards: WildcardPolicy::Admit, ..Default::default() }, stereo_molecule()
+    )]
     fn test_resolver_with_config(
-        chemistry_model: ChemistryModel,
+        mut chemistry_model: ChemistryModel,
         aromatic_molecule: Molecule,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
         #[case] config: ResolveConfig,
         #[case] stereo_molecule: Molecule,
     ) {
+        chemistry_model.valence = valence;
         let resolver = Resolver::with_config(&chemistry_model, config);
+        let wildcard = mol_dsl!(r#"{:atoms ["*"]}"#);
+        let (isotope, valence) = match config.wildcards {
+            WildcardPolicy::Strict => (
+                Solution::Underdetermined(Edits::new()),
+                Solution::Underdetermined(ResolveState::default()),
+            ),
+            WildcardPolicy::Admit => (
+                Solution::Determined(Edits::new()),
+                Solution::Determined(ResolveState::default()),
+            ),
+        };
+        assert_eq!(resolver.isotope.plan_resolve(&wildcard), isotope);
+        assert_eq!(resolver.valence.admit(&wildcard), Ok(valence));
         let expected_aromaticity =
             AromaticityResolver::with_config(&chemistry_model.aromaticity, config.aromaticity)
                 .plan_resolve(&aromatic_molecule);
-        let expected_stereo = StereoResolver::with_config(
-            &chemistry_model.stereo,
-            config.stereo,
-            WildcardPolicy::Strict,
-        )
-        .plan_resolve(&stereo_molecule);
+        let expected_stereo =
+            StereoResolver::with_config(&chemistry_model.stereo, config.stereo, config.wildcards)
+                .plan_resolve(&stereo_molecule);
 
         assert_eq!(
             resolver.aromaticity.plan_resolve(&aromatic_molecule),
@@ -1076,6 +1086,15 @@ mod tests {
             ..ChemistryModel::default()
         };
         let resolver = Resolver::new(&model);
+        assert_resolution(&resolver, molecule, rollback_method, expected);
+    }
+
+    fn assert_resolution(
+        resolver: &Resolver<'_>,
+        molecule: Molecule,
+        rollback_method: RollbackMethod,
+        expected: Solution<(Molecule, ResolveReport), ResolveContradiction, ResolveReport>,
+    ) {
         assert_eq!(
             resolver.resolve_with_report(molecule.clone()),
             Ok(expected.clone())
@@ -1110,6 +1129,161 @@ mod tests {
             Ok(expected_report.map(|_| ()))
         );
         assert_eq!(without_report, expected_molecule);
+    }
+
+    #[rstest]
+    #[case::branched(ingest_smiles_unresolved("*C(O)C").unwrap(),
+        Some(mol_dsl!(r#"{:atoms ["*#i=#c0#u0" "C#i=#c0#h#n0#u0#s" "O#i=#c0#h#n2#u0#s" "C#i=#c0#h3#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [1 3 "1#c0#u0#s"]]}"#)), &[AtomId(3)])]
+    #[case::isotope(ingest_smiles_unresolved("[1*]C").unwrap(),
+        Some(mol_dsl!(r#"{:atoms ["*#i1#c0#h0" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "1#c0#u0#s"]]}"#)), &[AtomId(1)])]
+    #[case::lone(ingest_smiles_unresolved("*").unwrap(), Some(mol_dsl!(r#"{:atoms ["*#i=#c0#u0"]}"#)), &[])]
+    #[case::two_substituents(ingest_smiles_unresolved("*C*").unwrap(),
+        Some(mol_dsl!(r#"{:atoms ["*#i=#c0#u0" "C#i=#c0#h2#n0#u0#s" "*#i=#c0#u0"]
+            :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]]}"#)), &[AtomId(1)])]
+    #[case::element_set(mol_dsl_concrete!(r#"{:atoms ["{C,N}"]}"#), None, &[])]
+    #[case::element_variable(mol_dsl_concrete!(r#"{:atoms ["?element"]}"#), None, &[])]
+    #[case::localized_missing_h(ingest_smiles_unresolved_with("C~C", &SmilesIoConfig::lenient()).unwrap(), None, &[])]
+    #[case::localized_complete(mol_dsl!(r#"{:atoms ["C#i=#c0#h3#n0#u0#s" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "*"]]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "*"]]}"#)), &[])]
+    #[case::dative_missing_order(mol_dsl_concrete!(r#"{:atoms ["N#h3#d1" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#), None, &[])]
+    #[case::dative_complete(mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#)), &[])]
+    #[case::multicenter_missing_contribution(mol_dsl_concrete!(r#"{:atoms ["B#m1" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#), None, &[])]
+    #[case::multicenter_defaults(mol_dsl!(r#"{:atoms ["B#i=#c0#h0#n0#u0#s" "H#i=#c0#h0#n0#u0#s" "B#i=#c0#h0#n0#u0#s"] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#)), &[])]
+    #[case::noncovalent(mol_dsl!(r#"{:atoms ["C#i*#c0#h4#n0#u0#s#v0#a!" "C#i=#c0#h4#n0#u0#s"] :noncovalent-bonds [{:atoms [0 1] :attrs "*"}]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h4#a!" "C#h4"] :noncovalent-bonds [{:atoms [0 1] :attrs "*"}]}"#)), &[])]
+    #[case::stereo_ligand(mol_dsl_concrete!(r#"{:atoms ["C#T+" "*" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C" "*" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#)), &[])]
+    #[case::isotope_and_hydrogen_completion(mol_dsl!(r#"{:atoms ["C#i*#c0#h*#n0#u0#s#T+" "F#i=#c0#h0#n0#u0#s"
+        "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"] :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#)), &[])]
+    #[case::new_open_coset(mol_dsl_concrete!(r#"{:atoms ["C#h#T+" "F#n3" "Cl#n3" "Br#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h" "F#n3" "Cl#n3" "Br#n3"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#)), &[])]
+    #[case::new_cis_trans(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]] :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#)), &[])]
+    #[case::stored_open(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#)), &[])]
+    #[case::stored_virtual(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:virt 0] 3 [:virt 1]] :attrs "Ct*"}]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F#n3" "Cl#n3"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#)), &[])]
+    #[case::kindless_retained(mol_dsl_concrete!(r#"{:atoms ["C#h" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "*"}]}"#),
+        Some(mol_dsl_concrete!(r#"{:atoms ["C#h" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "*"}]}"#)), &[])]
+    #[case::kindless_requested(mol_dsl_concrete!(r#"{:atoms ["C#h#T+" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "*"}]}"#), None, &[])]
+    #[case::ambiguous_virtual(mol_dsl!(r#"{:atoms ["*" "F#i=#c0#h0#n3#u0#s" "Cl#i=#c0#h0#n3#u0#s" "Br#i=#c0#h0#n3#u0#s"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:virt 0]] :attrs "*"}]}"#), None, &[])]
+    #[case::coset_set(mol_dsl_concrete!(r#"{:atoms ["C#h" "C#h" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct{0,1}"}]}"#), None, &[])]
+    fn test_resolver_resolve_wildcards(
+        #[case] molecule: Molecule,
+        #[case] admitted: Option<Molecule>,
+        #[case] tie_breaks: &[AtomId],
+        #[values(
+            ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            ValenceModel::default()
+        )]
+        mut valence: ValenceModel,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        valence.tie_break = ValenceTieBreak::MostSaturated;
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                isotope: IsotopePolicy::Natural,
+                wildcards,
+                ..Default::default()
+            },
+        );
+        let expected = match (wildcards, admitted) {
+            (WildcardPolicy::Admit, Some(output)) => Solution::Determined((
+                output,
+                ResolveReport {
+                    unresolved: AtomCompletions::new(),
+                    tie_breaks: tie_breaks.to_vec(),
+                },
+            )),
+            _ => Solution::Underdetermined(ResolveReport::default()),
+        };
+        assert_resolution(&resolver, molecule, rollback, expected);
+    }
+
+    #[rstest]
+    #[case::permissive(AromaticityModel::permissive(), Solution::Determined(mol_dsl_concrete!(r#"{
+        :atoms ["*" "C#h" "C#h" "C#h" "C#h" "C#h"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#)))]
+    #[case::daylight(AromaticityModel::daylight(), Solution::Contradictory(ResolveContradiction::Aromaticity(
+        AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }.into())))]
+    fn test_resolver_resolve_wildcard_ring(
+        #[case] aromaticity: AromaticityModel,
+        #[case] admitted: Solution<Molecule, ResolveContradiction, ()>,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let molecule = mol_dsl_concrete!(
+            r#"{:atoms ["*#a1" "C#h#a1" "C#h#a1" "C#h#a1" "C#h#a1" "C#h#a1"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
+        );
+        let model = ChemistryModel {
+            valence,
+            aromaticity,
+            ..Default::default()
+        };
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                wildcards,
+                ..Default::default()
+            },
+        );
+        let expected = match (wildcards, admitted) {
+            (WildcardPolicy::Admit, Solution::Determined(output)) => {
+                Solution::Determined((output, ResolveReport::default()))
+            }
+            (WildcardPolicy::Admit, Solution::Contradictory(cause)) => {
+                Solution::Contradictory(cause)
+            }
+            _ => Solution::Underdetermined(ResolveReport::default()),
+        };
+        assert_resolution(&resolver, molecule, rollback, expected);
+    }
+
+    #[rstest]
+    #[case::aggregate_strict(WildcardPolicy::Admit, WildcardPolicy::Strict)]
+    #[case::aggregate_admit(WildcardPolicy::Strict, WildcardPolicy::Admit)]
+    fn test_resolver_resolve_inconsistent_config(
+        chemistry_model: ChemistryModel,
+        #[case] phase_policy: WildcardPolicy,
+        #[case] changed_policy: WildcardPolicy,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let mut resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                wildcards: phase_policy,
+                ..Default::default()
+            },
+        );
+        resolver.config.wildcards = changed_policy;
+        let molecule = mol_dsl_concrete!(r#"{:atoms ["*" "C#h3"] :bonds [[0 1 "1"]]}"#);
+        let _ = resolver.resolve(molecule.clone());
+        let _ = resolver.resolve_with_report(molecule.clone());
+        let _ = resolver.resolve_into(&mut molecule.clone(), rollback);
+        let _ = resolver.resolve_into_with_report(&mut molecule.clone(), rollback);
     }
 
     #[rstest]
@@ -1619,9 +1793,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::omitted(mol_dsl!(r#"{:atoms ["C#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#), true)]
-    #[case::natural(mol_dsl!(r#"{:atoms ["C#i=#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#), false)]
-    #[case::mass(mol_dsl!(r#"{:atoms ["C#i13#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i13#c0#h4#n0#u0#s"]}"#), false)]
+    #[case::omitted(mol_dsl!(r#"{:atoms ["C#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))]
+    #[case::natural(mol_dsl!(r#"{:atoms ["C#i=#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))]
+    #[case::mass(mol_dsl!(r#"{:atoms ["C#i13#c0#h4"]}"#), mol_dsl!(r#"{:atoms ["C#i13#c0#h4#n0#u0#s"]}"#))]
     fn test_resolver_resolve_isotope(
         #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
         #[values(ValenceTieBreak::Strict, ValenceTieBreak::MostSaturated)]
@@ -1629,7 +1803,7 @@ mod tests {
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
         #[case] mut molecule: Molecule,
         #[case] expected: Molecule,
-        #[case] omitted: bool,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
         #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         valence.tie_break = tie_break;
@@ -1641,8 +1815,13 @@ mod tests {
             &model,
             ResolveConfig {
                 isotope,
+                wildcards,
                 ..Default::default()
             },
+        );
+        let omitted = matches!(
+            molecule.atom(AtomId(0)).attributes().isotope_mass,
+            IsotopeMassForm::Undetermined
         );
         let original = molecule.clone();
         let consumed = resolver.resolve(molecule.clone());
@@ -1664,37 +1843,28 @@ mod tests {
     fn test_resolver_resolve_isotope_partial(
         #[values(ValenceModel::smiles(), ValenceModel::default())] valence: ValenceModel,
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] isotope: IsotopePolicy,
-        #[case] mut molecule: Molecule,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+        #[case] molecule: Molecule,
         #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
     ) {
         let model = ChemistryModel {
             valence,
             ..Default::default()
         };
-        let original = molecule.clone();
-        assert_eq!(
-            Resolver::with_config(
-                &model,
-                ResolveConfig {
-                    isotope,
-                    ..Default::default()
-                }
-            )
-            .resolve(molecule.clone()),
-            Ok(Solution::Underdetermined(()))
+        let resolver = Resolver::with_config(
+            &model,
+            ResolveConfig {
+                isotope,
+                wildcards,
+                ..Default::default()
+            },
         );
-        assert_eq!(
-            Resolver::with_config(
-                &model,
-                ResolveConfig {
-                    isotope,
-                    ..Default::default()
-                }
-            )
-            .resolve_into(&mut molecule, rollback_method),
-            Ok(Solution::Underdetermined(()))
+        assert_resolution(
+            &resolver,
+            molecule,
+            rollback_method,
+            Solution::Underdetermined(ResolveReport::default()),
         );
-        assert_eq!(molecule, original);
     }
 
     #[rstest]
@@ -1743,9 +1913,17 @@ mod tests {
     fn test_resolver_resolve_stereo_assertions(
         chemistry_model: ChemistryModel,
         #[case] molecule: Molecule,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
     ) {
         assert_eq!(
-            Resolver::new(&chemistry_model).resolve(molecule.clone()),
+            Resolver::with_config(
+                &chemistry_model,
+                ResolveConfig {
+                    wildcards,
+                    ..Default::default()
+                }
+            )
+            .resolve(molecule.clone()),
             Ok(Solution::Determined(molecule))
         );
     }
@@ -2776,6 +2954,29 @@ mod tests {
     }
 
     #[rstest]
+    fn test_resolver_plan_constitution_altered_state(chemistry_model: ChemistryModel) {
+        let molecule = mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "1#a"]]}"#);
+        let resolver = Resolver::new(&chemistry_model);
+        let mut state = resolver
+            .valence
+            .admit(&molecule)
+            .unwrap()
+            .into_determined()
+            .unwrap();
+        let missing = AtomId(2);
+        state.completions.insert(missing, smallvec![atom_dsl!("C")]);
+        state.aromatic_systems.push((
+            vec![AtomId(0), missing],
+            AromaticSystemForm::from_electrons(vec![1]),
+        ));
+        let _ =
+            resolver
+                .aromaticity
+                .select_with_report(&molecule, state.clone(), resolver.tie_break);
+        let _ = resolver.plan_constitution(&molecule, &state);
+    }
+
+    #[rstest]
     #[case::literal(Some(NumForm::Lit(0)))]
     #[case::set(Some(NumForm::LitSet(Box::new(BTreeSet::from([0, 1])))))]
     #[case::vacuous(Some(NumForm::Undetermined))]
@@ -2799,7 +3000,7 @@ mod tests {
             ..ResolveState::default()
         };
         let edits = Resolver::new(&chemistry_model)
-            .plan_constitution(&molecule, &state, WildcardPolicy::Strict)
+            .plan_constitution(&molecule, &state)
             .0;
         let mut editor = molecule.edit();
         editor.apply(edits).unwrap();
@@ -2836,11 +3037,8 @@ mod tests {
             .collect(),
             ..ResolveState::default()
         };
-        let (edits, determined) = Resolver::new(&chemistry_model).plan_constitution(
-            &molecule,
-            &state,
-            WildcardPolicy::Strict,
-        );
+        let (edits, determined) =
+            Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
         assert_eq!(determined, matches!(expected_count, NumForm::Lit(0)));
         assert_eq!(
             edits,
@@ -2968,7 +3166,7 @@ mod tests {
         #[case] expected: Molecule,
     ) {
         let edits = Resolver::new(&chemistry_model)
-            .plan_constitution(&molecule, &ResolveState::default(), WildcardPolicy::Strict)
+            .plan_constitution(&molecule, &ResolveState::default())
             .0;
         assert_eq!(molecule.apply(edits), Ok(expected));
     }
@@ -2984,7 +3182,7 @@ mod tests {
     ) {
         assert_eq!(
             Resolver::new(&chemistry_model)
-                .plan_constitution(&molecule, &ResolveState::default(), WildcardPolicy::Strict)
+                .plan_constitution(&molecule, &ResolveState::default())
                 .0,
             Edits::new()
         );

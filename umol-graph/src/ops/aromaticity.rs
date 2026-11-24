@@ -480,8 +480,10 @@ impl AromaticityPerceiver {
         let mut edits = Edits::new();
         let mut changes = Vec::new();
         for (position, &atom) in atoms.iter().enumerate() {
-            if let Some(asserted) = molecule
-                .atom(atom)
+            let Some(member) = molecule.atoms().get(atom) else {
+                return Edits::new();
+            };
+            if let Some(asserted) = member
                 .attributes()
                 .constraints
                 .get(AtomConstraintKey::AromaticValence)

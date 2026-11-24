@@ -534,8 +534,9 @@ impl AromaticityResolver {
         }
         for (aromatic_system, (atoms, _)) in aromatic_systems.iter().enumerate() {
             for atom in atoms {
-                membership[atom.index()] =
-                    Some(molecule.aromatic_systems().count() + aromatic_system);
+                if let Some(member) = membership.get_mut(atom.index()) {
+                    *member = Some(molecule.aromatic_systems().count() + aromatic_system);
+                }
             }
         }
         let mut changes = Vec::new();

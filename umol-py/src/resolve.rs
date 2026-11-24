@@ -8,7 +8,7 @@ use umol_graph::ops::resolve::{
     AtomSelectionAlgorithm as GraphAtomSelectionAlgorithm, IsotopePolicy as GraphIsotopePolicy,
     ResolveConfig as GraphResolveConfig, ResolveContradiction as GraphResolveContradiction,
     StereoFailurePolicy as GraphStereoFailurePolicy,
-    StereoResolveConfig as GraphStereoResolveConfig,
+    StereoResolveConfig as GraphStereoResolveConfig, WildcardPolicy as GraphWildcardPolicy,
 };
 use umol_graph::ops::valence::{
     AtomCompletions as GraphAtomCompletions, ResolveReport as GraphResolveReport,
@@ -275,6 +275,7 @@ impl ResolveConfig {
             isotope: isotope.to_rust(),
             aromaticity: aromaticity.to_rust(),
             stereo: stereo.to_rust(),
+            wildcards: GraphWildcardPolicy::Strict,
         })
     }
 
@@ -571,6 +572,7 @@ mod tests {
                 aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
             },
             stereo: GraphStereoResolveConfig::default(),
+            wildcards: GraphWildcardPolicy::Strict,
         },
     )]
     #[case::stereo(
@@ -584,6 +586,7 @@ mod tests {
                 stereo_bond_failure: GraphStereoFailurePolicy::Keep,
                 ring_config: Default::default(),
             },
+            wildcards: GraphWildcardPolicy::Strict,
         },
     )]
     fn test_resolve_config_new(
@@ -605,6 +608,7 @@ mod tests {
                 isotope: GraphIsotopePolicy::Strict,
                 aromaticity: GraphAromaticityResolveConfig::default(),
                 stereo: GraphStereoResolveConfig::default(),
+                wildcards: GraphWildcardPolicy::Strict,
             })
         );
     }
@@ -638,6 +642,7 @@ mod tests {
             stereo_bond_failure: GraphStereoFailurePolicy::Keep,
             ring_config: Default::default(),
         },
+        wildcards: GraphWildcardPolicy::Strict,
     })]
     fn test_resolve_config_from_rust(#[case] config: GraphResolveConfig) {
         assert_eq!(ResolveConfig::from_rust(config).0, config);
