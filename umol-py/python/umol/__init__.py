@@ -251,6 +251,7 @@ from ._native import (
     PredExpr,
     ArithExpr,
     ValenceTieBreak,
+    WildcardPolicy,
     WlHashScheme,
 )
 from .elements import E
@@ -515,6 +516,7 @@ __all__ = [
     "NumForm",
     "PredExpr",
     "ArithExpr",
+    "WildcardPolicy",
     "WlHashScheme",
     "__version__",
     "ValenceTieBreak",

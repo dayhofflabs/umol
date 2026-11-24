@@ -30,6 +30,8 @@ from umol import (
     UnderdeterminedError,
     ValenceModel,
     ValenceTable,
+    ValenceTieBreak,
+    WildcardPolicy,
 )
 
 
@@ -357,10 +359,23 @@ def test_resolve_config_isotope(isotope):
     )
 
 
+@pytest.mark.parametrize("wildcards", [WildcardPolicy.Strict, WildcardPolicy.Admit])
+def test_resolve_config_wildcards(wildcards):
+    config = ResolveConfig(
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+        wildcards=wildcards,
+    )
+    assert config.wildcards == wildcards
+    assert (config == ResolveConfig.default()) == (wildcards == WildcardPolicy.Strict)
+    assert len({WildcardPolicy.Strict, WildcardPolicy.Admit}) == 2
+
+
 def test_resolve_config_default():
     config = ResolveConfig.default()
 
     assert config.isotope == IsotopePolicy.Strict
+    assert config.wildcards == WildcardPolicy.Strict
     assert config.aromaticity == AromaticityResolveConfig()
     assert config.stereo == StereoResolveConfig()
     assert config == ResolveConfig.default()
@@ -443,7 +458,7 @@ def test_resolve_config_equality(other):
             "aromatic_system_failure=AromaticityFailurePolicy.Keep), "
             "stereo=StereoResolveConfig(stereo_atom_failure="
             "StereoFailurePolicy.Keep, stereo_bond_failure="
-            "StereoFailurePolicy.Error, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())))",
+            "StereoFailurePolicy.Error, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())), wildcards=WildcardPolicy.Strict)",
         ),
     ],
 )
@@ -455,6 +470,7 @@ def test_resolve_config_repr(config, expected):
     ("field", "value"),
     [
         ("isotope", IsotopePolicy.Natural),
+        ("wildcards", WildcardPolicy.Admit),
         ("aromaticity", AromaticityResolveConfig()),
         ("stereo", StereoResolveConfig()),
     ],
@@ -653,13 +669,15 @@ def test_molecule_resolve_with_report(method):
 
 
 @pytest.mark.parametrize("method", ["resolve_with_report", "resolve_into_with_report"])
-def test_molecule_resolve_with_report_empty(method):
+@pytest.mark.parametrize("wildcards", [WildcardPolicy.Strict, WildcardPolicy.Admit])
+def test_molecule_resolve_with_report_empty(method, wildcards):
     source = Molecule.parse('{:atoms ["C#c0#h4"]}')
     result, report = getattr(source, method)(
         resolve_config=ResolveConfig(
             isotope=IsotopePolicy.Strict,
             aromaticity=AromaticityResolveConfig(),
             stereo=StereoResolveConfig(),
+            wildcards=wildcards,
         )
     )
     assert isinstance(result, Solution.Underdetermined)
@@ -774,18 +792,26 @@ def test_molecule_resolve_aromaticity(
 
 
 @pytest.mark.parametrize(
-    "source",
+    ("atoms", "can_resolve"),
     [
-        '{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] '
-        ':bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
-        ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}',
+        ('["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]', True),
+        ('["*" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]', False),
     ],
+    ids=["member-contributions", "missing-member-contribution"],
 )
 @pytest.mark.parametrize(
     "failure", [AromaticityFailurePolicy.Error, AromaticityFailurePolicy.Keep]
 )
 @pytest.mark.parametrize("rollback", [RollbackMethod.Clone, RollbackMethod.Journal])
-def test_molecule_resolve_into_aromaticity_partial(source, failure, rollback):
+@pytest.mark.parametrize("wildcards", [WildcardPolicy.Strict, WildcardPolicy.Admit])
+def test_molecule_resolve_into_aromaticity_partial(
+    atoms, can_resolve, failure, rollback, wildcards
+):
+    source = (
+        f'{{:atoms {atoms} '
+        ':bonds [[0 1 "1#a"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+        ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}'
+    )
     molecule = Molecule.parse(source, defaults=MoleculeDefaults.concrete())
     original = molecule.copy()
     config = ResolveConfig(
@@ -794,11 +820,21 @@ def test_molecule_resolve_into_aromaticity_partial(source, failure, rollback):
             aromatic_system_failure=failure,
         ),
         stereo=StereoResolveConfig(),
+        wildcards=wildcards,
     )
-    assert molecule.resolve_into(
-        resolve_config=config, rollback_method=rollback
-    ) == Solution.Underdetermined()
-    assert molecule == original
+    result = molecule.resolve_into(resolve_config=config, rollback_method=rollback)
+    if can_resolve and wildcards == WildcardPolicy.Admit:
+        expected = Molecule.parse(
+            f'{{:atoms {atoms} '
+            ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]] '
+            ':aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}',
+            defaults=MoleculeDefaults.concrete(),
+        )
+        assert result == Solution.Determined()
+        assert molecule == expected
+    else:
+        assert result == Solution.Underdetermined()
+        assert molecule == original
 
 
 @pytest.mark.parametrize(
@@ -892,8 +928,9 @@ def test_molecule_resolve_valence(
 )
 @pytest.mark.parametrize("isotope", [IsotopePolicy.Strict, IsotopePolicy.Natural])
 @pytest.mark.parametrize("chemistry_model", [None, ChemistryModel.default()])
+@pytest.mark.parametrize("wildcards", [WildcardPolicy.Strict, WildcardPolicy.Admit])
 def test_molecule_resolve_isotope(
-    method, copying, with_report, rollback_method, isotope, chemistry_model
+    method, copying, with_report, rollback_method, isotope, chemistry_model, wildcards
 ):
     source = Molecule.parse('{:atoms ["C#c0#h4"]}')
     alias = source
@@ -908,6 +945,7 @@ def test_molecule_resolve_isotope(
         isotope=isotope,
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
+        wildcards=wildcards,
     )
     kwargs = {} if rollback_method is None else {"rollback_method": rollback_method}
     result = getattr(source, method)(
@@ -961,6 +999,58 @@ def test_molecule_resolve_isotope(
             with pytest.raises(InvalidatedViewError):
                 access()
     assert original == Molecule.parse('{:atoms ["C#c0#h4"]}')
+
+
+@pytest.mark.parametrize(
+    ("method", "copying", "with_report"),
+    [
+        ("resolve", True, False),
+        ("resolve_with_report", True, True),
+        ("resolve_into", False, False),
+        ("resolve_into_with_report", False, True),
+    ],
+)
+@pytest.mark.parametrize("wildcards", [WildcardPolicy.Strict, WildcardPolicy.Admit])
+def test_molecule_resolve_wildcard(method, copying, with_report, wildcards):
+    source = Molecule.from_smiles("[1*]C", resolve=False)
+    original = source.copy()
+    view = source.atoms[0]
+    defaults = ChemistryModel.default()
+    result = getattr(source, method)(
+        chemistry_model=ChemistryModel(
+            connectivity=defaults.connectivity,
+            valence=ValenceModel(
+                candidates=defaults.valence.candidates, tie_break=ValenceTieBreak.MostSaturated
+            ),
+            aromaticity=defaults.aromaticity,
+            stereo=defaults.stereo,
+        ),
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(),
+            isotope=IsotopePolicy.Natural,
+            wildcards=wildcards,
+        ),
+    )
+    admitted = wildcards == WildcardPolicy.Admit
+    if with_report:
+        result, report = result
+        assert report.unresolved.items() == []
+        assert report.tie_breaks == ((1,) if admitted else ())
+
+    expected = Molecule.parse(
+        '{:atoms ["*#i1#c0#h0" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "1#c0#u0#s"]]}'
+    )
+    if admitted:
+        assert result == Solution.Determined(molecule=expected if copying else None)
+    else:
+        assert result == Solution.Underdetermined()
+    assert source == (expected if admitted and not copying else original)
+    if copying:
+        assert view.is_wildcard()
+    else:
+        with pytest.raises(InvalidatedViewError):
+            view.is_wildcard()
 
 
 @pytest.mark.parametrize(

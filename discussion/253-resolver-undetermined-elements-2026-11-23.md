@@ -803,9 +803,9 @@ at a separate bond. The C assignment with order 1 must succeed. Under Daylight w
 result supplies that contribution. The property compares retained relations in corresponding
 participant frames, including shuffled tetrahedral ligands.
 
-### S4 — Python surfaces
+### S4 — Python surfaces (done)
 
-#### S4a — Form, view and molecule queries
+#### S4a — Form, view and molecule queries (done)
 
 `umol-py/src/{atom,bond,dative,aromatic,multicenter,noncovalent,stereo,molecule}.rs`
 and their Python tests. Additive (green). [dep: S0c]
@@ -816,7 +816,7 @@ invalidation checks. Bind `Molecule.has_wildcards()`. Test each kind from an own
 an indexed view, a changed principal field read through a live view, and ordinary invalidation.
 Include `C#h*` and the isotope-labeled wildcard in molecule tests.
 
-#### S4b — Policy, configuration and boundary outcomes
+#### S4b — Policy, configuration and boundary outcomes (done)
 
 `umol-py/src/{resolve,lib,molecule,reaction}.rs`, `umol-py/python/umol/__init__.py`
 and `umol-py/tests/`. Additive (green). [dep: S3b, S3c]

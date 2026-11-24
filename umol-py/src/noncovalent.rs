@@ -262,6 +262,11 @@ impl NoncovalentBondForm {
             .map_err(parse_error)
     }
 
+    /// Whether the stored interaction kind is undetermined.
+    fn is_wildcard(&self) -> bool {
+        self.value.is_wildcard()
+    }
+
     fn __str__(&self) -> String {
         self.value.to_string()
     }
@@ -418,6 +423,16 @@ impl NoncovalentBondView {
         molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
         let [first, second] = self.noncovalent_bond(molecule.to_rust())?.atom_ids();
         Ok((first.0, second.0))
+    }
+
+    /// Whether the stored interaction kind is undetermined.
+    fn is_wildcard(&self, py: Python<'_>) -> PyResult<bool> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(NoncovalentBondView))?;
+        Ok(self
+            .noncovalent_bond(molecule.to_rust())?
+            .attributes()
+            .is_wildcard())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

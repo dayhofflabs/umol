@@ -1119,6 +1119,11 @@ impl Molecule {
             .collect()
     }
 
+    /// Whether any entity in the molecule has an undetermined principal field.
+    fn has_wildcards(&self) -> bool {
+        self.to_rust().has_wildcards()
+    }
+
     /// The atoms, indexed by integer position.
     #[getter]
     fn atoms(slf: Py<Self>, py: Python<'_>) -> PyResult<AtomViews> {

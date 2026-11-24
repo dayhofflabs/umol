@@ -97,7 +97,7 @@ import umol
             "(*, kind_models, stereo_bond_min_ring_size, "
             "stereo_bond_e_min_ring_size)",
         ),
-        (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis)"),
+        (umol.ResolveConfig, "(*, aromaticity, stereo, isotope=Ellipsis, wildcards=Ellipsis)"),
         (
             umol.ConnectivityModel,
             "(*, allow_disconnected, allow_disconnected_dative, "

@@ -425,6 +425,11 @@ impl AtomForm {
             .map_err(parse_error)
     }
 
+    /// Whether the stored element is undetermined.
+    fn is_wildcard(&self) -> bool {
+        self.value.is_wildcard()
+    }
+
     fn __str__(&self) -> String {
         self.value.to_string()
     }
@@ -717,6 +722,13 @@ impl AtomView {
         let molecule = self.owner.try_borrow(py)?;
         molecule.check_access(self.counter, stringify!(AtomView))?;
         Ok(self.id.0)
+    }
+
+    /// Whether the stored element is undetermined.
+    fn is_wildcard(&self, py: Python<'_>) -> PyResult<bool> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AtomView))?;
+        Ok(self.atom(molecule.to_rust())?.is_wildcard())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

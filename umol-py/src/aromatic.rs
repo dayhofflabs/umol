@@ -163,6 +163,11 @@ impl AromaticSystemForm {
             .map_err(parse_error)
     }
 
+    /// Whether the stored electron counts are undetermined.
+    fn is_wildcard(&self) -> bool {
+        self.value.is_wildcard()
+    }
+
     fn __str__(&self) -> String {
         self.value.to_string()
     }
@@ -349,6 +354,16 @@ impl AromaticSystemView {
             .map(|atom| atom.0)
             .collect();
         PyTuple::new(py, atom_ids)
+    }
+
+    /// Whether the stored electron counts are undetermined.
+    fn is_wildcard(&self, py: Python<'_>) -> PyResult<bool> {
+        let molecule = self.owner.try_borrow(py)?;
+        molecule.check_access(self.counter, stringify!(AromaticSystemView))?;
+        Ok(self
+            .aromatic_system(molecule.to_rust())?
+            .attributes()
+            .is_wildcard())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
