@@ -558,7 +558,7 @@ Run the existing electron-count, aromatic, multicenter and stereo parsing, forma
 edit tests and the Python stereo tests. Preserve their accepted strings, exact errors and
 renderings, including the distinction between an omitted configuration and `*` in stereo updates.
 
-### S1 — Isotope and valence resolution
+### S1 — Isotope and valence resolution (done)
 
 #### S1a — Isotope completion and projection (done)
 
@@ -607,7 +607,7 @@ from skipping one whose missing hydrogen count needs the order. Test constructio
 the exact candidates or outcome for `*C(O)C`, a lone wildcard, a symbolic element and the
 two open-order cases.
 
-#### S1d — Valence dispatch and incidence assertions
+#### S1d — Valence dispatch and incidence assertions (done)
 
 `umol-graph/src/ops/resolve/valence.rs`. Additive (green). [dep: S1b, S1c]
 
