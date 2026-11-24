@@ -25,7 +25,8 @@ pub trait Interpret {
     /// Interpret this format value under the semantic model and resolve policy.
     ///
     /// Format-owned values survive resolution: SMILES with an omitted isotope
-    /// raises to Natural composition, which Strict also preserves.
+    /// raises to Natural composition, which the strict isotope policy also preserves.
+    /// With wildcard admission, a molecule or either reaction side may retain wildcards.
     fn interpret(
         &self,
         model: &ChemistryModel,
@@ -1089,6 +1090,8 @@ mod tests {
     #[rstest]
     #[case::implicit_counts("C", mol_dsl!(r#"{:atoms ["C#i=#c0#u0"]}"#))]
     #[case::wildcard("*", mol_dsl!(r#"{:atoms ["*#i=#c0#u0"]}"#))]
+    #[case::wildcard_branch("*C(O)C", mol_dsl!(r#"{:atoms ["*#i=#c0#u0" "C#i=#c0#u0" "O#i=#c0#u0" "C#i=#c0#u0"]
+        :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#))]
     #[case::bracket_fields("[13CH3+]", mol_dsl!(r#"{:atoms ["C#i13#c+#h3"]}"#))]
     #[case::aromatic(
         "c1ccccc1",
@@ -1762,6 +1765,36 @@ mod tests {
     }
 
     #[rstest]
+    #[case::branched("*C(O)C", mol_dsl!(r#"{:atoms ["*#i=#c0#u0" "C#i=#c0#h#n0#u0#s" "O#i=#c0#h#n2#u0#s" "C#i=#c0#h3#n0#u0#s"]
+        :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [1 3 "1#c0#u0#s"]]}"#))]
+    #[case::isotope("[1*]C", mol_dsl!(r#"{:atoms ["*#i1#c0#h0" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "1#c0#u0#s"]]}"#))]
+    fn test_ingest_smiles_with_resolution_partial(
+        #[case] input: &str,
+        #[case] expected: Molecule,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] mut valence: ValenceModel,
+    ) {
+        valence.tie_break = ValenceTieBreak::MostSaturated;
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            wildcards: WildcardPolicy::Admit,
+            ..Default::default()
+        };
+        let io = SmilesIoConfig::opensmiles();
+        assert_eq!(
+            ingest_smiles_with(input, &io, &model, &config).unwrap(),
+            expected
+        );
+        assert_eq!(
+            ingest_smiles_bytes_with(input.as_bytes(), &io, &model, &config).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
     #[case::carbanion("[C@-](F)(Cl)Br", atom_dsl!("C#i=#c-#h0#n1#u0#s"))]
     #[case::nitrogen("[N@](F)(Cl)Br", atom_dsl!("N#i=#c0#h0#n1#u0#s"))]
     #[case::phosphorus("[P@](F)(Cl)Br", atom_dsl!("P#i=#c0#h0#n1#u0#s"))]
@@ -2037,6 +2070,13 @@ mod tests {
         ResolveConfig::default(),
         SmilesInputError::Underdetermined(ResolveUnderdetermined)
     )]
+    #[case::wildcard(
+        "*",
+        SmilesIoConfig::opensmiles(),
+        ChemistryModel::default(),
+        ResolveConfig::default(),
+        SmilesInputError::Underdetermined(ResolveUnderdetermined)
+    )]
     #[case::mdl_furan(
         "o1cccc1",
         SmilesIoConfig::opensmiles(),
@@ -2087,8 +2127,13 @@ mod tests {
         #[case] expected: SmilesInputError,
     ) {
         assert_eq!(
-            ingest_smiles_with(input, &io_config, &model, &resolve_config,),
-            Err(expected)
+            ingest_smiles_with(input, &io_config, &model, &resolve_config).unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            ingest_smiles_bytes_with(input.as_bytes(), &io_config, &model, &resolve_config)
+                .unwrap_err(),
+            expected
         );
     }
 
@@ -2354,16 +2399,22 @@ mod tests {
     fn test_ingest_reaction_smiles_with_underdetermined(
         #[case] input: &str,
         #[case] expected: ReactionInterpretationError,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
     ) {
-        let result = ingest_reaction_smiles_with(
-            input,
-            &SmilesIoConfig::lenient(),
-            &ChemistryModel::default(),
-            &ResolveConfig::default(),
+        let io = SmilesIoConfig::lenient();
+        let model = ChemistryModel::default();
+        let config = ResolveConfig {
+            wildcards,
+            ..Default::default()
+        };
+        let expected = ReactionSmilesInputError::Interpretation(expected);
+        assert_eq!(
+            ingest_reaction_smiles_with(input, &io, &model, &config).unwrap_err(),
+            expected
         );
         assert_eq!(
-            result,
-            Err(ReactionSmilesInputError::Interpretation(expected))
+            ingest_reaction_smiles_bytes_with(input.as_bytes(), &io, &model, &config).unwrap_err(),
+            expected
         );
     }
 
@@ -2461,6 +2512,11 @@ mod tests {
         ResolveConfig::default(),
         Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 2 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]]}}"##.parse().unwrap()),
     )]
+    #[case::mapped_wildcard(
+        "[1*:1][CH3:2]>>[1*:1][CH3:2]", SmilesIoConfig::opensmiles(), ChemistryModel::default(),
+        ResolveConfig { isotope: IsotopePolicy::Natural, wildcards: WildcardPolicy::Admit, ..Default::default() },
+        Ok(Reaction::new(mol_dsl!(r#"{:atoms ["*#i1#c0#h0" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "1#c0#u0#s"]]}"#), Deltas::default()))
+    )]
     fn test_ingest_reaction_smiles_with(
         #[case] input: &str,
         #[case] io_config: SmilesIoConfig,
@@ -2470,6 +2526,15 @@ mod tests {
     ) {
         assert_eq!(
             ingest_reaction_smiles_with(input, &io_config, &model, &resolve_config),
+            expected
+        );
+        assert_eq!(
+            ingest_reaction_smiles_bytes_with(
+                input.as_bytes(),
+                &io_config,
+                &model,
+                &resolve_config
+            ),
             expected
         );
     }

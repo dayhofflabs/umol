@@ -288,7 +288,7 @@ is undetermined, even though the isotope is known.
 
 Python exposes `WildcardPolicy`, the `wildcards` keyword and attribute on `ResolveConfig`, and
 the same predicates. An indexed molecule entity view delegates `is_wildcard()` to its stored
-form. SMILES and MOL ingestion with a supplied config publish the aggregate resolver's
+form. SMILES and MOL ingestion with a supplied config return the aggregate resolver's
 determined result, including an admitted partial molecule.
 
 The [DSL specification](../umol-graph-ir/spec/umol-dsl-spec.md) uses *wildcard* for `*`, and
@@ -758,15 +758,15 @@ reports where requested, and restored receivers on rejection.
   consumers and inconsistent phase settings on the aggregate. Assert absence of panics. Normal
   configurations retain the full outcome, report and rollback assertions.
 
-#### S3c — SMILES and MOL boundaries
+#### S3c — SMILES and MOL boundaries (done)
 
 `umol-graph/src/{ingest,parse,export}.rs` and `umol-graph/tests/property/project.rs`.
 Integration coverage (green). [dep: S3b]
 
 Follow `ResolveConfig` through molecule and reaction SMILES interpretation and configured MOL
-parsing, including the byte entry points. Publish the determined partial molecule, retain
+parsing, including the byte entry points. Return the determined partial molecule, retain
 side-specific errors on reaction underdetermination, and keep unresolved ingestion available.
-Exercise `test_ingest_smiles_with_resolution` on `*C(O)C` and `[1*]C` under `Natural + Admit`.
+Exercise `test_ingest_smiles_with_resolution_partial` on `*C(O)C` and `[1*]C` under `Natural + Admit`.
 In `test_ingest_smiles_with_error` keep the custom carbon registry whose selected entry
 leaves required fields open and add the default-model wildcard case. Keep the `*` case of
 `test_ingest_smiles_error`.
@@ -774,8 +774,8 @@ leaves required fields open and add the default-model wildcard case. Keep the `*
 In `test_export_smiles_with_mol` preserve the whole generated MOL domain, including both
 valence sources and the existing render/reingest checks for definite geometries. For the
 double bond marked “either”, test strict rejection with restoration and admitted resolution
-with the stored open cis-trans coset. Check export against the format's own representability
-rules. A successful resolve alone establishes no format roundtrip.
+with the stored open cis-trans coset. SMILES rendering returns `UnsupportedBond` for `Either`.
+A successful resolve alone establishes no format roundtrip.
 
 #### S3d — Cross-phase properties
 

@@ -18,8 +18,9 @@
 //! The mixed aromatic/stereo SMILES roundtrip also checks composite validation of
 //! resolved inputs and re-imported outputs under the same chemistry model.
 //! MOL export compares coordinate-derived stereo with independently specified SMILES, including
-//! absent coordinates and the resolver's undetermined Either outcome. Initial marker spelling
-//! may normalize.
+//! absent coordinates. Initial marker spelling may normalize.
+//! For an Either bond, strict resolution restores the input, while
+//! admitted resolution retains the open cis-trans configuration and SMILES rendering rejects it.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -28,14 +29,16 @@ use proptest::prelude::*;
 use rstest::rstest;
 use umol_chem::element::Element;
 use umol_chem::spin::SpinMultiplicity;
-use umol_graph::export::{export_reaction_smiles_with, export_smiles_with, Convey};
+use umol_graph::export::{
+    export_reaction_smiles_with, export_smiles_with, Convey, SmilesOutputError,
+};
 use umol_graph::ingest::{ingest_reaction_smiles_with, ingest_smiles, ingest_smiles_with};
 use umol_graph::ops::model::{ChemistryModel, ValenceModel, ValenceTieBreak};
 use umol_graph::ops::resolve::isotope::IsotopeProjectError;
 use umol_graph::ops::resolve::stereo::StereoResolver;
 use umol_graph::ops::resolve::valence::ValenceResolver;
 use umol_graph::ops::resolve::{
-    IsotopePolicy, ProjectError, ProjectFlags, ResolveConfig, Resolver,
+    IsotopePolicy, ProjectError, ProjectFlags, ResolveConfig, Resolver, WildcardPolicy,
 };
 use umol_graph::ops::valence::{AtomTypeRegistry, ValenceEntry, ValenceTable};
 use umol_graph::ops::validate::Validator;
@@ -50,7 +53,7 @@ use umol_graph_ir::ir::{
 };
 use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
 use umol_io::ctfile::parser::parse_mol_to_ir;
-use umol_io::smiles::{ReactionSmiles, Smiles, SmilesIoConfig};
+use umol_io::smiles::{ReactionSmiles, Smiles, SmilesIoConfig, SmilesRenderError};
 use umol_io::table_ir::{Atom, Bond, BondOrder, Molecule as TableMolecule};
 use umol_utils::solution::Solution;
 
@@ -697,25 +700,37 @@ proptest! {
                 ..if typing { ValenceModel::default() } else { ValenceModel::smiles() } },
             ..Default::default()
         };
-        let config = ResolveConfig { isotope: IsotopePolicy::Natural, ..Default::default() };
         let io = SmilesIoConfig::opensmiles();
-        let mut source = parse_mol_to_ir(&input).unwrap();
-        let raised = source.clone();
-        let result = Resolver::with_config(&model, config).resolve_into(&mut source, RollbackMethod::Journal).unwrap();
-        if state == 3 {
-            prop_assert_eq!(result, Solution::Underdetermined(()));
-            prop_assert_eq!(source, raised);
-        } else {
-            prop_assert!(matches!(result, Solution::Determined(_)), "{result:?}");
+        let raised = parse_mol_to_ir(&input).unwrap();
+        let context = CanonicalizeContext { automorphism_algorithm: AutomorphismAlgorithm::Nauty };
+        for wildcards in [WildcardPolicy::Strict, WildcardPolicy::Admit] {
+            let config = ResolveConfig { isotope: IsotopePolicy::Natural, wildcards, ..Default::default() };
+            let mut source = raised.clone();
+            let result = Resolver::with_config(&model, config).resolve_into(&mut source, RollbackMethod::Journal).unwrap();
+            if state == 3 && wildcards == WildcardPolicy::Strict {
+                prop_assert_eq!(result, Solution::Underdetermined(()));
+                prop_assert_eq!(&source, &raised);
+                continue;
+            }
+            prop_assert_eq!(result, Solution::Determined(()));
             let original = source.clone();
-            let text = export_smiles_with(&source, &io, &model, &config).unwrap();
-            let expected = match state { 1 => "F/C=C\\F", 2 => "F/C=C/F", _ => "FC=CF" };
-            let expected = ingest_smiles_with(expected, &io, &model, &config).unwrap();
-            let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
-            let context = CanonicalizeContext { automorphism_algorithm: AutomorphismAlgorithm::Nauty };
-            prop_assert!(source.canonical_eq(&expected, &context));
-            prop_assert!(source.canonical_eq(&restored, &context));
-            prop_assert_eq!(export_smiles_with(&source, &io, &model, &config).unwrap(), text);
+            let output = export_smiles_with(&source, &io, &model, &config);
+            if state == 3 {
+                let expected = mol_dsl_concrete!(r#"{:atoms ["F#n3" "C#h" "C#h" "F#n3"]
+                    :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                    :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct*"}]}"#);
+                prop_assert!(source.canonical_eq(&expected, &context));
+                prop_assert_eq!(output, Err(SmilesOutputError::Render(
+                    SmilesRenderError::UnsupportedBond { bond: 1, field: "Either" })));
+            } else {
+                let text = output.unwrap();
+                let expected = match state { 1 => "F/C=C\\F", 2 => "F/C=C/F", _ => "FC=CF" };
+                let expected = ingest_smiles_with(expected, &io, &model, &config).unwrap();
+                let restored = ingest_smiles_with(&text, &io, &model, &config).unwrap();
+                prop_assert!(source.canonical_eq(&expected, &context));
+                prop_assert!(source.canonical_eq(&restored, &context));
+                prop_assert_eq!(export_smiles_with(&source, &io, &model, &config).unwrap(), text);
+            }
             prop_assert_eq!(source, original);
         }
     }
