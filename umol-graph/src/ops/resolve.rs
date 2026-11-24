@@ -44,6 +44,7 @@ use crate::ops::valence::compare::compare_by_key;
 use crate::ops::valence::{AtomCompletions, ResolveReport, ValenceContradiction};
 
 /// Whether resolution admits entities with an undetermined principal field or component.
+/// Sets and variables in a principal field remain symbolic under either policy.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WildcardPolicy {
     /// Require a concrete molecule for a determined aggregate result.
@@ -111,6 +112,12 @@ impl ResolveState {
 
 /// Resolves or projects a molecule using the configured chemistry model and policies.
 ///
+/// [WildcardPolicy::Strict] requires a concrete result. Under [WildcardPolicy::Admit],
+/// resolution can complete a molecule containing wildcards. For example, with SMILES
+/// valence, `*C` resolves the carbon and bond while preserving the wildcard atom.
+/// In lenient SMILES, `C~C` remains underdetermined because the hydrogen counts require
+/// a bond order. Each phase accounts for the fields it retains or creates.
+///
 /// # Semantic properties
 ///
 /// resolve and project consume the input and return a molecule only on Determined.
@@ -127,7 +134,8 @@ impl ResolveState {
 /// Resolution does not normalize, inline, or evaluate the molecule-level list.
 /// Constraint validation and Molecule::inline_constraints are explicit operations.
 /// The with_report methods additionally collect unresolved candidates and tie-break
-/// uses; omitting that report preserves the outcome, errors, and resulting molecule.
+/// uses. An admitted wildcard alone contributes no report entry. All four resolution
+/// methods agree on the outcome and determined molecule.
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {
     pub isotope: IsotopeResolver,

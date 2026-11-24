@@ -144,29 +144,47 @@ Recovery handles only the classified failure it names, never a mismatch:
 
 AromaticityFailurePolicy offers Error/Keep through aromatic_valence_failure and
 aromatic_system_failure. StereoFailurePolicy offers all three actions through stereo_atom_failure
-and stereo_bond_failure, each covering assertions and entities of its kind. Ambiguity remains
-underdetermined under every policy.
+and stereo_bond_failure, each covering assertions and entities of its kind. Missing evidence for a
+required reading yields Underdetermined under every recovery policy.
 
 ### Resolver scope
 
 | Operation | Owned work and particular requirements |
 | --- | --- |
-| ValenceResolver::admit | Checks #v/#d/#t against complete derived readings, then admits completions from the registry or counts table without selecting one. Candidates respect supplied fields, constraints, and unresolved isotopes. Nonliteral elements leave admission underdetermined. Resolver::plan_constitution applies selections and discharges entailed owned assertions, including on already concrete atoms. |
-| AromaticityResolver::plan_resolve | Creates missing systems from aromatic evidence without valence admission; insufficient contributions yield an empty underdetermined plan. Preserves stored systems, atom fields, and localized bonds. Discharges entailed atom/bond aromatic assertions beside new and retained systems; other compatible assertions remain. |
-| StereoResolver::plan_resolve | Plans requested entities with open cosets, identifies unique virtual kinds, and discharges entailed #T/#C. Strict requires ground configurations. Admit permits an undetermined kind or coset. A configuration outside the policy yields Underdetermined with the established edits. Preserves retained frames, configurations, and attributes. Requests filtered by the creation cutoff remain under every policy. Insufficient frame evidence yields an empty underdetermined plan after established findings are checked. |
-| IsotopeResolver::plan_resolve | Strict preserves isotopes; Natural changes only Undetermined to Natural. Supplied masses, sets, and variables remain. Determined requires ground isotopes, not other fields. Underdetermined retains proposed defaults for aggregate resolution; standalone application waits for a determined plan. |
-| BondsResolver::plan_resolve | Defaults unknown localized-bond charge to zero and wholly unknown spin to closed-shell singlet. Completes one missing spin component from a literal counterpart using the high-spin relation; other forms remain. Orders, topology, and constraints are preserved. |
-| MulticenterBondsResolver::plan_resolve | First checks #m against complete derived readings; uncertainty alone yields an empty plan. Then defaults charge/spin as BondsResolver does, preserving contributions and participants. |
+| ValenceResolver::admit | Checks #v/#d/#t against complete derived readings on every atom. Registry and counts admission return candidates consistent with the supplied fields and constraints, preserving isotope information. Strict requires literal elements. Admit skips candidate generation for wildcard atoms. A required completion or assertion that depends on an open order is underdetermined. A symbolic element blocks admission under either policy. Established contradictions take precedence. |
+| AromaticityResolver::plan_resolve | Creates systems from aromatic evidence while preserving atom fields and localized bonds. With Hückel and any element in scope, a wildcard member's #a1 can establish its contribution. A stored system keeps its electron vector. If the vector is open, member assertions supplying contributions stay in place. Missing required contributions or unresolved system charge or spin give an empty underdetermined plan. An element allow-list excludes wildcard elements. |
+| StereoResolver::plan_resolve | Creates entities requested by #T+/#C+ when it can establish the frame. For a new tetrahedral frame, the plan creates `Th*` and discharges #T+. Strict yields Underdetermined with the planned edits. Admit yields Determined. The same policy applies to retained configurations. A retained kindless entity can stay open under Admit when its frame is established. A coset set or a required choice of kind stays underdetermined under either policy. Insufficient frame evidence gives an empty underdetermined plan after established conflicts are checked. Requests filtered by the creation cutoff remain. |
+| IsotopeResolver::plan_resolve | WildcardPolicy::Admit preserves the isotope on every wildcard atom. On participating atoms, IsotopePolicy::Natural fills an undetermined isotope with natural composition and IsotopePolicy::Strict preserves it. Any remaining non-ground isotope on a participating atom yields Underdetermined with the proposed defaults. Standalone in-place resolution applies a determined plan. |
+| BondsResolver::plan_resolve | Defaults unknown localized-bond charge to zero and wholly unknown spin to closed-shell singlet. Completes one missing spin component from a literal counterpart using the high-spin relation. Order, topology and constraints are preserved. Defaults apply even on an open order. In aggregate resolution the phase also checks localized and dative orders and noncovalent kinds against the wildcard policy. |
+| MulticenterBondsResolver::plan_resolve | Checks #m against complete derived readings. Insufficient evidence yields an empty underdetermined plan. Charge and spin receive the same defaults as localized bonds. An open electron vector can survive aggregate resolution under Admit. |
 
-Each phase handles its owned keys; unrelated assertions remain for validation. Removing an entity
-in a transformer is distinct from resolver discharge.
+Each phase discharges only its own assertions that the result independently entails, including
+#v/#d/#t on already concrete atoms. Stereo preserves retained frames and configurations,
+identifies uniquely determined virtual ligands, and discharges entailed #T/#C. Aromaticity
+discharges entailed atom and bond assertions beside new or retained systems. Other compatible
+assertions remain for validation.
 
 ### Resolver::resolve
 
-Runs isotope completion → joint valence/aromatic selection → stereo → localized/multicenter bond
-defaults. Each phase accounts for its fields. Strict requires all inherent fields to be ground.
-An unresolved isotope or stereo configuration allows later independent phases to run. Consuming
-resolution returns a molecule only on Determined; conformance validation remains explicit.
+Resolution runs isotope completion, joint valence and aromatic selection, stereo, then bond
+defaults. Each phase accounts for its fields, including those on newly created entities.
+An unresolved isotope or stereo configuration allows subsequent independent checks to establish
+a contradiction. All four resolution methods derive their outcome from these phases.
+
+ResolveConfig.wildcards defaults to WildcardPolicy::Strict, which requires ground inherent fields on every entity.
+WildcardPolicy::Admit permits an undetermined principal field or component to stay open when the
+requested work can finish. For example, with SMILES valence, `*C` resolves the carbon and bond
+and retains the wildcard atom. In lenient SMILES, `C~C` remains underdetermined because its
+hydrogen counts depend on bond order. For every assignment to the admitted values that full
+resolution accepts under the same model, the fully resolved molecule refines the partial result.
+
+Molecule::has_wildcards and Molecule::is_concrete are caller queries. Consuming methods return a
+molecule only on Determined. In-place methods commit only on Determined and otherwise restore the
+receiver under the selected rollback method. Reports record unresolved candidate sets and valence
+tie-breaks. An admitted wildcard alone contributes no report entry. Conformance validation is a
+separate operation. These chemistry outcomes assume the phase settings supplied at construction.
+Deliberately inconsistent settings or altered intermediate results have an unspecified chemistry
+outcome and must still be handled without a panic.
 
 ## Projection
 
@@ -177,7 +195,7 @@ format is a separate check.
 | --- | --- |
 | AromaticityResolver::plan_project | Replaces systems with member #a<n> and internal-bond #a assertions, meeting existing assertions. Requires one literal contribution per member, zero system charge, and closed-shell singlet spin; violations produce AromaticityProjectError. Preserves atom fields and localized bonds, but loses grouping and system-local constraints. No perception or selection; idempotent. |
 | StereoResolver::plan_project | Reduces tetrahedral/CisTrans entities to #T+/#C+, discarding frames, configurations, and local constraints without interpreting them. Meets existing assertions; conflicting, unsupported, or unknown kinds produce StereoProjectError. Model-free and idempotent. Aggregate projection and export do not invoke it. |
-| IsotopeResolver::plan_project | Requires ground isotopes or returns NonGroundIsotope with the atom ID. Natural elides Natural composition to Undetermined; Strict preserves it; explicit masses remain. Same-policy resolution restores the input exactly. The projected result need not meet projection's own ground-input requirement. |
+| IsotopeResolver::plan_project | Requires a ground isotope on every atom, including wildcard atoms, or returns NonGroundIsotope with the atom ID. IsotopePolicy::Natural elides natural composition only on participating atoms. WildcardPolicy::Admit preserves natural composition on wildcard atoms. Explicit masses survive. Under IsotopePolicy::Strict projection preserves all ground isotopes. Isotope resolution under the same policies restores the input exactly. |
 | ValenceResolver::project | Always returns Determined and preserves the molecule exactly. |
 
 ### Resolver::project
@@ -282,7 +300,7 @@ conversion. Standalone atom/bond conversion lacks topology context.
 ### Interpret::interpret
 
 Raises Smiles/ReactionSmiles, then resolves under the supplied model and policy; only Determined
-returns graph IR. Raising, contradiction, underdetermination, and execution failures stay distinct.
+returns graph IR, including a partial result under Admit. Raising, contradiction, underdetermination, and execution failures stay distinct.
 Reaction sides resolve independently; unique matched atom-map pairs form the correspondence,
 unmatched atoms stay unmatched. Agents and repeated atoms in a map class are rejected.
 
@@ -306,7 +324,8 @@ ring labels, or redundant slash markers.
 
 ingest::ingest_smiles and ingest::ingest_reaction_smiles compose parse → interpret;
 export::export_smiles and export::export_reaction_smiles compose convey → render. Defaults are
-OpenSMILES, the SMILES valence preset, and Natural isotope policy; explicit-config and byte-input
-variants retain the same composition. Unresolved ingestion stops after parse → raise, retaining
-partial fields, constraints, and explicit stereo, with the same reaction-map/agent restrictions.
+OpenSMILES, the SMILES valence preset, Natural isotope completion and Strict wildcard handling.
+Explicit-config and byte-input variants retain the same composition. Unresolved ingestion stops
+after parse → raise, retaining partial fields, constraints, and explicit stereo, with the same
+reaction-map/agent restrictions.
 Failure channels remain owned by their respective stages.

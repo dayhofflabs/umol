@@ -37,6 +37,8 @@ impl MulticenterBondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
+    /// An open electron vector permits these defaults once the multicenter assertions
+    /// are determined. Aggregate resolution also checks the resulting fields against its policy.
     /// Established constraint contradictions take precedence over underdetermination.
     pub fn plan_resolve(
         &self,

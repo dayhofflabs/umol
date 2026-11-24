@@ -6,7 +6,8 @@
 //! flexible fused component).
 //!
 //! The `smiles_roundtrip/resolve` group isolates resolution with the SMILES counts
-//! model. Parsing, raising, resolver construction, and input cloning are outside timing.
+//! model. Both valence models measure Strict and Admit on the same six fixtures.
+//! Parsing, raising, resolver construction, and input cloning are outside timing.
 //! The `valence_readings` group measures counts/registry admission, registry
 //! classification of resolved molecules, and complete resolution with atom typing.
 //! `aromatic_selection/hueckel` stresses joint selection with 128–4096 admitted
@@ -33,6 +34,7 @@ use umol_graph::ops::resolve::stereo::StereoResolver;
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
     AtomSelectionAlgorithm, BondsResolver, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver,
+    WildcardPolicy,
 };
 use umol_graph::ops::valence::{
     AtomCompletions, AtomTypeRegistry, AtomTypingValence, CountsValence, ResolveReport,
@@ -135,9 +137,18 @@ fn resolve_baseline_cases() -> [(&'static str, &'static str, Molecule); 6] {
 fn bench_resolve_cases(
     group: &mut BenchmarkGroup<'_, WallTime>,
     operation: Option<&str>,
-    resolver: &Resolver<'_>,
+    model: &ChemistryModel,
+    wildcards: WildcardPolicy,
     additional_cases: &[(&str, &str)],
 ) {
+    let resolver = Resolver::with_config(
+        model,
+        ResolveConfig {
+            isotope: IsotopePolicy::Natural,
+            wildcards,
+            ..Default::default()
+        },
+    );
     let baseline = resolve_baseline_cases()
         .into_iter()
         .map(|(name, input, expected)| (name, input, Some(expected)));
@@ -158,6 +169,7 @@ fn bench_resolve_cases(
             "{name}"
         );
         if let Some(expected) = expected {
+            assert!(!molecule.has_wildcards(), "{name}");
             assert_eq!(checked, expected, "{name}");
         }
         let run = |b: &mut Bencher<'_>| {
@@ -184,18 +196,12 @@ fn bench_resolve(c: &mut Criterion) {
         valence: ValenceModel::smiles(),
         ..ChemistryModel::default()
     };
-    let resolver = Resolver::with_config(
-        &model,
-        ResolveConfig {
-            isotope: IsotopePolicy::Natural,
-            ..Default::default()
-        },
-    );
     let mut group = c.benchmark_group("smiles_roundtrip/resolve");
     bench_resolve_cases(
         &mut group,
         None,
-        &resolver,
+        &model,
+        WildcardPolicy::Strict,
         &[
             ("components", "CC.O.[Na+]"),
             ("aromatic_lone_pair", "[nH]1cccc1"),
@@ -209,6 +215,13 @@ fn bench_resolve(c: &mut Criterion) {
             ("shared_cycle", "C1/C=C/C=C/CCC1"),
         ],
     );
+    bench_resolve_cases(
+        &mut group,
+        Some("admit"),
+        &model,
+        WildcardPolicy::Admit,
+        &[],
+    );
     group.finish();
 }
 
@@ -217,13 +230,6 @@ fn bench_valence(c: &mut Criterion) {
     let counts = CountsValence::new(ValenceTable::smiles_table());
     let mut model = ChemistryModel::default();
     model.valence.tie_break = ValenceTieBreak::MostSaturated;
-    let resolver = Resolver::with_config(
-        &model,
-        ResolveConfig {
-            isotope: IsotopePolicy::Natural,
-            ..Default::default()
-        },
-    );
     let mut group = c.benchmark_group("valence_readings");
     let additional = [
         ("octane", "CCCCCCCC"),
@@ -261,7 +267,20 @@ fn bench_valence(c: &mut Criterion) {
             });
         });
     }
-    bench_resolve_cases(&mut group, Some("typing_resolve"), &resolver, &additional);
+    bench_resolve_cases(
+        &mut group,
+        Some("typing_resolve"),
+        &model,
+        WildcardPolicy::Strict,
+        &additional,
+    );
+    bench_resolve_cases(
+        &mut group,
+        Some("typing_resolve_admit"),
+        &model,
+        WildcardPolicy::Admit,
+        &[],
+    );
     group.finish();
 }
 

@@ -26,8 +26,8 @@ pub enum IsotopePolicy {
 /// # Semantic properties
 ///
 /// Resolution is idempotent and preserves every supplied non-Undetermined isotope.
-/// It publishes changes only when every atom other than an admitted wildcard has
-/// a ground isotope after completion. resolve_into preserves the caller's molecule
+/// It returns Determined when every participating atom has a ground isotope after
+/// completion. resolve_into preserves the caller's molecule
 /// on underdetermination or error. resolve consumes it on every outcome.
 ///
 /// For every molecule with ground isotope fields, successful projection followed

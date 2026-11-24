@@ -127,7 +127,9 @@ impl AromaticityResolver {
     /// add information, including negative assertions outside systems, are preserved.
     /// A required Hückel contribution may be supplied by a wildcard atom in scope.
     /// Missing contributions and unresolved charge or spin on a retained system leave the
-    /// plan underdetermined. A retained system keeps its own electron vector.
+    /// plan underdetermined. Standalone resolution can retain an open electron vector.
+    /// Member assertions that supply its contributions remain. Aggregate resolution
+    /// requires [WildcardPolicy::Admit] to return such a system.
     /// Mismatched evidence is contradictory regardless of the failure policies.
     ///
     /// # Semantic properties

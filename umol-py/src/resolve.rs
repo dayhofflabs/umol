@@ -45,7 +45,7 @@ impl IsotopePolicy {
     }
 }
 
-/// Whether resolution admits entities with an undetermined principal field.
+/// Whether resolution admits entities with an undetermined principal field or component.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WildcardPolicy {
@@ -217,7 +217,7 @@ impl AromaticityResolveConfig {
 }
 
 /// Ring-detection algorithms and policies for unrealizable stereo descriptions.
-/// Ambiguity remains underdetermined under every policy; mismatches always contradict.
+/// Missing evidence for a required frame yields underdetermination. Mismatches are contradictory.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig(GraphStereoResolveConfig);

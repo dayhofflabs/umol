@@ -27,7 +27,7 @@ pub enum StereoFailurePolicy {
 
 /// Ring-detection algorithms and recovery policies for structural stereo resolution.
 ///
-/// Ambiguity remains underdetermined under every policy. Mismatches are always contradictory.
+/// Missing evidence for a required frame yields underdetermination. Mismatches are contradictory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig {
     /// Policy for unrealizable tetrahedral constraints and stored stereo atoms.

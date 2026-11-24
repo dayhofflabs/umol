@@ -259,7 +259,7 @@ impl Molecule {
     }
 
     /// Ingest a molecule from SMILES, resolving it by default.
-    /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
+    /// Defaults are OpenSMILES, SMILES valence, Natural isotope completion and Strict wildcard handling.
     /// With resolve=False, apply format-owned defaults and convert to graph IR without
     /// resolution; chemistry_model and resolve_config are ignored. io_config applies
     /// in both modes. An explicitly supplied resolve_config is preserved when resolving.
@@ -474,7 +474,8 @@ impl Molecule {
     ///
     /// Determined carries the resolved molecule. The source and its views remain
     /// unchanged on every outcome. No report is built.
-    /// The default model is ChemistryModel.default(); resolution completes open fields.
+    /// The default model is ChemistryModel.default(). WildcardPolicy.Admit permits a
+    /// partial result when the phases can finish with the wildcard fields open.
     ///
     /// Raises RuntimeError for planning errors.
     #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
@@ -1119,7 +1120,7 @@ impl Molecule {
             .collect()
     }
 
-    /// Whether any entity in the molecule has an undetermined principal field.
+    /// Whether any stored entity has an undetermined principal field or component.
     fn has_wildcards(&self) -> bool {
         self.to_rust().has_wildcards()
     }

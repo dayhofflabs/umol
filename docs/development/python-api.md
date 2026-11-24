@@ -328,6 +328,20 @@ per input format. It introduces no additional interpretation in the binding.
 
 ### Resolution
 
+ResolveConfig takes keyword-only arguments in the order
+`(*, aromaticity, stereo, isotope=IsotopePolicy.Strict, wildcards=WildcardPolicy.Strict)`.
+The properties are read-only. ResolveConfig.default() uses the Rust defaults. A non-default
+repr includes wildcards last. WildcardPolicy.Admit allows a determined molecule to retain an
+undetermined principal field when the resolver can finish using the available evidence.
+For SMILES ingestion, omitting resolve_config selects IsotopePolicy.Natural and WildcardPolicy.Strict.
+
+All eight owned entity forms and their indexed views expose is_wildcard(). A view reads the
+current principal field and raises InvalidatedViewError after invalidation. Molecule.has_wildcards()
+checks all stored entities. A molecule containing only `C#h*` returns False because the element
+is known. An isotope-labelled wildcard such as SMILES `[1*]` returns True. For stereo, both
+an undetermined kind and an undetermined coset (such as `Th*`) qualify. A set or variable in the principal field yields
+False.
+
 StereoResolveConfig exposes stereo_atom_failure, stereo_bond_failure, and
 ring_config as keyword-only constructor arguments and immutable properties.
 Both failure policies default to StereoFailurePolicy.Error; RingConfig uses
@@ -335,10 +349,10 @@ its Rust default. stereo_atom_failure covers unrealizable tetrahedral constraint
 and stored stereo atoms; stereo_bond_failure covers unrealizable cis/trans
 constraints and stored stereo bonds. Error rejects, Keep retains the failed
 description, and Remove clears the failed constraint or removes the failed entity.
-Ambiguity remains Underdetermined under every policy; mismatches are always
-Contradictory. Ring-size admissibility comes from StereoModel. The repr includes
-all three fields. Former failure-policy and operation-level ring-size keywords
-raise TypeError.
+Insufficient evidence for a required frame gives Underdetermined, and a mismatch gives
+Contradictory. An established frame with an open coset follows the wildcard policy. Ring-size
+admissibility comes from StereoModel. The repr includes all three fields. Former failure-policy
+and operation-level ring-size keywords raise TypeError.
 
 Molecule.resolve resolves a copy of its receiver and returns Solution. Only Determined contains a
 molecule; Underdetermined is payload-free and Contradictory contains its diagnostic. Planning errors
@@ -356,8 +370,9 @@ cheaper choice for every workload; callers can select either method.
 
 Molecule.resolve_with_report and resolve_into_with_report return `(solution, report)`. The report
 is present on Determined and Underdetermined, and None on Contradictory. Solution itself has no
-report field. Returning a separate report preserves one Python Solution variant hierarchy for
-the Rust methods' different payload types. Ordinary resolution does not construct a report.
+report field. The report records unresolved valence candidates and tie-breaks. An admitted
+wildcard alone adds no entry. Returning a separate report preserves one Python Solution variant
+hierarchy for the Rust methods' different payload types. Ordinary resolution does not construct a report.
 resolve_with_report preserves the source and its views; resolve_into_with_report follows
 resolve_into's mutation, invalidation, and rollback selection contract.
 

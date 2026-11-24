@@ -31,6 +31,8 @@ impl BondsResolver {
     }
 
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
+    /// An open localized-bond order permits the same defaults. Aggregate resolution
+    /// also checks localized and dative orders and noncovalent kinds against its wildcard policy.
     pub fn plan_resolve(&self, molecule: &Molecule) -> Edits {
         self.plan_resolve_with_policy(molecule, None).0
     }

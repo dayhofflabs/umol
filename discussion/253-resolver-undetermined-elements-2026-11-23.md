@@ -1,16 +1,17 @@
 # 253 — Undetermined elements in resolution
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-23
 Relates: [operations guide](../docs/development/operations.md),
-[data types guide](../docs/development/data-types.md)
+[data types guide](../docs/development/data-types.md),
+[Python API guide](../docs/development/python-api.md#resolution)
 
 ## Purpose
 
 A molecule can hold an atom whose element is undetermined. SMILES writes one as `*`, and generic
-compound records use it for a group that is left open. Resolution of such a molecule returns
-underdetermined and no molecule, so the atoms whose elements are known get no hydrogen counts,
-lone pairs, or bond defaults either. `*C` is the smallest case.
+compound records use it for a group that is left open. Strict resolution of `*C` returns
+underdetermined. With wildcard admission and the SMILES valence model, resolution returns
+the wildcard atom attached to a completed methyl group.
 
 The [partial resolution discussion](#partial-resolution) defines an opt-in policy for wildcard
 entities. The default still requires a concrete result. The [staged implementation plan](#staged-implementation-plan)
@@ -497,7 +498,7 @@ frames. Parsing, raising, resolver construction and these assertions run before 
 and drops the mutated molecules and returned reports afterward.
 
 The raw samples and estimates are saved locally under the Criterion baseline name `s0a`.
-From the workspace root, S5a can compare the same IDs with this command for each policy.
+From the workspace root, this command compares the original benchmark IDs under Strict.
 The original run used `--save-baseline s0a` in place of `--baseline s0a`.
 
 ```sh
@@ -835,9 +836,9 @@ the four resolution methods. Keep the lenient `C~C>>C.C` reaction case under bot
 and include a reaction with an admissible wildcard. The Python wrappers forward the config
 and use the existing Rust outcomes.
 
-### S5 — Verification and permanent documentation
+### S5 — Verification and permanent documentation (done)
 
-#### S5a — Measure both policies on ordinary molecules
+#### S5a — Measure both policies on ordinary molecules (done)
 
 `umol-graph/benches/resolve.rs`. Additive benchmark coverage (green). [dep: S0a, S3b]
 
@@ -848,7 +849,37 @@ per case and repeat noisy or regressing cases before attributing a cost to the p
 Investigate and resolve a significant common-case regression before accepting this stage.
 The earlier stand-alone scan timing cannot measure the implemented phases.
 
-#### S5b — Publish the contracts
+Measured the resolver at `d5d11bb2a` with the S5a harness. All six wildcard-free
+inputs produced the exact S0a molecules under both policies and both valence models.
+The toolchain, bench profile, models, rollback, batching and timed operation matched S0a.
+Each measurement used a 3 s warm-up, 5 s collection target and 100 samples. Strict
+kept its original IDs. The Admit prefixes are `smiles_roundtrip/resolve/admit/` and
+`valence_readings/typing_resolve_admit/`. Each ID used its model and fixture's saved
+`s0a` samples for comparison.
+
+The table gives extra **µs per molecule** relative to the S0a slope estimate. Positive
+values mean slower. Each policy column shows the first and second full runs. Between
+them, the original S0a executable ran on the same fixtures as a control.
+
+| Case | Counts control | Counts Strict | Counts Admit | Registry control | Registry Strict | Registry Admit |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Ammonium | +0.002 | −0.024 / −0.033 | −0.039 / −0.038 | +0.014 | −0.032 / −0.037 | −0.029 / −0.035 |
+| Branched | −0.057 | +0.042 / +0.001 | −0.074 / −0.061 | −0.002 | −0.034 / +0.046 | +0.012 / +0.053 |
+| 64-carbon chain | +0.157 | +0.678 / +0.387 | +0.345 / +0.292 | −0.574 | +1.259 / +1.485 | +1.007 / +0.880 |
+| Naphthalene | −0.019 | −0.639 / −0.706 | −0.680 / −0.535 | +0.719 | −0.956 / −0.741 | −0.857 / −0.756 |
+| Tetrahedral | −0.019 | −0.048 / −0.061 | −0.066 / −0.053 | −0.048 | −0.088 / +0.025 | −0.034 / −0.065 |
+| Alkene | −0.017 | −0.032 / −0.104 | −0.054 / −0.086 | +0.092 | −0.054 / +0.148 | −0.051 / −0.005 |
+
+A third registry run put the alkene at −0.2% under Strict and −0.4% under Admit.
+The +2.3% result added 0.15 µs in one run. On the 64-carbon chain, the third registry
+run was +1.4% under Strict and +1.8% under Admit. Across the runs, the extra time
+per whole chain was 0.39–0.68 µs (counts Strict), 0.29–0.35 µs (counts Admit),
+1.26–1.59 µs (registry Strict) and 0.88–2.06 µs (registry Admit). The largest
+increase was from 115.05 to 117.12 µs. This cost is accepted for the measured
+wildcard-free cases. The samples and logs are in `scratch/253-resolver-s5a/`
+under `first`, `control`, `repeat` and `third`.
+
+#### S5b — Publish the contracts (done)
 
 `docs/development/{operations,python-api}.md` and the affected rustdoc.
 Documentation (green). [dep: S0f, S3d, S4a, S4b, S5a]
@@ -857,6 +888,11 @@ Update the phase, discharge, isotope projection and aggregate outcome descriptio
 `ResolveConfig` and predicate entries in the Python guide. Cross-check examples against the
 tested `*C`, `C~C` and `Th*` cases. Verify the guide and public rustdoc agree about caller
 queries, the strict default, standalone outcomes, admitted results and rollback.
+
+The operations and Python API guides now describe the implemented contracts. The three
+examples above were verified through Python. Workspace tests and Clippy, the graph
+all-feature tests and Clippy, the binding library and Python tests, and the graph rustdoc
+link check passed.
 
 ### Coverage of the earlier plan
 
