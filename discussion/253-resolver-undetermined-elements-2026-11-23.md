@@ -80,7 +80,8 @@ the list. HMO needs parameters of the element and Clar accepts carbon only.
 
 ### Stereo resolver called alone
 
-`StereoResolver::plan_resolve` with the default failure policies:
+Before S2b, `StereoResolver::plan_resolve` gave the following outcomes with the default
+failure policies. The [stereo scope table](#stereo) gives the implemented frame rules.
 
 | Input | Scope of the tetrahedral kind | Outcome |
 | --- | --- | --- |
@@ -90,9 +91,9 @@ the list. HMO needs parameters of the element and Clar accepts carbon only.
 | `#T+` on `*` with literal hydrogen and lone-pair counts and four neighbors | any element | Underdetermined |
 | The same | allow-list of carbon | Underdetermined |
 
-`StereoPerceiver::derive` tests the scope in `derive_stereo_atom`, `derive_stereo_bond`, and
-`identify_virtual_ligands`. Each requires a literal element first; a non-literal one leaves the
-row unresolved whatever the scope is.
+At that point, `derive_stereo_atom`, `derive_stereo_bond`, and `identify_virtual_ligands`
+each required a literal element before checking the scope. A non-literal element left the
+row unresolved under either scope.
 
 ### Constructors
 
@@ -641,7 +642,7 @@ six-membered systems, retained member assertions, `*#a+`, a bare ring member ver
 controls in the standalone table. Cover insufficient evidence under both `Error` and `Keep`
 and exercise both atom-selection algorithms.
 
-#### S2b — Stereo scope and frame derivation
+#### S2b — Stereo scope and frame derivation (done)
 
 `umol-graph/src/ops/{stereo.rs,validate/stereo.rs}`. Behavior change (green).
 [dep: none]

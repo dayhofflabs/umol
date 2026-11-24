@@ -12,15 +12,15 @@ pub use recognize::StereoPerceptionError;
 use smallvec::SmallVec;
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AsLit, AtomConstraintKey, AtomId, BondConstraintKey, BondId, CisTransStereoForm, Lattice,
-    Molecule, Normalize, NumForm, RingConfig, RingModel, RingSet, StereoAtomForm, StereoAtomId,
-    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereogenicSiteKind, TetrahedralStereoForm,
+    AsLit, AtomConstraintKey, AtomId, BondConstraintKey, BondId, CisTransStereoForm, ElementForm,
+    Lattice, Molecule, Normalize, NumForm, RingConfig, RingModel, RingSet, StereoAtomForm,
+    StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereogenicSiteKind, TetrahedralStereoForm,
 };
 use umol_perm::Permutation;
 use umol_utils::solution::Solution;
 
-use crate::ops::model::StereoModel;
+use crate::ops::model::{ElementScope, StereoModel};
 
 /// An atom or bond topology site for stereo processing.
 ///
@@ -161,6 +161,9 @@ impl StereoPerceiver {
     /// retaining unresolved rows and established findings. Impossible completions
     /// produce entity failures. An undetermined coset does not imply ambiguity.
     /// Without a stored entity, insufficient frame evidence contributes no row.
+    /// Element scope applies to the central atom or both bond endpoints.
+    /// ElementScope::Any admits every element form. An allow-list admits listed literals,
+    /// excludes wildcards and unlisted literals, and leaves sets, complements, and variables unresolved.
     /// Contradictory evidence between realizable sources is a mismatch. Independent
     /// constraint and entity realizability failures retain their separate diagnostics.
     /// Missing stereo bonds on double bonds follow the model's minimum ring size.
@@ -397,8 +400,9 @@ impl StereoPerceiver {
 
     /// Derive a tetrahedral stereo atom in the canonical neighbor frame.
     /// All actual neighbors precede virtual hydrogen, then lone pair.
-    /// Returns None for an excluded site, a hydrogen or lone-pair count other than
-    /// literal zero or one, or a ligand list that does not have four entries.
+    /// The tetrahedral kind must be enabled and the central atom must be nonaromatic
+    /// and in scope. Both hydrogen and lone-pair counts must be literal zero or one,
+    /// and the ligand list must have four entries.
     pub fn derive_stereo_atom(
         &self,
         molecule: &Molecule,
@@ -412,8 +416,10 @@ impl StereoPerceiver {
 
         let kind = StereoKind::Tetrahedral;
         let model = self.model.kind_model(kind)?;
-        if !model.scope.contains(view.element().as_lit()?) {
-            return None;
+        if let ElementScope::AllowList(elements) = &model.scope {
+            if !elements.contains(&view.element().as_lit()?) {
+                return None;
+            }
         }
 
         let mut ligands: Vec<StereoLigand> = view
@@ -442,10 +448,9 @@ impl StereoPerceiver {
 
     /// Derive a cis-trans stereo bond in the canonical endpoint and side frames.
     /// Each side lists every actual neighbor except the opposite endpoint, then
-    /// virtual hydrogen and lone pair. Returns None for an excluded kind or element,
-    /// a hydrogen or lone-pair count other than literal zero or one, or an
-    /// endpoint ligand list that does not have two distinct entries. The endpoint
-    /// frames must not share a ligand.
+    /// virtual hydrogen and lone pair. The kind must be enabled and both endpoints
+    /// must be in scope. Each hydrogen and lone-pair count must be literal zero or one.
+    /// Each side must have two distinct ligands and the sides must be disjoint.
     pub fn derive_stereo_bond(
         &self,
         molecule: &Molecule,
@@ -456,14 +461,12 @@ impl StereoPerceiver {
         let kind = StereoKind::CisTrans;
         let model = self.model.kind_model(kind)?;
         let [first, second] = view.atom_ids();
-        if !model
-            .scope
-            .contains(molecule.atom(first).element().as_lit()?)
-            || !model
-                .scope
-                .contains(molecule.atom(second).element().as_lit()?)
-        {
-            return None;
+        if let ElementScope::AllowList(elements) = &model.scope {
+            for endpoint in [first, second] {
+                if !elements.contains(&molecule.atom(endpoint).element().as_lit()?) {
+                    return None;
+                }
+            }
         }
 
         let first_side = self.bond_side_ligands(molecule, first, second)?;
@@ -503,12 +506,16 @@ impl StereoPerceiver {
         let mut frames = SmallVec::<[(AtomId, Vec<StereoLigand>); 2]>::new();
         for (atom, partner) in sites {
             let view = molecule.atom(atom);
-            match view.element().as_lit() {
-                Some(element) if !model.scope.contains(element) => {
-                    return Solution::Contradictory(());
+            if let ElementScope::AllowList(elements) = &model.scope {
+                match view.element() {
+                    ElementForm::Lit(element) if elements.contains(element) => {}
+                    ElementForm::Lit(_) | ElementForm::Undetermined => {
+                        return Solution::Contradictory(())
+                    }
+                    ElementForm::LitSet(_) | ElementForm::NotSet(_) | ElementForm::Var(_) => {
+                        unresolved_scope = true
+                    }
                 }
-                Some(_) => {}
-                None => unresolved_scope = true,
             }
             let actual = view
                 .neighbors()
@@ -630,17 +637,17 @@ impl StereoPerceiver {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use umol_chem::element::Element;
     use umol_graph_ir::dsl::StereoAtomDsl;
     use umol_graph_ir::ir::{
-        ArithExpr, AtomConstraintForm, AtomForm, BondConstraintForm, BondForm, ElementForm,
-        MoleculeEntries, NumForm, StereoAtomId, StereoBondId, StereogenicSiteKind,
+        ArithExpr, AtomConstraintForm, AtomForm, BondConstraintForm, BondForm, MoleculeEntries,
+        NumForm, StereoAtomId, StereoBondId, StereogenicSiteKind,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
     use super::*;
-    use crate::ops::model::{ElementScope, StereoKindModel};
+    use crate::ops::model::StereoKindModel;
 
     #[rstest]
     #[case::unrestricted(
@@ -837,6 +844,19 @@ mod tests {
     }
 
     #[rstest]
+    #[case::wildcard_endpoint_request(
+        mol_dsl!(r#"{:atoms ["F" "C#h1#n0" "*#h1#n0" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]}"#),
+        StereoDerivation {
+            stereo_bonds: vec![(BondId(1), vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+            ], StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined))],
+            ..Default::default()
+        },
+    )]
     #[case::materializations(
         mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T+" "N#h2" "O#h"
@@ -1061,6 +1081,92 @@ mod tests {
         assert_eq!(
             StereoPerceiver::new(&StereoModel::default()).derive(&molecule, RingConfig::default()),
             Solution::Determined(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::wildcard_any(ElementForm::Undetermined, ElementScope::Any, Solution::Determined(()))]
+    #[case::wildcard_list(ElementForm::Undetermined, ElementScope::AllowList(vec![Element::C]), Solution::Contradictory(()))]
+    #[case::listed(ElementForm::Lit(Element::C), ElementScope::AllowList(vec![Element::C]), Solution::Determined(()))]
+    #[case::unlisted(ElementForm::Lit(Element::N), ElementScope::AllowList(vec![Element::C]), Solution::Contradictory(()))]
+    #[case::set_any(ElementForm::lit_set([Element::C, Element::N]), ElementScope::Any, Solution::Determined(()))]
+    #[case::set_list(ElementForm::lit_set([Element::C, Element::N]), ElementScope::AllowList(vec![Element::C]), Solution::Underdetermined(()))]
+    #[case::complement_any(ElementForm::not(Element::C), ElementScope::Any, Solution::Determined(()))]
+    #[case::complement_list(ElementForm::not(Element::C), ElementScope::AllowList(vec![Element::C]), Solution::Underdetermined(()))]
+    #[case::variable_any(ElementForm::var("e"), ElementScope::Any, Solution::Determined(()))]
+    #[case::variable_list(ElementForm::var("e"), ElementScope::AllowList(vec![Element::C]), Solution::Underdetermined(()))]
+    fn test_stereo_perceiver_derive_scope(
+        #[case] element: ElementForm,
+        #[case] scope: ElementScope,
+        #[case] scope_outcome: Solution<(), ()>,
+    ) {
+        let mut requested = mol_dsl!(
+            r#"{:atoms ["*#h0#n0#T+" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+        );
+        let mut stored = mol_dsl!(
+            r#"{:atoms ["*#h1#n0" "C#h1#n0" "F" "Cl"]
+            :bonds [[0 1 "2"] [0 2 "1"] [1 3 "1"]]
+            :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]}"#
+        );
+        requested.atom_mut(AtomId(0)).attributes_mut().element = element.clone();
+        stored.atom_mut(AtomId(0)).attributes_mut().element = element;
+        let mut model = StereoModel::default();
+        for kind in [StereoKind::Tetrahedral, StereoKind::CisTrans] {
+            model.kind_models[kind as usize] = Some(StereoKindModel {
+                scope: scope.clone(),
+            });
+        }
+        let bond = stored.stereo_bond(StereoBondId(0));
+        let retained = StereoDerivation {
+            stereo_bonds: vec![(
+                bond.site_id(),
+                bond.ligand_ids().to_vec(),
+                bond.attributes().clone(),
+            )],
+            ..Default::default()
+        };
+        let (expected_request, expected_stored) = match scope_outcome {
+            Solution::Determined(()) => (
+                Solution::Determined(StereoDerivation {
+                    stereo_atoms: vec![(
+                        AtomId(0),
+                        (1..=4)
+                            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+                            .collect(),
+                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+                    )],
+                    ..Default::default()
+                }),
+                Solution::Determined(retained),
+            ),
+            Solution::Underdetermined(()) => (
+                Solution::Underdetermined(StereoDerivation::default()),
+                Solution::Underdetermined(retained),
+            ),
+            Solution::Contradictory(()) => (
+                Solution::Determined(StereoDerivation {
+                    inconsistencies: vec![StereoInconsistency::TetrahedralStereoFailure {
+                        atom: AtomId(0),
+                    }],
+                    ..Default::default()
+                }),
+                Solution::Determined(StereoDerivation {
+                    inconsistencies: vec![StereoInconsistency::StereoBondFailure {
+                        stereo_bond: StereoBondId(0),
+                    }],
+                    ..Default::default()
+                }),
+            ),
+        };
+        let perceiver = StereoPerceiver::new(&model);
+        assert_eq!(
+            perceiver.derive(&requested, RingConfig::default()),
+            expected_request
+        );
+        assert_eq!(
+            perceiver.derive(&stored, RingConfig::default()),
+            expected_stored
         );
     }
 
@@ -1371,11 +1477,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::symbolic_count(ElementForm::Lit(Element::C), NumForm::var("hydrogens"))]
-    #[case::unknown_scope(ElementForm::Undetermined, NumForm::Lit(0))]
+    #[case::symbolic_count(ElementForm::Lit(Element::C), NumForm::var("hydrogens"), Solution::Underdetermined(()))]
+    #[case::wildcard(ElementForm::Undetermined, NumForm::Lit(0), Solution::Determined(()))]
     fn test_stereo_perceiver_derive_partial(
         #[case] element: ElementForm,
         #[case] hydrogens: NumForm,
+        #[case] outcome: Solution<(), StereoContradiction>,
         #[values(false, true)] negative_assertion: bool,
     ) {
         let mut entries = MoleculeEntries {
@@ -1420,7 +1527,7 @@ mod tests {
                     ..Default::default()
                 })
             } else {
-                Solution::Underdetermined(StereoDerivation {
+                outcome.map(|()| StereoDerivation {
                     stereo_atoms: entries.stereo_atoms,
                     ..Default::default()
                 })
@@ -1686,7 +1793,29 @@ mod tests {
         );
     }
 
+    #[fixture]
+    fn carbon_stereo_model() -> StereoModel {
+        let mut model = StereoModel::default();
+        for kind in [StereoKind::Tetrahedral, StereoKind::CisTrans] {
+            model.kind_models[kind as usize] = Some(StereoKindModel {
+                scope: ElementScope::AllowList(vec![Element::C]),
+            });
+        }
+        model
+    }
+
     #[rstest]
+    #[case::wildcard_ligand(
+        carbon_stereo_model(),
+        mol_dsl!(r#"{:atoms ["*" "C#h0#n0" "F" "Cl" "Br"]
+            :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]}"#),
+        Some((vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ], StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)))),
+    )]
     #[case::tetrahedral(
         StereoModel::default(),
         mol_dsl_concrete!(r#"{
@@ -1716,14 +1845,7 @@ mod tests {
         None,
     )]
     #[case::element_scope(
-        {
-            let mut model = StereoModel::default();
-            model.kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
-                scope: ElementScope::AllowList(vec![Element::C]),
-
-            });
-            model
-        },
+        carbon_stereo_model(),
         mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "S#h#T+" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
@@ -1908,18 +2030,17 @@ mod tests {
         None,
     )]
     #[case::element_scope(
-        {
-            let mut model = StereoModel::default();
-            model.kind_models[StereoKind::CisTrans as usize] = Some(StereoKindModel {
-                scope: ElementScope::AllowList(vec![Element::C]),
-
-            });
-            model
-        },
+        carbon_stereo_model(),
         mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "N#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]
         }"#),
+        None,
+    )]
+    #[case::wildcard_endpoint(
+        carbon_stereo_model(),
+        mol_dsl!(r#"{:atoms ["F" "C#h1#n0" "*#h1#n0" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]}"#),
         None,
     )]
     #[case::ligand_arity(
