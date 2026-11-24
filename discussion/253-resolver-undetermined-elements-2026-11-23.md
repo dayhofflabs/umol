@@ -534,7 +534,7 @@ All eight predicates inspect the stored principal field in constant time. The at
 tests include an empty element complement and an empty conjunction over bond order. Both
 return false for `is_wildcard()` even though normalization produces `Undetermined` in each case.
 
-#### S0c — Molecule wildcard query
+#### S0c — Molecule wildcard query (done)
 
 `umol-graph-ir/src/ir/molecule.rs`. Additive (green). [dep: S0b]
 

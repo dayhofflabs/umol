@@ -208,6 +208,53 @@ fn test_molecule_is_concrete(#[case] molecule: Molecule, #[case] expected: bool)
 }
 
 #[rstest]
+#[case::empty(Molecule::new(), false)]
+#[case::all_principals_specified(Molecule::from_entries(equiv_molecule_entries()), false)]
+#[case::open_hydrogens(mol_dsl!(r#"{:atoms ["C#h*"]}"#), false)]
+#[case::element_set(mol_dsl!(r#"{:atoms ["{C,N}"]}"#), false)]
+#[case::atom(mol_dsl!(r#"{:atoms ["C" "*"] :bonds [[0 1 "1"]]}"#), true)]
+#[case::isotope_labeled_atom(mol_dsl!(r#"{:atoms ["*#i1"]}"#), true)]
+#[case::bond(mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "*"]]}"#), true)]
+#[case::dative_bond(
+    mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+    true
+)]
+#[case::aromatic_system(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}"#
+    ),
+    true
+)]
+#[case::multicenter_bond(
+    mol_dsl!(r#"{:atoms ["B" "H" "B"] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#),
+    true
+)]
+#[case::noncovalent_bond(
+    mol_dsl!(r#"{:atoms ["O" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "*"}]}"#),
+    true
+)]
+#[case::stereo_atom(
+    mol_dsl!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#
+    ),
+    true
+)]
+#[case::stereo_bond(
+    mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "*"}]}"#
+    ),
+    true
+)]
+fn test_molecule_has_wildcards(#[case] molecule: Molecule, #[case] expected: bool) {
+    assert_eq!(molecule.has_wildcards(), expected);
+}
+
+#[rstest]
 #[case::hub(AtomId(0), vec![(AtomId(1), BondId(0)), (AtomId(2), BondId(1))])]
 #[case::leaf_o(AtomId(1), vec![(AtomId(0), BondId(0))])]
 #[case::leaf_n(AtomId(2), vec![(AtomId(0), BondId(1))])]
