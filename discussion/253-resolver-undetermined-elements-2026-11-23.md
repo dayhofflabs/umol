@@ -560,7 +560,7 @@ renderings, including the distinction between an omitted configuration and `*` i
 
 ### S1 — Isotope and valence resolution
 
-#### S1a — Isotope completion and projection
+#### S1a — Isotope completion and projection (done)
 
 `umol-graph/src/ops/{resolve/isotope.rs,resolve.rs}` and `umol-graph/tests/property/isotope.rs`.
 Breaking (red→green within the subitem). [dep: S0b, S0d]

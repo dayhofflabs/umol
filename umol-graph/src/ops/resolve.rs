@@ -229,7 +229,7 @@ impl<'a> Resolver<'a> {
 
     pub fn with_config(model: &'a ChemistryModel, config: ResolveConfig) -> Self {
         Self {
-            isotope: IsotopeResolver::new(config.isotope),
+            isotope: IsotopeResolver::with_config(config.isotope, WildcardPolicy::Strict),
             valence: ValenceResolver::new(&model.valence),
             aromaticity: AromaticityResolver::with_config(&model.aromaticity, config.aromaticity),
             stereo: StereoResolver::with_config(&model.stereo, config.stereo),
