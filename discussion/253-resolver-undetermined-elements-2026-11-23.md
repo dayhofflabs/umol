@@ -596,7 +596,7 @@ candidates for the three known atoms and none for `*`. A lone `*` gives determin
 completions. Element sets and variables still block admission. Pair an open order needed to
 complete a known atom with a case whose known fields and assertions need no choice of order.
 
-#### S1c — Counts admission
+#### S1c — Counts admission (done)
 
 `umol-graph/src/ops/valence/counts.rs`. Additive (green). [dep: S0b, S0d]
 
