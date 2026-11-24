@@ -153,7 +153,7 @@ underdetermined under every policy.
 | --- | --- |
 | ValenceResolver::admit | Checks #v/#d/#t against complete derived readings, then admits completions from the registry or counts table without selecting one. Candidates respect supplied fields, constraints, and unresolved isotopes. Nonliteral elements leave admission underdetermined. Resolver::plan_constitution applies selections and discharges entailed owned assertions, including on already concrete atoms. |
 | AromaticityResolver::plan_resolve | Creates missing systems from aromatic evidence without valence admission; insufficient contributions yield an empty underdetermined plan. Preserves stored systems, atom fields, and localized bonds. Discharges entailed atom/bond aromatic assertions beside new and retained systems; other compatible assertions remain. |
-| StereoResolver::plan_resolve | Creates requested entities with open cosets, identifies unique virtual kinds, and discharges entailed #T/#C. Preserves retained frames, configurations, and attributes. Requests filtered by the creation cutoff remain under every policy. Insufficient evidence yields an empty plan after established findings are checked; no configuration or stereogenicity is selected. |
+| StereoResolver::plan_resolve | Plans requested entities with open cosets, identifies unique virtual kinds, and discharges entailed #T/#C. Strict requires ground configurations. Admit permits an undetermined kind or coset. A configuration outside the policy yields Underdetermined with the established edits. Preserves retained frames, configurations, and attributes. Requests filtered by the creation cutoff remain under every policy. Insufficient frame evidence yields an empty underdetermined plan after established findings are checked. |
 | IsotopeResolver::plan_resolve | Strict preserves isotopes; Natural changes only Undetermined to Natural. Supplied masses, sets, and variables remain. Determined requires ground isotopes, not other fields. Underdetermined retains proposed defaults for aggregate resolution; standalone application waits for a determined plan. |
 | BondsResolver::plan_resolve | Defaults unknown localized-bond charge to zero and wholly unknown spin to closed-shell singlet. Completes one missing spin component from a literal counterpart using the high-spin relation; other forms remain. Orders, topology, and constraints are preserved. |
 | MulticenterBondsResolver::plan_resolve | First checks #m against complete derived readings; uncertainty alone yields an empty plan. Then defaults charge/spin as BondsResolver does, preserving contributions and participants. |
@@ -164,8 +164,8 @@ in a transformer is distinct from resolver discharge.
 ### Resolver::resolve
 
 Runs isotope completion → joint valence/aromatic selection → stereo → localized/multicenter bond
-defaults. Unresolved isotopes allow later phases to run. Determined requires Molecule::is_concrete,
-including ground stereo configurations; resolution does not choose an open coset. Consuming
+defaults. Each phase accounts for its fields. Strict requires all inherent fields to be ground.
+An unresolved isotope or stereo configuration allows later independent phases to run. Consuming
 resolution returns a molecule only on Determined; conformance validation remains explicit.
 
 ## Projection

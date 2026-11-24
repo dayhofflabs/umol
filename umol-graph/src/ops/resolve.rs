@@ -1,9 +1,9 @@
 //! Composite resolver: chains the per-entity resolvers (isotope, valence,
 //! aromaticity, stereo, bonds, multicenter bonds) on a single `Molecule`.
 //!
-//! A determined result satisfies [`Molecule::is_concrete`]. Consuming operations
-//! use an editor; borrowed operations use a transaction and retain changes only
-//! on a determined result.
+//! Each phase determines the outcome for its fields under the configured policies.
+//! Consuming calls return a molecule and borrowed calls commit their transaction only
+//! when every phase is determined.
 
 pub mod aromaticity;
 pub mod bonds;
@@ -13,7 +13,7 @@ pub mod stereo;
 pub mod valence;
 
 use std::any::Any;
-use std::collections::BTreeSet;
+use std::mem;
 
 use aromaticity::AromaticityProjectError;
 pub use aromaticity::{
@@ -30,7 +30,7 @@ pub use stereo::{StereoFailurePolicy, StereoResolveConfig, StereoResolver};
 use thiserror::Error;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomConstraintKey, AtomHandle, AtomId, Edits, Entity, Lattice, Molecule,
-    MoleculeApplyError, Normalize, NumForm, RollbackMethod, Transaction, UnpairedElectronsForm,
+    MoleculeApplyError, NumForm, RollbackMethod, Transaction, UnpairedElectronsForm,
 };
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
@@ -51,6 +51,12 @@ pub enum WildcardPolicy {
     Strict,
     /// Allow wildcard values to remain open when resolution can complete its work without choosing them.
     Admit,
+}
+
+impl WildcardPolicy {
+    fn admits(self, ground: bool, wildcard: bool) -> bool {
+        ground || (self == Self::Admit && wildcard)
+    }
 }
 
 /// Operational policies for resolution; unspecified isotope composition remains unresolved by default.
@@ -209,9 +215,8 @@ impl UmolError for ProjectContradiction {
     }
 }
 
-/// Resolution left the molecule underdetermined (no contradiction, but not
-/// concrete). Surfaced as an error only at boundaries that require a
-/// determined result.
+/// The resolution phases could not determine a result under the configured policies.
+/// Boundaries requiring a determined molecule surface this outcome as an error.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Error)]
 #[error("resolution underdetermined")]
 pub struct ResolveUnderdetermined;
@@ -232,7 +237,11 @@ impl<'a> Resolver<'a> {
             isotope: IsotopeResolver::with_config(config.isotope, WildcardPolicy::Strict),
             valence: ValenceResolver::new(&model.valence),
             aromaticity: AromaticityResolver::with_config(&model.aromaticity, config.aromaticity),
-            stereo: StereoResolver::with_config(&model.stereo, config.stereo),
+            stereo: StereoResolver::with_config(
+                &model.stereo,
+                config.stereo,
+                WildcardPolicy::Strict,
+            ),
             bonds: BondsResolver::new(),
             multicenter_bonds: MulticenterBondsResolver::new(),
             tie_break: model.valence.tie_break,
@@ -240,10 +249,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Resolves isotope composition before valence and aromaticity, then stereo and bonds.
-    ///
-    /// An unresolved isotope does not stop later phases. Only a completely determined
-    /// result returns the molecule. Every other outcome drops the consumed input.
+    /// Resolves a consumed molecule and returns it when all phases are determined
+    /// under their policies. An unresolved isotope allows later phases to run.
     /// Uses one editor without copying the molecule or recording undo.
     ///
     /// # Errors
@@ -253,114 +260,11 @@ impl<'a> Resolver<'a> {
         &self,
         molecule: Molecule,
     ) -> Result<Solution<Molecule, ResolveContradiction, ()>, ResolveError> {
-        let isotope_edits = match self.isotope.plan_resolve(&molecule) {
-            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
-            Solution::Contradictory(contradiction) => match contradiction {},
-        };
-        let mut editor = molecule.edit();
-        editor
-            .apply(isotope_edits)
-            .expect("isotope resolve plan applies to its input");
-        let isotopic = editor
-            .probe()
-            .expect("resolver phase plans preserve molecule integrity");
-
-        let state = match self
-            .valence
-            .admit(isotopic)
-            .map_err(ResolveError::Valence)?
-        {
-            Solution::Determined(state) => state,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(()));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::from(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let outcome = self
-            .aromaticity
-            .select(isotopic, state, self.tie_break)
-            .map_err(ResolveError::Aromaticity)?;
-        let mut state = match outcome {
-            Solution::Determined(state) => state,
-            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::from(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-
-        self.select_atom_completions(&mut state, false);
-
-        if state
-            .completions
-            .iter()
-            .any(|(_, candidates)| candidates.len() > 1)
-        {
-            return Ok(Solution::Underdetermined(()));
-        }
-
-        let edits = self.plan_constitution(isotopic, &state);
-        editor
-            .apply(edits)
-            .expect("constitution plan applies to its input");
-        let working = editor
-            .probe()
-            .expect("resolver phase plans preserve molecule integrity");
-
-        let outcome = self.stereo.plan_resolve(working);
-        let edits = match outcome {
-            Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(()));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::Stereo(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        // Plan stereo and bond defaults from the same post-constitution molecule.
-        let bond_edits = self.bonds.plan_resolve(working);
-        let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
-        editor
-            .apply(edits)
-            .expect("stereo resolve plan applies to its input");
-        editor
-            .apply(bond_edits)
-            .expect("bond resolve plan applies to its input");
-
-        let edits = match multicenter_outcome {
-            Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(()));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        editor
-            .apply(edits)
-            .expect("multicenter-bond resolve plan applies to its input");
-
-        let molecule = editor
-            .finish()
-            .expect("resolver phase plans preserve molecule integrity");
-        if molecule.is_concrete() {
-            Ok(Solution::Determined(molecule))
-        } else {
-            Ok(Solution::Underdetermined(()))
-        }
+        self.resolve_owned(molecule, None)
     }
 
-    /// Resolves a consumed molecule and reports unresolved candidates and tie-break uses.
-    ///
-    /// An unresolved isotope does not stop later phases. Only a completely determined
-    /// result returns the molecule. Every other outcome drops the consumed input.
-    /// Underdetermined returns the report alone. Uses one editor without copying
-    /// the molecule or recording undo.
+    /// Resolves a consumed molecule under the same phase policies as [Self::resolve].
+    /// Determined carries the molecule and report. Underdetermined carries the report alone.
     ///
     /// # Errors
     ///
@@ -372,125 +276,16 @@ impl<'a> Resolver<'a> {
         Solution<(Molecule, ResolveReport), ResolveContradiction, ResolveReport>,
         ResolveError,
     > {
-        let isotope_edits = match self.isotope.plan_resolve(&molecule) {
-            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
-            Solution::Contradictory(contradiction) => match contradiction {},
-        };
-        let mut editor = molecule.edit();
-        editor
-            .apply(isotope_edits)
-            .expect("isotope resolve plan applies to its input");
-        let isotopic = editor
-            .probe()
-            .expect("resolver phase plans preserve molecule integrity");
-
-        let state = match self
-            .valence
-            .admit(isotopic)
-            .map_err(ResolveError::Valence)?
-        {
-            Solution::Determined(state) => state,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(ResolveReport::default()));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::from(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let outcome = self
-            .aromaticity
-            .select_with_report(isotopic, state, self.tie_break)
-            .map_err(ResolveError::Aromaticity)?;
-        let mut state = match outcome {
-            Solution::Determined(state) => state,
-            Solution::Underdetermined(state) => {
-                return Ok(Solution::Underdetermined(state.to_report()));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::from(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-
-        self.select_atom_completions(&mut state, true);
-
-        if state
-            .completions
-            .iter()
-            .any(|(_, candidates)| candidates.len() > 1)
-        {
-            return Ok(Solution::Underdetermined(state.to_report()));
-        }
-
-        let edits = self.plan_constitution(isotopic, &state);
-        editor
-            .apply(edits)
-            .expect("constitution plan applies to its input");
-        let working = editor
-            .probe()
-            .expect("resolver phase plans preserve molecule integrity");
-
-        let outcome = self.stereo.plan_resolve(working);
-        let edits = match outcome {
-            Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(ResolveReport {
-                    unresolved: AtomCompletions::new(),
-                    tie_breaks: state.tie_breaks,
-                }));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::Stereo(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        // Plan stereo and bond defaults from the same post-constitution molecule.
-        let bond_edits = self.bonds.plan_resolve(working);
-        let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
-        editor
-            .apply(edits)
-            .expect("stereo resolve plan applies to its input");
-        editor
-            .apply(bond_edits)
-            .expect("bond resolve plan applies to its input");
-
-        let edits = match multicenter_outcome {
-            Solution::Determined(edits) => edits,
-            Solution::Underdetermined(_) => {
-                return Ok(Solution::Underdetermined(ResolveReport {
-                    unresolved: AtomCompletions::new(),
-                    tie_breaks: state.tie_breaks,
-                }));
-            }
-            Solution::Contradictory(contradiction) => {
-                let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        editor
-            .apply(edits)
-            .expect("multicenter-bond resolve plan applies to its input");
-
-        let molecule = editor
-            .finish()
-            .expect("resolver phase plans preserve molecule integrity");
-        let report = ResolveReport {
-            unresolved: AtomCompletions::new(),
-            tie_breaks: state.tie_breaks,
-        };
-        if molecule.is_concrete() {
-            Ok(Solution::Determined((molecule, report)))
-        } else {
-            Ok(Solution::Underdetermined(report))
-        }
+        let mut report = ResolveReport::default();
+        Ok(match self.resolve_owned(molecule, Some(&mut report))? {
+            Solution::Determined(molecule) => Solution::Determined((molecule, report)),
+            Solution::Underdetermined(()) => Solution::Underdetermined(report),
+            Solution::Contradictory(cause) => Solution::Contradictory(cause),
+        })
     }
 
-    /// Resolves isotope composition before valence and aromaticity, then stereo and bonds.
-    ///
-    /// An unresolved isotope does not stop later phases. Only a completely determined
-    /// result retains the changes; every other outcome preserves the caller's molecule.
-    /// All phases share one transaction using the selected rollback method.
+    /// Resolves in one transaction, committing when every phase is determined under
+    /// its policy. All other outcomes restore the receiver with the selected rollback method.
     ///
     /// # Errors
     ///
@@ -500,121 +295,12 @@ impl<'a> Resolver<'a> {
         molecule: &mut Molecule,
         rollback_method: RollbackMethod,
     ) -> Result<Solution<(), ResolveContradiction>, ResolveError> {
-        let isotope_edits = match self.isotope.plan_resolve(molecule) {
-            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
-            Solution::Contradictory(contradiction) => match contradiction {},
-        };
-        Transaction::run::<_, MoleculeApplyError>(molecule, rollback_method, |mut transaction| {
-            Ok((|| {
-                transaction
-                    .apply(isotope_edits)
-                    .expect("isotope resolve plan applies to its input");
-                let isotopic = transaction
-                    .probe()
-                    .expect("resolver phase plans preserve molecule integrity");
-
-                let state = match self
-                    .valence
-                    .admit(isotopic)
-                    .map_err(ResolveError::Valence)?
-                {
-                    Solution::Determined(state) => state,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(()));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::from(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-                let outcome = self
-                    .aromaticity
-                    .select(isotopic, state, self.tie_break)
-                    .map_err(ResolveError::Aromaticity)?;
-                let mut state = match outcome {
-                    Solution::Determined(state) => state,
-                    Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::from(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-
-                self.select_atom_completions(&mut state, false);
-
-                if state
-                    .completions
-                    .iter()
-                    .any(|(_, candidates)| candidates.len() > 1)
-                {
-                    return Ok(Solution::Underdetermined(()));
-                }
-
-                let edits = self.plan_constitution(isotopic, &state);
-                transaction
-                    .apply(edits)
-                    .expect("constitution plan applies to its input");
-                let working = transaction
-                    .probe()
-                    .expect("resolver phase plans preserve molecule integrity");
-
-                let outcome = self.stereo.plan_resolve(working);
-                let edits = match outcome {
-                    Solution::Determined(edits) => edits,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(()));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::Stereo(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-                // Plan stereo and bond defaults from the same post-constitution molecule.
-                let bond_edits = self.bonds.plan_resolve(working);
-                let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
-                transaction
-                    .apply(edits)
-                    .expect("stereo resolve plan applies to its input");
-                transaction
-                    .apply(bond_edits)
-                    .expect("bond resolve plan applies to its input");
-
-                let edits = match multicenter_outcome {
-                    Solution::Determined(edits) => edits,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(()));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-                transaction
-                    .apply(edits)
-                    .expect("multicenter-bond resolve plan applies to its input");
-
-                if transaction
-                    .probe()
-                    .expect("resolver phase plans preserve molecule integrity")
-                    .is_concrete()
-                {
-                    transaction
-                        .commit()
-                        .expect("resolver phase plans preserve molecule integrity");
-                    Ok(Solution::Determined(()))
-                } else {
-                    Ok(Solution::Underdetermined(()))
-                }
-            })())
-        })
-        .expect("resolver applies and commits only its own valid plans")
+        self.resolve_borrowed(molecule, rollback_method, None)
     }
 
-    /// Resolves a borrowed molecule and reports unresolved candidates and tie-break uses.
-    ///
-    /// An unresolved isotope does not stop later phases. Only a completely determined
-    /// result retains the changes; every other outcome preserves the caller's molecule.
-    /// All phases share one transaction using the selected rollback method.
+    /// Resolves in one transaction under the same policies as [Self::resolve_into],
+    /// reporting unresolved valence candidates and tie-breaks even on underdetermination.
+    /// Only a determined result commits changes.
     ///
     /// # Errors
     ///
@@ -624,129 +310,167 @@ impl<'a> Resolver<'a> {
         molecule: &mut Molecule,
         rollback_method: RollbackMethod,
     ) -> Result<Solution<ResolveReport, ResolveContradiction>, ResolveError> {
-        let isotope_edits = match self.isotope.plan_resolve(molecule) {
-            Solution::Determined(edits) | Solution::Underdetermined(edits) => edits,
-            Solution::Contradictory(contradiction) => match contradiction {},
+        let mut report = ResolveReport::default();
+        Ok(self
+            .resolve_borrowed(molecule, rollback_method, Some(&mut report))?
+            .map(|()| report))
+    }
+
+    fn resolve_owned(
+        &self,
+        molecule: Molecule,
+        report: Option<&mut ResolveReport>,
+    ) -> Result<Solution<Molecule, ResolveContradiction, ()>, ResolveError> {
+        let (edits, isotope_determined) = self.plan_isotopes(&molecule);
+        let mut editor = molecule.edit();
+        editor
+            .apply(edits)
+            .expect("isotope plan applies to its input");
+        let isotopic = editor.probe().expect("isotope plan preserves integrity");
+        let state = match self.select_constitution(isotopic, report)? {
+            Solution::Determined(state) => state,
+            Solution::Underdetermined(()) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(cause) => return Ok(Solution::Contradictory(cause)),
         };
+        let (edits, constitution_determined) =
+            self.plan_constitution(isotopic, &state, WildcardPolicy::Strict);
+        editor
+            .apply(edits)
+            .expect("constitution plan applies to its input");
+        let working = editor
+            .probe()
+            .expect("constitution plan preserves integrity");
+        match self.plan_stereo_and_bonds(working, isotope_determined && constitution_determined) {
+            Solution::Determined(plans) => {
+                for edits in plans {
+                    editor
+                        .apply(edits)
+                        .expect("resolver plan applies to its input");
+                }
+                let molecule = editor.finish().expect("resolver plans preserve integrity");
+                Ok(Solution::Determined(molecule))
+            }
+            Solution::Underdetermined(()) => Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(cause) => Ok(Solution::Contradictory(cause)),
+        }
+    }
+
+    fn resolve_borrowed(
+        &self,
+        molecule: &mut Molecule,
+        rollback_method: RollbackMethod,
+        report: Option<&mut ResolveReport>,
+    ) -> Result<Solution<(), ResolveContradiction>, ResolveError> {
+        let (edits, isotope_determined) = self.plan_isotopes(molecule);
         Transaction::run::<_, MoleculeApplyError>(molecule, rollback_method, |mut transaction| {
-            Ok((|| {
-                transaction
-                    .apply(isotope_edits)
-                    .expect("isotope resolve plan applies to its input");
-                let isotopic = transaction
-                    .probe()
-                    .expect("resolver phase plans preserve molecule integrity");
-
-                let state = match self
-                    .valence
-                    .admit(isotopic)
-                    .map_err(ResolveError::Valence)?
-                {
-                    Solution::Determined(state) => state,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(ResolveReport::default()));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::from(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-                let outcome = self
-                    .aromaticity
-                    .select_with_report(isotopic, state, self.tie_break)
-                    .map_err(ResolveError::Aromaticity)?;
-                let mut state = match outcome {
-                    Solution::Determined(state) => state,
-                    Solution::Underdetermined(state) => {
-                        let report = state.to_report();
-                        return Ok(Solution::Underdetermined(report));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::from(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-
-                self.select_atom_completions(&mut state, true);
-
-                if state
-                    .completions
-                    .iter()
-                    .any(|(_, candidates)| candidates.len() > 1)
-                {
-                    return Ok(Solution::Underdetermined(state.to_report()));
+            transaction.apply(edits)?;
+            let isotopic = transaction.probe()?;
+            let state = match self.select_constitution(isotopic, report) {
+                Ok(Solution::Determined(state)) => state,
+                Ok(Solution::Underdetermined(())) => return Ok(Ok(Solution::Underdetermined(()))),
+                Ok(Solution::Contradictory(cause)) => {
+                    return Ok(Ok(Solution::Contradictory(cause)))
                 }
-
-                let edits = self.plan_constitution(isotopic, &state);
-                transaction
-                    .apply(edits)
-                    .expect("constitution plan applies to its input");
-                let working = transaction
-                    .probe()
-                    .expect("resolver phase plans preserve molecule integrity");
-
-                let outcome = self.stereo.plan_resolve(working);
-                let edits = match outcome {
-                    Solution::Determined(edits) => edits,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(ResolveReport {
-                            unresolved: AtomCompletions::new(),
-                            tie_breaks: state.tie_breaks,
-                        }));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::Stereo(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-                // Plan stereo and bond defaults from the same post-constitution molecule.
-                let bond_edits = self.bonds.plan_resolve(working);
-                let multicenter_outcome = self.multicenter_bonds.plan_resolve(working);
-                transaction
-                    .apply(edits)
-                    .expect("stereo resolve plan applies to its input");
-                transaction
-                    .apply(bond_edits)
-                    .expect("bond resolve plan applies to its input");
-
-                let edits = match multicenter_outcome {
-                    Solution::Determined(edits) => edits,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(ResolveReport {
-                            unresolved: AtomCompletions::new(),
-                            tie_breaks: state.tie_breaks,
-                        }));
-                    }
-                    Solution::Contradictory(contradiction) => {
-                        let contradiction = ResolveContradiction::MulticenterBonds(contradiction);
-                        return Ok(Solution::Contradictory(contradiction));
-                    }
-                };
-                transaction
-                    .apply(edits)
-                    .expect("multicenter-bond resolve plan applies to its input");
-
-                if transaction
-                    .probe()
-                    .expect("resolver phase plans preserve molecule integrity")
-                    .is_concrete()
+                Err(error) => return Ok(Err(error)),
+            };
+            let (edits, constitution_determined) =
+                self.plan_constitution(isotopic, &state, WildcardPolicy::Strict);
+            transaction.apply(edits)?;
+            let working = transaction.probe()?;
+            Ok(Ok(
+                match self
+                    .plan_stereo_and_bonds(working, isotope_determined && constitution_determined)
                 {
-                    transaction
-                        .commit()
-                        .expect("resolver phase plans preserve molecule integrity");
-                    Ok(Solution::Determined(ResolveReport {
-                        unresolved: AtomCompletions::new(),
-                        tie_breaks: state.tie_breaks,
-                    }))
-                } else {
-                    Ok(Solution::Underdetermined(ResolveReport {
-                        unresolved: AtomCompletions::new(),
-                        tie_breaks: state.tie_breaks,
-                    }))
-                }
-            })())
+                    Solution::Determined(plans) => {
+                        for edits in plans {
+                            transaction.apply(edits)?;
+                        }
+                        transaction.commit()?;
+                        Solution::Determined(())
+                    }
+                    Solution::Underdetermined(()) => Solution::Underdetermined(()),
+                    Solution::Contradictory(cause) => Solution::Contradictory(cause),
+                },
+            ))
         })
-        .expect("resolver applies and commits only its own valid plans")
+        .expect("resolver plans apply to their input and preserve integrity")
+    }
+
+    fn plan_isotopes(&self, molecule: &Molecule) -> (Edits, bool) {
+        match self.isotope.plan_resolve(molecule) {
+            Solution::Determined(edits) => (edits, true),
+            Solution::Underdetermined(edits) => (edits, false),
+            Solution::Contradictory(cause) => match cause {},
+        }
+    }
+
+    fn select_constitution(
+        &self,
+        molecule: &Molecule,
+        report: Option<&mut ResolveReport>,
+    ) -> Result<Solution<ResolveState, ResolveContradiction, ()>, ResolveError> {
+        let state = match self.valence.admit(molecule)? {
+            Solution::Determined(state) => state,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(cause) => return Ok(Solution::Contradictory(cause.into())),
+        };
+        let selection = if report.is_some() {
+            self.aromaticity
+                .select_with_report(molecule, state, self.tie_break)?
+        } else {
+            self.aromaticity.select(molecule, state, self.tie_break)?
+        };
+        let mut state = match selection {
+            Solution::Determined(state) => state,
+            Solution::Underdetermined(state) => {
+                if let Some(report) = report {
+                    *report = state.to_report();
+                }
+                return Ok(Solution::Underdetermined(()));
+            }
+            Solution::Contradictory(cause) => return Ok(Solution::Contradictory(cause.into())),
+        };
+        self.select_atom_completions(&mut state, report.is_some());
+        if state
+            .completions
+            .iter()
+            .any(|(_, candidates)| candidates.len() > 1)
+        {
+            if let Some(report) = report {
+                *report = state.to_report();
+            }
+            return Ok(Solution::Underdetermined(()));
+        }
+        if let Some(report) = report {
+            report.tie_breaks = mem::take(&mut state.tie_breaks);
+        }
+        Ok(Solution::Determined(state))
+    }
+
+    fn plan_stereo_and_bonds(
+        &self,
+        molecule: &Molecule,
+        earlier_phases_determined: bool,
+    ) -> Solution<[Edits; 3], ResolveContradiction, ()> {
+        let stereo = match self.stereo.plan_resolve(molecule) {
+            Solution::Determined(edits) => Some(edits),
+            Solution::Underdetermined(_) => None,
+            Solution::Contradictory(cause) => return Solution::Contradictory(cause.into()),
+        };
+        let policy = Some(WildcardPolicy::Strict);
+        let (bonds, bonds_determined) = self.bonds.plan_resolve_with_policy(molecule, policy);
+        let multicenter = self
+            .multicenter_bonds
+            .plan_resolve_with_policy(molecule, policy);
+        match (stereo, multicenter) {
+            (_, Solution::Contradictory(cause)) => Solution::Contradictory(cause.into()),
+            (Some(stereo), Solution::Determined((multicenter, true)))
+                if earlier_phases_determined && bonds_determined =>
+            {
+                Solution::Determined([stereo, bonds, multicenter])
+            }
+            _ => Solution::Underdetermined(()),
+        }
     }
 
     /// Projects selected stages within graph IR, consuming the molecule.
@@ -996,7 +720,12 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn plan_constitution(&self, molecule: &Molecule, state: &ResolveState) -> Edits {
+    fn plan_constitution(
+        &self,
+        molecule: &Molecule,
+        state: &ResolveState,
+        wildcards: WildcardPolicy,
+    ) -> (Edits, bool) {
         let mut edits = self
             .aromaticity
             .plan_discharge(molecule, &state.aromatic_systems);
@@ -1006,62 +735,46 @@ impl<'a> Resolver<'a> {
         let mut implicit_hydrogens = Vec::new();
         let mut lone_pairs = Vec::new();
         let mut unpaired_electrons = Vec::new();
-        for (atom, disjuncts) in state.completions.iter() {
-            let current = molecule.atom(atom).attributes();
+        let mut determined = true;
+        let mut completions = state.completions.iter().peekable();
+        for atom in molecule.atoms().iter() {
+            let current = atom.attributes();
+            let Some((id, disjuncts)) = completions.next_if(|(id, _)| *id == atom.id()) else {
+                determined &= wildcards.admits(current.is_concrete(), current.is_wildcard());
+                continue;
+            };
             let selected = &disjuncts[0];
-            if !current.element.normalized_eq(&selected.element) {
-                elements.push((
-                    AtomHandle::Id(atom),
-                    current.element.clone(),
-                    selected.element.clone(),
-                ));
-            }
-            if !current.isotope_mass.normalized_eq(&selected.isotope_mass) {
-                isotope_masses.push((
-                    AtomHandle::Id(atom),
-                    current.isotope_mass.clone(),
-                    selected.isotope_mass.clone(),
-                ));
-            }
-            if !current.charge.normalized_eq(&selected.charge) {
-                charges.push((
-                    AtomHandle::Id(atom),
-                    current.charge.clone(),
-                    selected.charge.clone(),
-                ));
-            }
-            if !current
-                .implicit_hydrogens
-                .normalized_eq(&selected.implicit_hydrogens)
-            {
-                implicit_hydrogens.push((
-                    AtomHandle::Id(atom),
-                    current.implicit_hydrogens.clone(),
-                    selected.implicit_hydrogens.clone(),
-                ));
-            }
-            if !current.lone_pairs.normalized_eq(&selected.lone_pairs) {
-                lone_pairs.push((
-                    AtomHandle::Id(atom),
-                    current.lone_pairs.clone(),
-                    selected.lone_pairs.clone(),
-                ));
-            }
-            let selected_unpaired_electrons = current.unpaired_electrons.update(
+            let spin = current.unpaired_electrons.update(
                 &current
                     .unpaired_electrons
                     .difference_to(&selected.unpaired_electrons),
             );
-            if !current
-                .unpaired_electrons
-                .normalized_eq(&selected_unpaired_electrons)
-            {
-                unpaired_electrons.push((
-                    AtomHandle::Id(atom),
-                    current.unpaired_electrons.clone(),
-                    selected_unpaired_electrons,
-                ));
-            }
+            determined &= plan_atom_field(id, &current.element, &selected.element, &mut elements);
+            determined &= plan_atom_field(
+                id,
+                &current.isotope_mass,
+                &selected.isotope_mass,
+                &mut isotope_masses,
+            );
+            determined &= plan_atom_field(id, &current.charge, &selected.charge, &mut charges);
+            determined &= plan_atom_field(
+                id,
+                &current.implicit_hydrogens,
+                &selected.implicit_hydrogens,
+                &mut implicit_hydrogens,
+            );
+            determined &= plan_atom_field(
+                id,
+                &current.lone_pairs,
+                &selected.lone_pairs,
+                &mut lone_pairs,
+            );
+            determined &= plan_atom_field(
+                id,
+                &current.unpaired_electrons,
+                &spin,
+                &mut unpaired_electrons,
+            );
         }
         if !elements.is_empty() {
             edits.modify_atom_elements(elements);
@@ -1103,36 +816,32 @@ impl<'a> Resolver<'a> {
                 edits.modify_atom_constraints(key, changes);
             }
         }
-        let existing: BTreeSet<Vec<AtomId>> = molecule
-            .aromatic_systems()
-            .iter()
-            .map(|aromatic_system| {
-                let mut atoms: Vec<AtomId> = aromatic_system.atom_ids().collect();
-                atoms.sort_unstable();
-                atoms
-            })
-            .collect();
-        for (atoms, aromatic_system) in &state.aromatic_systems {
-            let mut key = atoms.clone();
-            key.sort_unstable();
-            if existing.contains(&key) {
-                continue;
-            }
-            for edit in self.aromaticity.perception.plan_aromatic_system(
-                molecule,
-                atoms.clone(),
-                aromatic_system.clone(),
-            ) {
-                edits.push(edit);
-            }
-        }
-        edits
+        determined &=
+            self.aromaticity
+                .plan_systems(molecule, &state.aromatic_systems, wildcards, &mut edits);
+        (edits, determined)
+    }
+}
+
+/// Normalized-equal fields retain their stored representation, including singleton sets.
+fn plan_atom_field<T: Lattice>(
+    atom: AtomId,
+    current: &T,
+    selected: &T,
+    changes: &mut Vec<(AtomHandle, T, T)>,
+) -> bool {
+    if current.normalized_eq(selected) {
+        current.is_ground()
+    } else {
+        changes.push((AtomHandle::Id(atom), current.clone(), selected.clone()));
+        selected.is_ground()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::collections::BTreeSet;
 
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
@@ -1261,8 +970,12 @@ mod tests {
         let expected_aromaticity =
             AromaticityResolver::with_config(&chemistry_model.aromaticity, config.aromaticity)
                 .plan_resolve(&aromatic_molecule);
-        let expected_stereo = StereoResolver::with_config(&chemistry_model.stereo, config.stereo)
-            .plan_resolve(&stereo_molecule);
+        let expected_stereo = StereoResolver::with_config(
+            &chemistry_model.stereo,
+            config.stereo,
+            WildcardPolicy::Strict,
+        )
+        .plan_resolve(&stereo_molecule);
 
         assert_eq!(
             resolver.aromaticity.plan_resolve(&aromatic_molecule),
@@ -1312,6 +1025,40 @@ mod tests {
         ValenceTieBreak::MostSaturated,
         Solution::Underdetermined(ResolveReport::default())
     )]
+    #[case::localized(mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h3"] :bonds [[0 1 "*"]]}"#),
+        ValenceTieBreak::Strict, Solution::Underdetermined(ResolveReport::default()))]
+    #[case::dative(mol_dsl_concrete!(r#"{:atoms ["N#h3" "B#h3"]
+        :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        ValenceTieBreak::Strict, Solution::Underdetermined(ResolveReport::default()))]
+    #[case::multicenter(mol_dsl_concrete!(r#"{:atoms ["B" "H" "B"]
+        :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#),
+        ValenceTieBreak::Strict, Solution::Underdetermined(ResolveReport::default()))]
+    #[case::noncovalent(mol_dsl_concrete!(r#"{:atoms ["C#h4" "C#h4"]
+        :noncovalent-bonds [{:atoms [0 1] :attrs "*"}]}"#),
+        ValenceTieBreak::Strict, Solution::Underdetermined(ResolveReport::default()))]
+    #[case::aromatic(mol_dsl_concrete!(r#"{:atoms ["C#h#a1" "C#h#a1" "C#h#a1" "C#h#a1" "C#h#a1" "C#h#a1"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*"}]}"#),
+        ValenceTieBreak::Strict, Solution::Underdetermined(ResolveReport::default()))]
+    #[case::created_stereo(mol_dsl_concrete!(r#"{:atoms ["C#h#T+" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        ValenceTieBreak::Strict, Solution::Underdetermined(ResolveReport::default()))]
+    #[case::isotope_before_stereo_failure(mol_dsl!(r#"{:atoms ["C#c0#h4#T+"]}"#),
+        ValenceTieBreak::Strict, Solution::Contradictory(ResolveContradiction::Stereo(
+            StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(0) }.into())))]
+    #[case::stereo_before_multicenter_failure(mol_dsl_concrete!(r#"{:atoms ["C#h#T+#m1" "F" "Cl" "Br"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#),
+        ValenceTieBreak::Strict, Solution::Contradictory(ResolveContradiction::MulticenterBonds(
+            MulticenterBondsContradiction::Constraint(IncidenceConstraintInvariantsContradiction::Atom {
+                atom: AtomId(0), constraint: AtomConstraintForm::multicenter_valence(MulticenterValenceForm::multicenter(1)),
+            })))) ]
+    #[case::aromatic_charge_before_stereo_failure(mol_dsl!(r#"{
+        :atoms ["C#i=#c0#h#n0#u0#s#a1" "C#i=#c0#h#n0#u0#s#a1" "C#i=#c0#h#n0#u0#s#a1"
+                "C#i=#c0#h#n0#u0#s#a1" "C#i=#c0#h#n0#u0#s#a1" "C#i=#c0#h#n0#u0#s#a1" "C#i=#c0#h4#n0#u0#s#T+"]
+        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]#u0#s"}]}"#),
+        ValenceTieBreak::Strict, Solution::Contradictory(ResolveContradiction::Stereo(
+            StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(6) }.into())))]
     fn test_resolver_resolve_with_report(
         #[case] molecule: Molecule,
         #[case] tie_break: ValenceTieBreak,
@@ -1363,6 +1110,98 @@ mod tests {
             Ok(expected_report.map(|_| ()))
         );
         assert_eq!(without_report, expected_molecule);
+    }
+
+    #[rstest]
+    #[case::selected(ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#v0")]))),
+        mol_dsl!(r#"{:atoms ["C#i=#c0"]}"#))]
+    #[case::no_candidate(ValenceModel::smiles(), mol_dsl!(r#"{:atoms ["C#i="]}"#))]
+    fn test_resolver_resolve_atom_fields(
+        #[case] valence: ValenceModel,
+        #[case] molecule: Molecule,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let model = ChemistryModel {
+            valence,
+            ..Default::default()
+        };
+        let resolver = Resolver::new(&model);
+        assert_eq!(
+            resolver.resolve(molecule.clone()),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(
+            resolver.resolve_with_report(molecule.clone()),
+            Ok(Solution::Underdetermined(ResolveReport::default()))
+        );
+        let mut actual = molecule.clone();
+        assert_eq!(
+            resolver.resolve_into(&mut actual, rollback),
+            Ok(Solution::Underdetermined(()))
+        );
+        assert_eq!(actual, molecule);
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut actual, rollback),
+            Ok(Solution::Underdetermined(ResolveReport::default()))
+        );
+        assert_eq!(actual, molecule);
+    }
+
+    #[rstest]
+    #[case::kept(StereoFailurePolicy::Keep, Solution::Underdetermined(()))]
+    #[case::removed(StereoFailurePolicy::Remove, Solution::Determined(()))]
+    fn test_resolver_resolve_stereo_failure(
+        chemistry_model: ChemistryModel,
+        #[case] failure: StereoFailurePolicy,
+        #[case] expected: Solution<(), ResolveContradiction>,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback: RollbackMethod,
+    ) {
+        let input = mol_dsl_concrete!(
+            r#"{:atoms ["C#h4"]
+            :stereo-atoms [{:site 0 :ligands [] :attrs "Th*"}]}"#
+        );
+        let resolver = Resolver::with_config(
+            &chemistry_model,
+            ResolveConfig {
+                stereo: StereoResolveConfig {
+                    stereo_atom_failure: failure,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let output = mol_dsl_concrete!(r#"{:atoms ["C#h4"]}"#);
+        let report = ResolveReport::default();
+        let (expected_owned, expected_with_report) = if expected.is_determined() {
+            (
+                Solution::Determined(output.clone()),
+                Solution::Determined((output.clone(), report.clone())),
+            )
+        } else {
+            (
+                Solution::Underdetermined(()),
+                Solution::Underdetermined(report.clone()),
+            )
+        };
+        assert_eq!(resolver.resolve(input.clone()), Ok(expected_owned));
+        assert_eq!(
+            resolver.resolve_with_report(input.clone()),
+            Ok(expected_with_report)
+        );
+        let mut working = input.clone();
+        assert_eq!(
+            resolver.resolve_into_with_report(&mut working, rollback),
+            Ok(expected.clone().map(|()| report))
+        );
+        let expected_molecule = if expected.is_determined() {
+            output
+        } else {
+            input.clone()
+        };
+        assert_eq!(working, expected_molecule);
+        let mut working = input;
+        assert_eq!(resolver.resolve_into(&mut working, rollback), Ok(expected));
+        assert_eq!(working, expected_molecule);
     }
 
     #[rstest]
@@ -2959,7 +2798,9 @@ mod tests {
                 .collect(),
             ..ResolveState::default()
         };
-        let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        let edits = Resolver::new(&chemistry_model)
+            .plan_constitution(&molecule, &state, WildcardPolicy::Strict)
+            .0;
         let mut editor = molecule.edit();
         editor.apply(edits).unwrap();
         assert_eq!(
@@ -2995,7 +2836,12 @@ mod tests {
             .collect(),
             ..ResolveState::default()
         };
-        let edits = Resolver::new(&chemistry_model).plan_constitution(&molecule, &state);
+        let (edits, determined) = Resolver::new(&chemistry_model).plan_constitution(
+            &molecule,
+            &state,
+            WildcardPolicy::Strict,
+        );
+        assert_eq!(determined, matches!(expected_count, NumForm::Lit(0)));
         assert_eq!(
             edits,
             Edits::from_iter([
@@ -3121,8 +2967,9 @@ mod tests {
         #[case] molecule: Molecule,
         #[case] expected: Molecule,
     ) {
-        let edits =
-            Resolver::new(&chemistry_model).plan_constitution(&molecule, &ResolveState::default());
+        let edits = Resolver::new(&chemistry_model)
+            .plan_constitution(&molecule, &ResolveState::default(), WildcardPolicy::Strict)
+            .0;
         assert_eq!(molecule.apply(edits), Ok(expected));
     }
 
@@ -3136,7 +2983,9 @@ mod tests {
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            Resolver::new(&chemistry_model).plan_constitution(&molecule, &ResolveState::default()),
+            Resolver::new(&chemistry_model)
+                .plan_constitution(&molecule, &ResolveState::default(), WildcardPolicy::Strict)
+                .0,
             Edits::new()
         );
     }

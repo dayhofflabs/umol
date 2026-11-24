@@ -18,6 +18,8 @@ follows the earlier element-only design, which is retained for reference.
 
 ## Current behavior
 
+This section records the baseline for the staged work.
+
 `Resolver::resolve` runs isotope completion, valence admission, aromatic selection, selection among
 completions, the constitution edits, stereo, and the defaults of localized and multicenter bonds.
 The isotope plan is applied whatever its outcome. Each later phase that is underdetermined or
@@ -36,10 +38,8 @@ no aromatic assertion. It reads `[1*]` as an undetermined element with isotope m
 
 ### Final test of `Resolver`
 
-After the last phase, `resolve`, `resolve_with_report`, `resolve_into`, and
-`resolve_into_with_report` test `Molecule::is_concrete`. A molecule that fails it is not returned,
-and the outcome is underdetermined. The opening comment of `ops/resolve.rs` and the paragraph on
-`Resolver::resolve` in the operations guide state the test as the contract.
+Before S3a, all four aggregate entry points tested `Molecule::is_concrete` after the last phase.
+A failed test gave `Underdetermined`. The trial below identified the fields the phases now account for.
 
 With the test switched off in a trial, the outcome changes for six kinds of input, in which every
 phase finishes and something is left non-concrete:
@@ -208,18 +208,18 @@ is a change from the [current behavior](#aromaticity-resolver-called-alone).
 
 ### Standalone and aggregate outcomes
 
-A standalone resolver returns `Determined` when it completes its own work. For example, take an
-otherwise concrete molecule with a `#T+` assertion, an established tetrahedral frame, and a model
-that permits creation of the requested entity.
+Stereo resolution uses the same wildcard policy on its own and within the aggregate.
+Given an established tetrahedral frame and a permitted `#T+` request, the stereo plan creates
+`Th*` and discharges the assertion. Its outcome depends on the configuration left by the plan.
 
-| Call | Outcome |
+| Policy | Stereo outcome, standalone or within the aggregate |
 | --- | --- |
-| Standalone `StereoResolver::resolve` | `Determined`. It creates `Th*` and discharges `#T+`. The known kind entails the assertion. |
-| Aggregate resolution under `Strict` | `Underdetermined`. The coset is still open. |
-| Aggregate resolution under `Admit` | `Determined`. The molecule contains `Th*`. |
+| `Strict` | `Underdetermined(edits)`. The coset is open. Standalone resolution leaves the input untouched on the in-place route. |
+| `Admit` | `Determined(edits)`. The result retains `Th*`. |
 
-The same outcomes apply to a stored entity with that frame and open coset, and to the
-corresponding `#C+` and `Ct*` cases. Discovery of unasserted sites belongs to `StereoAdder`.
+The same rule covers a retained open configuration and the corresponding `#C+` and `Ct*`
+cases. A coset set remains underdetermined under both policies. Discovery of unasserted sites
+belongs to `StereoAdder`.
 
 `resolve`, `resolve_with_report`, `resolve_into`, and `resolve_into_with_report` derive their
 outcome from the phases. A phase accounts for fields left open on the entities it handles,
@@ -661,10 +661,11 @@ and `test_stereo_perceiver_derive_stereo_bond`, and exercise the validator on a 
 [dep: S0b, S2b]
 
 Retain or create `Th*` or `Ct*` when a permitted request establishes its frame and kind.
-Standalone resolution is determined in that case. Handle a stored kindless entity with an
-established explicit frame separately from a request that requires choosing its kind.
-Carry the configuration of retained and newly created entities into the aggregate decision
-in S3a. A removed entity contributes no open field to the result.
+S2c treated that plan as determined. S3a applies the wildcard policy to its outcome.
+Handle a stored kindless entity with an established explicit frame separately from a request
+that requires choosing its kind.
+S3a checks retained and newly created configurations in the stereo phase. A removed entity
+contributes no open field to the result.
 
 In `test_stereo_resolver_plan_resolve` cover creation, retention and discharge, unique virtual-ligand identification,
 incomplete frames, a known kind with a coset set, and a kindless row with and without a positive
@@ -692,9 +693,9 @@ otherwise complete molecules with those bonds.
 
 ### S3 — Aggregate resolution and its callers
 
-#### S3a — Derive the strict aggregate outcome from the phases
+#### S3a — Derive the strict aggregate outcome from the phases (done)
 
-`umol-graph/src/ops/resolve.rs` and its phase planners. Internal rewire (green).
+`umol-graph/src/ops/resolve.rs` and its phase planners. The stereo constructor also takes the wildcard policy.
 [dep: S1a, S1d, S2a, S2c, S2d]
 
 In all four `resolve` entry points, account for the result left by each phase while that phase
@@ -702,9 +703,11 @@ has the entities in hand. Carry the isotope outcome alongside its applicable edi
 contradiction can still surface. At constitution, inspect the selected atom fields and account
 for known atoms that received no candidate. At aromaticity, stereo and bond defaults, use the
 fields the plan retains or produces, including open configurations created from assertions.
-A field that only blocks publication must allow later phases to establish contradictions and
-retain their report information. Compose these findings internally with the edits each phase
-already plans. Preserve the scoped standalone results and the public plan and report interfaces.
+Each phase checks the fields it owns. When an open field leaves a phase underdetermined,
+run later phases whose inputs are available and retain their contradictions and report information.
+`StereoResolver::new` selects `Strict`. `StereoResolver::with_config(model, config, wildcards)`
+uses the supplied policy. The aggregate uses the stereo plan's outcome directly.
+Keep the public plan and report return types.
 
 Once every entity kind is accounted for, remove the final `Molecule::is_concrete()` calls
 from `resolve`, `resolve_with_report`, `resolve_into` and `resolve_into_with_report` together.
@@ -715,7 +718,7 @@ to describe the policy-dependent result. Keep its error message and boundary map
 
 Use the six cases in [Final test of Resolver](#final-test-of-resolver) as strict regressions,
 plus dative and multicenter bonds. Exercise consumed and borrowed molecules with and without a
-report. Assert standalone stereo success and aggregate underdetermination for the same `Th*`.
+report. Assert matching strict stereo outcomes on both routes and standalone success under `Admit`.
 Check later contradictions despite an unresolved isotope, and exclude an open stereo row removed
 by a failure policy from the final decision.
 
@@ -726,13 +729,13 @@ by a failure policy from the final decision.
 [dep: S0d, S3a]
 
 Add `wildcards: WildcardPolicy` after `isotope` on `ResolveConfig`. `Resolver::with_config`
-passes the chosen policy to the isotope and valence constructors and uses it for the aggregate
+passes the chosen policy to the isotope, valence and stereo constructors and uses it for the aggregate
 phase outcomes. `Resolver::new` and `ResolveConfig::default` select `Strict`. Migrate exhaustive
 literals in the same change, including the aggregate constructor tests, molecule and reaction
 ingestion tests, and the Python constructor and its four Rust test expectations. The existing
 Python signature supplies the strict default until S4b. Extend `test_resolve_config_default`
-and `test_resolver_with_config` to verify the default and propagation into the isotope resolver
-and both valence sources.
+and `test_resolver_with_config` to verify the default and propagation to the isotope resolver,
+both valence sources and the stereo resolver.
 
 Run the following cases through the four entry points. Check exact molecules on success,
 reports where requested, and restored receivers on rejection.
@@ -859,7 +862,7 @@ queries, the strict default, standalone outcomes, admitted results and rollback.
 | S2a · isotope resolver | S1a, S3a, S3b | Constructor migration and wildcard defaulting, plus projection and exact restoration. |
 | S2b · valence sources | S1b, S1c | Both constructors, prior strict and new admitted candidate cases, and resolution of order-dependent work. |
 | S2c · valence dispatch | S1d, S3b | Both sources receive the policy and incidence checks cover skipped atoms. |
-| S2d · stereo scope | S2b, S2c, S3a, S3b | Perceiver, virtual ligands, both scopes, failure policies, validator, and standalone versus aggregate outcomes. |
+| S2d · stereo scope | S2b, S2c, S3a, S3b | Perceiver, virtual ligands, both scopes, failure policies, validator, and policy agreement between standalone and aggregate stereo. |
 | S3a · aggregate construction | S3b–S3d | Constructor propagation, exact integration fixtures, four routes, ingress and both original property domains. |
 | S4a · Python | S4a, S4b | Bindings, exports, signature, repr, config and ingestion tests, plus predicates on forms, live views and molecules. |
 | S5a · guides | S0f, S5b | S0f records the terms and aligns the compact DSL. S5b covers the operations and Python guides. |

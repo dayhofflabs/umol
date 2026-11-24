@@ -21,7 +21,7 @@ use crate::ops::aromaticity::{
     AromaticityInconsistency, AromaticityPerceiver,
 };
 use crate::ops::model::{AromaticityModel, AromaticityTieBreak, ElementScope, ValenceTieBreak};
-use crate::ops::resolve::ResolveState;
+use crate::ops::resolve::{ResolveState, WildcardPolicy};
 use crate::ops::valence::compare::compare_by_key;
 
 /// Maximum number of search perception calls per rule-supplied component.
@@ -143,30 +143,17 @@ impl AromaticityResolver {
 
         match outcome {
             Solution::Determined(state) => {
-                let existing: BTreeSet<Vec<AtomId>> = molecule
-                    .aromatic_systems()
-                    .iter()
-                    .map(|aromatic_system| {
-                        let mut atoms: Vec<AtomId> = aromatic_system.atom_ids().collect();
-                        atoms.sort_unstable();
-                        atoms
-                    })
-                    .collect();
-
                 let mut edits = self.plan_discharge(molecule, &state.aromatic_systems);
-                for (atoms, aromatic_system) in state.aromatic_systems {
-                    let mut key = atoms.clone();
-                    key.sort_unstable();
-                    if !existing.contains(&key) {
-                        for edit in
-                            self.perception
-                                .plan_aromatic_system(molecule, atoms, aromatic_system)
-                        {
-                            edits.push(edit);
-                        }
-                    }
+                if self.plan_systems(
+                    molecule,
+                    &state.aromatic_systems,
+                    WildcardPolicy::Admit,
+                    &mut edits,
+                ) {
+                    Ok(Solution::Determined(edits))
+                } else {
+                    Ok(Solution::Underdetermined(Edits::new()))
                 }
-                Ok(Solution::Determined(edits))
             }
             Solution::Underdetermined(_) => Ok(Solution::Underdetermined(Edits::new())),
             Solution::Contradictory(contradiction) => Ok(Solution::Contradictory(contradiction)),
@@ -400,8 +387,8 @@ impl AromaticityResolver {
     /// tie_break; equal completions use the lexicographically smallest partition.
     /// Ties and combinations restricting different atoms leave those atoms plural.
     ///
-    /// A missing required contribution, unresolved charge or spin on a retained system,
-    /// undetermined perception, or more than 4096 perception calls in a component yields
+    /// A missing required contribution, undetermined perception, or more than 4096
+    /// perception calls in a component yields
     /// Underdetermined. A retained system keeps its electron vector. Independent evidence
     /// can supply the count for an open contribution. An established failure to cover a
     /// required atom yields Contradictory under the Error failure policy. If no positive aromatic
@@ -459,6 +446,44 @@ impl AromaticityResolver {
         tie_break: ValenceTieBreak,
     ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
         self.select_completions(molecule, state, tie_break, true)
+    }
+
+    /// Adds missing systems and checks the attributes of each retained or new system.
+    pub(super) fn plan_systems(
+        &self,
+        molecule: &Molecule,
+        systems: &[(Vec<AtomId>, AromaticSystemForm)],
+        wildcards: WildcardPolicy,
+        edits: &mut Edits,
+    ) -> bool {
+        let accepts = |system: &AromaticSystemForm| {
+            wildcards.admits(system.electrons.is_ground(), system.is_wildcard())
+                && system.charge.is_ground()
+                && system.unpaired_electrons.is_ground()
+        };
+        let mut determined = true;
+        let mut existing = BTreeSet::new();
+        for system in molecule.aromatic_systems().iter() {
+            determined &= accepts(system.attributes());
+            let mut atoms: Vec<_> = system.atom_ids().collect();
+            atoms.sort_unstable();
+            existing.insert(atoms);
+        }
+        for (atoms, system) in systems {
+            let mut key = atoms.clone();
+            key.sort_unstable();
+            if existing.contains(&key) {
+                continue;
+            }
+            determined &= accepts(system);
+            for edit in
+                self.perception
+                    .plan_aromatic_system(molecule, atoms.clone(), system.clone())
+            {
+                edits.push(edit);
+            }
+        }
+        determined
     }
 
     pub(crate) fn plan_discharge(
@@ -727,9 +752,6 @@ impl AromaticityResolver {
                 return Solution::Underdetermined(state);
             }
             for system in molecule.aromatic_systems().iter() {
-                if !system.charge().is_ground() || !system.unpaired_electrons().is_ground() {
-                    return Solution::Underdetermined(state);
-                }
                 if system.attributes().is_wildcard() {
                     if let Some((_, form)) = accepted.iter_mut().find(|(atoms, _)| {
                         atoms.len() == system.atom_ids().len()

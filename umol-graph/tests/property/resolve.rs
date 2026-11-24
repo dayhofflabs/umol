@@ -28,8 +28,9 @@
 //! it during planning; Keep preserves it, and all determined results retain integrity.
 //! This relation checks stored-system handling, not the shared perception algorithm.
 //!
-//! Stereo discharge is checked against independent results for mixtures of stored
+//! Under wildcard admission, stereo discharge is checked against independent results for mixtures of stored
 //! and newly added tetrahedral and cis-trans entities with literal or open configurations.
+//! Strict requires every site to have a stored literal coset.
 //! Bearer hydrogen and lone-pair counts are explicit; unrelated inherent fields remain open.
 //! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
 //!
@@ -61,6 +62,7 @@ use umol_graph::ops::model::{
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
     AtomSelectionAlgorithm, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver, StereoResolver,
+    WildcardPolicy,
 };
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
@@ -205,7 +207,9 @@ proptest! {
         let mut expected = MoleculeEntries::default();
         let mut added_atoms = Vec::new();
         let mut added_bonds = Vec::new();
+        let mut open = false;
         for (cis_trans, stored, coset) in sites {
+            open |= !stored || coset == 2;
             let coset = if coset == 2 { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
             let offset = source.atoms.len();
             let a = AtomId::from(offset);
@@ -263,7 +267,18 @@ proptest! {
         expected.stereo_bonds.extend(added_bonds);
         let mut molecule = Molecule::from_entries(source);
         let expected = Molecule::from_entries(expected);
-        let resolver = StereoResolver::new(&StereoModel::default());
+        let strict = StereoResolver::new(&StereoModel::default());
+        let mut strict_input = molecule.clone();
+        if open {
+            prop_assert_eq!(strict.resolve(molecule.clone()), Solution::Underdetermined(()));
+            prop_assert_eq!(strict.resolve_into(&mut strict_input), Solution::Underdetermined(()));
+            prop_assert_eq!(&strict_input, &molecule);
+        } else {
+            prop_assert_eq!(strict.resolve(molecule.clone()), Solution::Determined(expected.clone()));
+            prop_assert_eq!(strict.resolve_into(&mut strict_input), Solution::Determined(()));
+            prop_assert_eq!(&strict_input, &expected);
+        }
+        let resolver = StereoResolver::with_config(&StereoModel::default(), Default::default(), WildcardPolicy::Admit);
         prop_assert_eq!(resolver.resolve(molecule.clone()), Solution::Determined(expected.clone()));
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Solution::Determined(()));
         prop_assert_eq!(&molecule, &expected);

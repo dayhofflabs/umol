@@ -13,6 +13,7 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
+use super::WildcardPolicy;
 use crate::ops::model::StereoModel;
 use crate::ops::stereo::{StereoContradiction, StereoInconsistency, StereoPerceiver};
 
@@ -56,6 +57,7 @@ impl Default for StereoResolveConfig {
 pub struct StereoResolver {
     perception: StereoPerceiver,
     config: StereoResolveConfig,
+    wildcards: WildcardPolicy,
 }
 
 /// Failures to express stereo entities as atom and bond kind constraints.
@@ -72,14 +74,25 @@ pub enum StereoProjectError {
 }
 
 impl StereoResolver {
+    /// Uses strict wildcard handling and the default stereo failure policies.
     pub fn new(model: &StereoModel) -> Self {
-        Self::with_config(model, StereoResolveConfig::default())
+        Self::with_config(
+            model,
+            StereoResolveConfig::default(),
+            WildcardPolicy::Strict,
+        )
     }
 
-    pub fn with_config(model: &StereoModel, config: StereoResolveConfig) -> Self {
+    /// Selects the stereo configuration and the wildcard policy for retained and new entities.
+    pub fn with_config(
+        model: &StereoModel,
+        config: StereoResolveConfig,
+        wildcards: WildcardPolicy,
+    ) -> Self {
         Self {
             perception: StereoPerceiver::new(model),
             config,
+            wildcards,
         }
     }
 
@@ -96,7 +109,9 @@ impl StereoResolver {
     /// and all entity attributes. Keep retains a failed value; Remove clears its assertion or entity.
     /// Mismatched evidence is contradictory regardless of the failure policies.
     /// Established findings are checked before underdetermination. An underdetermined
-    /// derivation produces an empty plan and publishes no partial changes.
+    /// derivation produces an empty plan. When the frame is established, a configuration
+    /// left open under Strict, or a non-wildcard coset set under either policy, yields
+    /// Underdetermined with the planned edits. Admit accepts an undetermined kind or coset.
     pub fn plan_resolve(&self, molecule: &Molecule) -> Solution<Edits, StereoContradiction> {
         let (derivation, underdetermined) =
             match self.perception.derive(molecule, self.config.ring_config) {
@@ -144,6 +159,7 @@ impl StereoResolver {
             .collect();
 
         let mut edits = Edits::new();
+        let mut determined = true;
         let mut remove_atom_constraints = BTreeSet::new();
         let mut remove_bond_constraints = BTreeSet::new();
         let mut remove_stereo_atoms = BTreeSet::new();
@@ -167,6 +183,10 @@ impl StereoResolver {
                     match self.config.stereo_atom_failure {
                         StereoFailurePolicy::Error => unreachable!(),
                         StereoFailurePolicy::Keep => {
+                            let form = molecule.stereo_atom(stereo_atom).attributes();
+                            determined &= self
+                                .wildcards
+                                .admits(form.is_concrete(), form.is_wildcard());
                             suppressed_atoms.insert(site);
                         }
                         StereoFailurePolicy::Remove => {
@@ -188,6 +208,10 @@ impl StereoResolver {
                     match self.config.stereo_bond_failure {
                         StereoFailurePolicy::Error => unreachable!(),
                         StereoFailurePolicy::Keep => {
+                            let form = molecule.stereo_bond(stereo_bond).attributes();
+                            determined &= self
+                                .wildcards
+                                .admits(form.is_concrete(), form.is_wildcard());
                             suppressed_bonds.insert(site);
                         }
                         StereoFailurePolicy::Remove => {
@@ -243,6 +267,9 @@ impl StereoResolver {
             if suppressed_atoms.contains(&id) {
                 continue;
             }
+            determined &= self
+                .wildcards
+                .admits(stereo.is_concrete(), stereo.is_wildcard());
             if let Some(existing) = molecule
                 .stereo_atoms()
                 .at(id)
@@ -278,6 +305,9 @@ impl StereoResolver {
             if suppressed_bonds.contains(&id) {
                 continue;
             }
+            determined &= self
+                .wildcards
+                .admits(stereo.is_concrete(), stereo.is_wildcard());
             if let Some(existing) = molecule
                 .stereo_bonds()
                 .at(id)
@@ -375,13 +405,17 @@ impl StereoResolver {
         if !bond_constraints.is_empty() {
             edits.modify_bond_constraints(BondConstraintKey::CisTransStereo, bond_constraints);
         }
-        Solution::Determined(edits)
+        if determined {
+            Solution::Determined(edits)
+        } else {
+            Solution::Underdetermined(edits)
+        }
     }
 
     /// Resolves the molecule, consuming its storage without a recovery journal.
     ///
     /// Uses the same plan as [StereoResolver::resolve_into]. A determined result has checked
-    /// molecule integrity; its stereo configurations may remain open.
+    /// molecule integrity and satisfies the configured wildcard policy at every stereo site.
     /// Underdetermined and Contradictory drop the input.
     pub fn resolve(&self, molecule: Molecule) -> Solution<Molecule, StereoContradiction, ()> {
         let edits = match self.plan_resolve(&molecule) {
@@ -408,7 +442,7 @@ impl StereoResolver {
     /// Planning finishes before mutation. Only Determined changes the molecule;
     /// every other outcome leaves it unchanged.
     /// With consistent, realizable stereo evidence, resolution is idempotent under `==`.
-    /// Stereo configurations may remain open in a determined result.
+    /// Admit permits an undetermined stereo kind or coset in a determined result.
     pub fn resolve_into(&self, molecule: &mut Molecule) -> Solution<(), StereoContradiction> {
         let edits = match self.plan_resolve(molecule) {
             Solution::Determined(edits) => edits,
@@ -660,6 +694,7 @@ mod tests {
 
     #[rstest]
     #[case::stored_open_virtual(
+        true,
         mol_dsl_concrete!(r#"{:atoms ["C#h#T+" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [[:virt 0] 3 2 1] :attrs "Th*"}]}"#),
@@ -682,6 +717,7 @@ mod tests {
         ]),
     )]
     #[case::tetrahedral(
+        true,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h1 #T+" "N #h2" "O #h1"]
                              :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
@@ -713,6 +749,7 @@ mod tests {
         ]),
     )]
     #[case::cis_trans(
+        true,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]}"#
@@ -747,6 +784,7 @@ mod tests {
         ]),
     )]
     #[case::cyclooctene_asserted(
+        true,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h2" "C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 7 "1"] [0 1 "1"] [1 2 "2#C+"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 7 "1"]]}"#
@@ -781,6 +819,7 @@ mod tests {
         ]),
     )]
     #[case::cyclohexene_asserted(
+        false,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
@@ -788,6 +827,7 @@ mod tests {
         Edits::new(),
     )]
     #[case::cyclohexene_asserted_undetermined(
+        false,
         mol_dsl_concrete!(
             r#"{:atoms ["C #h1" "C #h1" "C #h2" "C #h2" "C #h2" "C #h2"]
                              :bonds [[0 5 "1"] [0 1 "2#C+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]]}"#
@@ -796,11 +836,22 @@ mod tests {
     )]
     fn test_stereo_resolver_plan_resolve(
         stereo_model: StereoModel,
+        #[case] open_coset: bool,
         #[case] molecule: Molecule,
         #[case] expected: Edits,
     ) {
+        let strict = if open_coset {
+            Solution::Underdetermined(expected.clone())
+        } else {
+            Solution::Determined(expected.clone())
+        };
         assert_eq!(
             StereoResolver::new(&stereo_model).plan_resolve(&molecule),
+            strict
+        );
+        assert_eq!(
+            StereoResolver::with_config(&stereo_model, Default::default(), WildcardPolicy::Admit)
+                .plan_resolve(&molecule),
             Solution::Determined(expected)
         );
     }
@@ -808,31 +859,57 @@ mod tests {
     #[rstest]
     #[case::open(StereoCoset::Undetermined, true)]
     #[case::set(StereoCoset::lit_set([0, 1]), false)]
-    fn test_stereo_resolver_plan_resolve_coset(#[case] coset: StereoCoset, #[case] wildcard: bool) {
+    #[case::literal(StereoCoset::Lit(1), false)]
+    fn test_stereo_resolver_plan_resolve_coset(
+        #[case] coset: StereoCoset,
+        #[case] wildcard: bool,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] policy: WildcardPolicy,
+    ) {
         let mut molecule = mol_dsl_concrete!(
             r#"{:atoms ["C#h" "C#h" "F" "Cl"]
             :bonds [[0 1 "2#C+"] [0 2 "1"] [1 3 "1"]]
             :stereo-bonds [{:site 0 :ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct*"}]}"#
         );
         let id = StereoBondId(0);
+        let determined =
+            coset == StereoCoset::Lit(1) || (wildcard && policy == WildcardPolicy::Admit);
         let form = StereoBondForm::new(StereoKind::CisTrans, coset);
         *molecule.stereo_bond_mut(id).attributes_mut() = form.clone();
-        let resolver = StereoResolver::new(&StereoModel::default());
-        assert_eq!(
-            resolver.plan_resolve(&molecule),
-            Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraints {
-                key: BondConstraintKey::CisTransStereo,
-                changes: vec![(
-                    BondHandle::Id(BondId(0)),
-                    Some(BondConstraintForm::cis_trans_stereo(true)),
-                    None
-                )],
-            },]))
-        );
-        assert_eq!(
-            resolver.resolve_into(&mut molecule),
-            Solution::Determined(())
-        );
+        let original = molecule.clone();
+        let resolver =
+            StereoResolver::with_config(&StereoModel::default(), Default::default(), policy);
+        let edits = Edits::from_iter([Edit::ModifyBondConstraints {
+            key: BondConstraintKey::CisTransStereo,
+            changes: vec![(
+                BondHandle::Id(BondId(0)),
+                Some(BondConstraintForm::cis_trans_stereo(true)),
+                None,
+            )],
+        }]);
+        if determined {
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Determined(edits)
+            );
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Solution::Determined(())
+            );
+        } else {
+            assert_eq!(
+                resolver.plan_resolve(&molecule),
+                Solution::Underdetermined(edits)
+            );
+            assert_eq!(
+                resolver.resolve(molecule.clone()),
+                Solution::Underdetermined(())
+            );
+            assert_eq!(
+                resolver.resolve_into(&mut molecule),
+                Solution::Underdetermined(())
+            );
+            assert_eq!(molecule, original);
+        }
         assert_eq!(molecule.stereo_bond(id).attributes(), &form);
         assert_eq!(
             molecule.stereo_bond(id).attributes().is_wildcard(),
@@ -900,6 +977,7 @@ mod tests {
                     stereo_bond_failure: policy,
                     ..Default::default()
                 },
+                WildcardPolicy::Admit,
             );
             assert_eq!(
                 resolver.plan_resolve(&molecule),
@@ -963,6 +1041,7 @@ mod tests {
                 ..Default::default()
             },
             StereoResolveConfig::default(),
+            WildcardPolicy::Admit,
         );
         assert_eq!(
             resolver.plan_resolve(&molecule),
@@ -1067,6 +1146,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: RingConfig::default(),
             },
+            WildcardPolicy::Admit,
         );
         assert_eq!(
             resolver.resolve(molecule.clone()),
@@ -1126,6 +1206,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: RingConfig::default(),
             },
+            WildcardPolicy::Admit,
         );
         assert_eq!(
             resolver.plan_resolve(&molecule),
@@ -1221,6 +1302,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: RingConfig::default(),
             },
+            WildcardPolicy::Admit,
         );
         assert_eq!(
             resolver.plan_resolve(&molecule),
@@ -1278,6 +1360,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: RingConfig::default(),
             },
+            WildcardPolicy::Admit,
         );
         assert_eq!(
             resolver.resolve(molecule.clone()),
@@ -1383,7 +1466,8 @@ mod tests {
         #[case] expected: Solution<Edits, StereoContradiction>,
     ) {
         assert_eq!(
-            StereoResolver::with_config(&stereo_model, config).plan_resolve(&molecule),
+            StereoResolver::with_config(&stereo_model, config, WildcardPolicy::Strict)
+                .plan_resolve(&molecule),
             expected
         );
     }
@@ -1430,6 +1514,7 @@ mod tests {
                     stereo_atom_failure: policy,
                     ..StereoResolveConfig::default()
                 },
+                WildcardPolicy::Strict
             )
             .plan_resolve(&tetrahedral_entity_failure_molecule),
             expected
@@ -1481,6 +1566,7 @@ mod tests {
                     stereo_bond_failure: policy,
                     ..StereoResolveConfig::default()
                 },
+                WildcardPolicy::Strict
             )
             .plan_resolve(&cis_trans_entity_failure_molecule),
             expected
@@ -1506,6 +1592,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Strict,
         );
         let expected =
             StereoContradiction::Inconsistency(StereoInconsistency::TetrahedralStereoMismatch {
@@ -1546,6 +1633,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Strict,
         );
         let expected =
             StereoContradiction::Inconsistency(StereoInconsistency::CisTransStereoMismatch {
@@ -1603,6 +1691,7 @@ mod tests {
                 stereo_bond_failure: failure,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Strict,
         );
         assert_eq!(
             resolver.plan_resolve(&molecule),
@@ -1759,7 +1848,8 @@ mod tests {
         #[case] mut molecule: Molecule,
         #[case] expected: Molecule,
     ) {
-        let resolver = StereoResolver::new(&stereo_model);
+        let resolver =
+            StereoResolver::with_config(&stereo_model, Default::default(), WildcardPolicy::Admit);
         assert_eq!(
             resolver.resolve(molecule.clone()),
             Solution::Determined(expected.clone())
@@ -1839,6 +1929,7 @@ mod tests {
                 stereo_bond_failure: policy,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Admit,
         );
         let expected = if policy == StereoFailurePolicy::Remove {
             removed
@@ -1886,6 +1977,7 @@ mod tests {
                 stereo_bond_failure,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Strict,
         );
         assert_eq!(
             resolver.plan_resolve(&underdetermined_molecule),
@@ -1965,6 +2057,7 @@ mod tests {
                 stereo_bond_failure: policy,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Strict,
         );
         if recoverable && policy != StereoFailurePolicy::Error {
             assert_eq!(
@@ -2047,6 +2140,7 @@ mod tests {
                 stereo_bond_failure: policy,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Strict,
         );
         if let Some(failure) = failure.filter(|_| policy == StereoFailurePolicy::Error) {
             let contradiction = StereoContradiction::Inconsistency(failure);
@@ -2153,6 +2247,7 @@ mod tests {
                 stereo_bond_failure: policy,
                 ring_config: Default::default(),
             },
+            WildcardPolicy::Admit,
         );
         let expected = match outcome {
             Solution::Determined(kind) => {
