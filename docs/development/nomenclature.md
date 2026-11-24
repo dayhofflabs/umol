@@ -237,6 +237,7 @@ spelling.
 
 | Do not write | Write instead | Because |
 | --- | --- | --- |
+| `head` for the first inherent field in an entity string | `principal field` | the term also identifies the field on the stored entity |
 | `projection` for a stored constraint or the incidence category | `constraint`, `incidence constraint` | `projection` names an actual mapping between representations |
 | `predicate` or `representation` for the stored object | `constraint` | the repository term for a possibly non-ground assertion |
 | `undetermined` for an operation outcome | `underdetermined` | stored state versus outcome |
@@ -457,6 +458,8 @@ chemistry-level determinedness of a structure; lattice groundness is the algebra
 the full product including the constraint coordinates, and the two decompose per form as
 `is_ground() == is_concrete() && constraints.is_ground()`. The pattern/concrete asymmetry names
 this axis: patterns are permanently non-concrete descriptions.
+Only the [principal field](#principal-field) determines whether an entity is a
+[wildcard entity](#wildcard-entity).
 
 **Not:** *ground* — the lattice term, which includes the constraint coordinates and stays on
 `Lattice::is_ground`; *complete* — the closure/completion family; the electronic *ground state*.
@@ -1461,6 +1464,22 @@ The [resolver recovery contract](operations.md#realizability-failures-and-recove
 classified failures admit recovery and how conflicts differ.
 **In code:** `AromaticityFailurePolicy`, `StereoFailurePolicy`.
 
+### Principal field
+
+A **principal field** is the [inherent field](#inherent-field) written first in an entity's
+compact DSL string.
+
+**Not:** head.
+**In code:**
+
+| Entity form | Principal field |
+| --- | --- |
+| `AtomForm` | `element` |
+| `BondForm`, `DativeBondForm` | `order` |
+| `AromaticSystemForm`, `MulticenterBondForm` | `electrons` (per-atom counts) |
+| `NoncovalentBondForm` | `kind` |
+| `StereoAtomForm`, `StereoBondForm` | `configuration` (kind and coset) |
+
 ### Projection
 
 Use **projection** for an actual mapping from one representation or indexed relation to another, as
@@ -1991,6 +2010,19 @@ selecting an authoritative representation. Validators live in `umol-graph`, use 
 **Not:** an integrity check, resolution, or transformation. Integrity is ordered before validation
 but is enforced by graph-IR construction rather than by a validator.
 **In code:** `Validator`, `validate`.
+
+### Wildcard entity
+
+A **wildcard entity** has an explicitly undetermined [principal field](#principal-field)
+or an explicitly undetermined component of that field. Both `*` (undetermined stereo kind)
+and `Th*` (tetrahedral kind with undetermined coset) are wildcard stereo configurations.
+In `C#h*`, `#h*` leaves the hydrogen count open. The atom's element is carbon, so
+`is_wildcard()` returns false. A stored set, complement, variable or expression in
+the principal field also yields false.
+
+**Not:** a synonym for *non-concrete*.
+**In code:** `is_wildcard()` on each entity form. `Molecule::has_wildcards()` returns true
+when any stored entity satisfies that predicate.
 
 ## Maintaining this guide
 

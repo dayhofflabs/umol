@@ -762,7 +762,7 @@ The **`noncovalent-kind-form`** leading field is the **noncovalent-kind** leaf (
 
 ### 7.11 Stereo subgrammar
 
-**Stereo-string** uses a **separate** namespace from the atom / bond / aromatic / multicenter strings (**§7.2**). It is the **`:attrs`** payload of a **`stereo-atom-entry`** / **`stereo-bond-entry`** (**§4**) and stores a coordination **`class`** with its **`coset`** relative to the entry's ordered **`:ligands`** frame. The head **`*`** leaves the kind undetermined; **`Th*`** specifies a tetrahedral kind with an undetermined coset. These are distinct values. Atom/bond **`#T`** / **`#C`** constraints use only the three states in **§5.8** and cannot carry this configuration data.
+**Stereo-string** uses a **separate** namespace from the atom / bond / aromatic / multicenter strings (**§7.2**). It is the **`:attrs`** payload of a **`stereo-atom-entry`** / **`stereo-bond-entry`** (**§4**) and stores a coordination **`class`** with its **`coset`** relative to the entry's ordered **`:ligands`** frame. The configuration is the principal field. **`*`** leaves the kind undetermined. **`Th*`** specifies a tetrahedral kind with an undetermined coset. These are distinct values. Atom/bond **`#T`** / **`#C`** constraints use only the three states in **§5.8** and cannot carry this configuration data.
 
 ```
 stereo-string ::= '*' | class coset stereo-predicate*
@@ -778,7 +778,7 @@ cycles      ::= '()' | ( '(' nat (',' nat)* ')' )+   (* disjoint cycles, 0-index
 ligand-pair ::= '(' nat ',' nat ')'                  (* two 0-indexed ligand-frame positions          *)
 ```
 
-**Class.** **`Th`** is Tetrahedral, **`Ct`** CisTrans, **`Ax`** Axial, **`Sp`** SquarePlanar, **`Tb`** TrigonalBipyramidal, and **`Oh`** Octahedral. The DSL stores these kinds independently of their support in a selected chemistry model. A kindless **`*`** head carries no inline stereo predicates. A stereo description does not assert stereogenicity; **`#g`** states that separate Stereogenicity constraint, distinct from StereogenicSiteKind used for site selection.
+**Class.** **`Th`** is Tetrahedral, **`Ct`** CisTrans, **`Ax`** Axial, **`Sp`** SquarePlanar, **`Tb`** TrigonalBipyramidal, and **`Oh`** Octahedral. The DSL stores these kinds independently of their support in a selected chemistry model. A stereo-string with **`*`** as its principal field carries no inline stereo predicates. A stereo description does not assert stereogenicity; **`#g`** states that separate Stereogenicity constraint, distinct from StereogenicSiteKind used for site selection.
 
 **Inline predicates (`#p` / `#o` / `#g`).** After the leading **`class coset`**, a **`stereo-string`** carries **zero or more** stereo predicates — the inline form of the per-element stereo constraints (the molecule-scope structured peers are **§7.12**). Each predicate's permutation degree is the **`class`** degree (number of ligand positions). The three predicates are:
 

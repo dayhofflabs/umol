@@ -582,7 +582,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::missing_head("#c+1", ParseError::ExpectedElectronCounts)]
+    #[case::missing_principal("#c+1", ParseError::ExpectedElectronCounts)]
     #[case::unknown("[1,1,1]#x", ParseError::UnknownMulticenterBondPredicate("#x".to_string()))]
     #[case::unknown_a("[1,1,1]#a", ParseError::UnknownMulticenterBondPredicate("#a".to_string()))]
     #[case::dup_charge("[1,1,1]#c+#c-", ParseError::DuplicateMulticenterBondPredicate("#c".to_string()))]

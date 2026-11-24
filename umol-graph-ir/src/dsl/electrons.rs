@@ -1,5 +1,4 @@
-//! Electron-counts head DSL: the mandatory per-atom electron-count head at the
-//! start of an aromatic-system or multicenter-bond string, shared by both.
+//! Per-atom electron counts form the principal field of aromatic systems and multicenter bonds.
 
 use std::fmt;
 
@@ -11,9 +10,9 @@ use winnow::Parser;
 use super::error::{PResult, ParseError};
 use crate::ir::electrons::ElectronCountsForm;
 
-/// The mandatory per-atom electron counts at the head of an aromatic-system /
-/// multicenter-bond string: `*` (undetermined) or a `[n,n,…]` vector, including `[]`
-/// (whitespace ignored). Leading and unprefixed, before any `#` predicate.
+/// Parse the mandatory principal field before any `#` predicate. It is an unprefixed
+/// `*` (undetermined) or a count vector such as `[1,1,1]`. The vector may be empty
+/// and may contain whitespace.
 pub(crate) fn electron_counts(i: &mut &str) -> PResult<ElectronCountsForm> {
     if opt('*').parse_next(i)?.is_some() {
         return Ok(ElectronCountsForm::Undetermined);

@@ -379,25 +379,13 @@ scope is any element; under an allow-list, and under HMO and Clar, the assertion
 
 ### Stereo
 
-The stereo perceiver reads the scope as the Hückel rule does. One method on `ElementScope` holds
-the reading:
+For a wildcard atom, stereo frame derivation only needs to check whether the element scope
+is `Any`. For a literal element it can use the existing `ElementScope::contains`.
 
-```rust
-impl ElementScope {
-    /// Whether an atom with this element form is in scope; `None` when the form does not decide.
-    pub fn contains_form(&self, element: &ElementForm) -> Option<bool>
-}
-```
-
-| Scope | Literal element | Undetermined | Set, complement, variable |
+| Stereo element scope | Literal element | Wildcard (`*`) | Set, complement, variable |
 | --- | --- | --- | --- |
-| `Any` | `Some(true)` | `Some(true)` | `Some(true)` |
-| `AllowList` | whether the list has it | `Some(false)` | `None` |
-
-`derive_stereo_atom`, `derive_stereo_bond`, and `identify_virtual_ligands` use it in place of
-their literal-element test: `Some(true)` is in scope, `Some(false)` is outside it, and `None` is
-unresolved as a non-literal element is today. The Hückel rule's `is_atom_eligible` calls the same
-method with `None` read as outside the scope, which is its present behavior.
+| `Any` | In scope | In scope | In scope |
+| `AllowList` | In scope if listed | Outside scope | Unresolved |
 
 The outcomes of the stereo table become:
 
@@ -408,8 +396,7 @@ The outcomes of the stereo table become:
 | `#T+` on `*` with literal counts | any element | Determined; the entity is created with an open coset |
 | The same | allow-list of carbon | `TetrahedralStereoFailure`; `stereo_atom_failure` applies |
 
-The same holds for stereo bonds with an end atom of undetermined element. An element given as a
-set or a variable is in scope under `Any`; under an allow-list it stays unresolved.
+The same holds for stereo bonds with an end atom of undetermined element.
 
 The reading is part of perception and does not depend on the policy. In `Resolver` an atom of
 undetermined element reaches the stereo phase only under `Admit`. `StereoResolver` called alone
@@ -467,7 +454,7 @@ implementation. Show the old and new assertions before editing an existing expec
 Keep cases beside the tests that use them, in source order, following the test-writing skill
 and the [property-test guide](../docs/development/property-tests.md).
 
-### S0 — Baseline, predicates, and shared vocabulary
+### S0 — Baseline, predicates, and shared vocabulary (done)
 
 #### S0a — Record the resolver baseline (done)
 
@@ -550,19 +537,7 @@ Define `WildcardPolicy::{Strict, Admit}` beside `ResolveConfig` with the value t
 `IsotopePolicy`. Add `test_wildcard_policy_default` for `Strict`. S3b exposes the config field
 together with working aggregate admission.
 
-#### S0e — Element scope for a stored form
-
-`umol-graph/src/ops/{model.rs,aromaticity/hueckel.rs}`.
-Additive (green). [dep: none]
-
-Add `ElementScope::contains_form(&self, element: &ElementForm) -> Option<bool>`. `Any` gives
-`Some(true)` for every form. An allow-list tests membership for literals, gives `Some(false)`
-for the wildcard and `None` for a set, complement or variable. Use it in
-`HueckelAromaticity::is_atom_eligible`, where `None` counts as outside the scope. Test the
-whole table in `test_element_scope_contains_form`, including literals inside and outside the
-list, and run the Hückel cases.
-
-#### S0f — Record the nomenclature and use it in the compact DSL
+#### S0f — Record the nomenclature and use it in the compact DSL (done)
 
 `docs/development/nomenclature.md`, `umol-graph-ir/spec/umol-dsl-spec.md`,
 `umol-graph-ir/src/dsl/{electrons,stereo,aromatic,multicenter,edit}.rs` and
@@ -648,7 +623,7 @@ sources and entailed, blocked and contradictory assertions.
 #### S2a — Aromatic selection and retained systems
 
 `umol-graph/src/ops/{aromaticity.rs,aromaticity/,resolve/aromaticity.rs}`.
-Behavior change (green). [dep: S0b, S0e]
+Behavior change (green). [dep: S0b]
 
 Apply the same evidence rules in standalone planning and joint selection, including the
 reporting path. Under Hückel with any element allowed, a required ring member with `*#a1`
@@ -669,14 +644,14 @@ and exercise both atom-selection algorithms.
 #### S2b — Stereo scope and frame derivation
 
 `umol-graph/src/ops/{stereo.rs,validate/stereo.rs}`. Behavior change (green).
-[dep: S0e]
+[dep: none]
 
-Use `ElementScope::contains_form` in `derive_stereo_atom`, `derive_stereo_bond` and
-`identify_virtual_ligands`. Distinguish exclusion by an allow-list from unresolved scope.
-Keep the literal-element requirements of independent site recognition. Cover a stored stereo
-atom at `*` and a requested `#T+` there under both scopes, a stereo bond with a wildcard
-endpoint, a carbon site with a wildcard ligand, and symbolic elements under `Any` and an
-allow-list. Extend `test_stereo_perceiver_derive`, `test_stereo_perceiver_derive_stereo_atom`
+Apply the [stereo element scope table](#stereo) directly in `derive_stereo_atom`,
+`derive_stereo_bond` and `identify_virtual_ligands`. Keep the literal-element requirements
+of independent site recognition. Cover a stored stereo atom at `*` and a requested `#T+`
+there under both scopes, a stereo bond with a wildcard endpoint, and a carbon site with a
+wildcard ligand. Test literals inside and outside an allow-list and sets, complements and
+variables under both scopes. Extend `test_stereo_perceiver_derive`, `test_stereo_perceiver_derive_stereo_atom`
 and `test_stereo_perceiver_derive_stereo_bond`, and exercise the validator on a stored site.
 
 #### S2c — Standalone stereo resolution and the configuration left open
@@ -879,7 +854,7 @@ queries, the strict default, standalone outcomes, admitted results and rollback.
 | --- | --- | --- |
 | S0a · final concreteness test | S2a–S2d, S3a–S3d, S4b | Four aggregate exits, rustdoc and boundary error, six strict regression cases, Rust and Python expectations below. Removal follows phase accounting. |
 | S1a · policy and config | S0d, S3b, S4b | Enum, strict default, field, exhaustive Rust literals and Python constructor migration use the agreed `WildcardPolicy` name. |
-| S1b · element scope | S0e, S2b | Three-valued `contains_form`, complete scope table and Hückel reuse. |
+| S1b · element scope | S2b | Stereo frame derivation tests scope membership, exclusion and unresolved cases directly. Hückel already admits a wildcard only under `Any`. |
 | S2a · isotope resolver | S1a, S3a, S3b | Constructor migration and wildcard defaulting, plus projection and exact restoration. |
 | S2b · valence sources | S1b, S1c | Both constructors, prior strict and new admitted candidate cases, and resolution of order-dependent work. |
 | S2c · valence dispatch | S1d, S3b | Both sources receive the policy and incidence checks cover skipped atoms. |
@@ -913,7 +888,7 @@ Activate `umol-py/.venv` in the same shell for each command that compiles or loa
 extension, including workspace commands, and confirm Python 3.13 first. Finish with the
 workspace test and Clippy gates from `AGENTS.md`.
 
-The valence path is S0b/S0d → S1b/S1c → S1d → S3a. The stereo path S0e → S2b → S2c also
+The valence path is S0b/S0d → S1b/S1c → S1d → S3a. The stereo path S2b → S2c also
 joins S3a, together with S1a, S2a and S2d. From S3a the path runs through S3b and S3c to
 S3d and S4b, then S5b. S0f and S4a can start after S0c, and the S0a baseline and S3b enable S5a.
 All stages are required.
