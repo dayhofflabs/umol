@@ -620,7 +620,7 @@ sources and entailed, blocked and contradictory assertions.
 
 ### S2 — Aromatic, stereo and bond phase outcomes
 
-#### S2a — Aromatic selection and retained systems
+#### S2a — Aromatic selection and retained systems (done)
 
 `umol-graph/src/ops/{aromaticity.rs,aromaticity/,resolve/aromaticity.rs}`.
 Behavior change (green). [dep: S0b]
