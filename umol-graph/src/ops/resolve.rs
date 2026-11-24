@@ -43,6 +43,16 @@ use crate::ops::stereo::StereoContradiction;
 use crate::ops::valence::compare::compare_by_key;
 use crate::ops::valence::{AtomCompletions, ResolveReport, ValenceContradiction};
 
+/// Whether resolution admits entities with an undetermined principal field or component.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WildcardPolicy {
+    /// Require a concrete molecule for a determined aggregate result.
+    #[default]
+    Strict,
+    /// Allow wildcard values to remain open when resolution can complete its work without choosing them.
+    Admit,
+}
+
 /// Operational policies for resolution; unspecified isotope composition remains unresolved by default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ResolveConfig {
@@ -1191,6 +1201,11 @@ mod tests {
                     [3 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 4 "1"]]
         }"#
         )
+    }
+
+    #[rstest]
+    fn test_wildcard_policy_default() {
+        assert_eq!(WildcardPolicy::default(), WildcardPolicy::Strict);
     }
 
     #[rstest]

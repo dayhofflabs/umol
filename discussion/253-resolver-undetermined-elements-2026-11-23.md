@@ -542,7 +542,7 @@ Add `Molecule::has_wildcards()` as a short-circuit query over the eight entity s
 empty molecule, a molecule with each kind as its sole wildcard, `C#h*`, and a wildcard atom
 with an explicit isotope as in `[1*]`. Keep `Molecule::is_concrete()` available to callers.
 
-#### S0d — Shared admission policy
+#### S0d — Shared admission policy (done)
 
 `umol-graph/src/ops/resolve.rs`. Additive (green). [dep: none]
 
