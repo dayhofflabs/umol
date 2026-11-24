@@ -655,7 +655,7 @@ wildcard ligand. Test literals inside and outside an allow-list and sets, comple
 variables under both scopes. Extend `test_stereo_perceiver_derive`, `test_stereo_perceiver_derive_stereo_atom`
 and `test_stereo_perceiver_derive_stereo_bond`, and exercise the validator on a stored site.
 
-#### S2c — Standalone stereo resolution and the configuration left open
+#### S2c — Standalone stereo resolution and the configuration left open (done)
 
 `umol-graph/src/ops/{resolve/stereo.rs,stereo.rs}`. Behavior change (green).
 [dep: S0b, S2b]

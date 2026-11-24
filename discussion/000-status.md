@@ -298,4 +298,4 @@ the statuses recorded here remain authoritative.
 | [247-aromatic-system-bonds-2026-11-16.md](247-aromatic-system-bonds-2026-11-16.md)                             | Informational | 2026-11-16   | |
 | [248-explicit-import-repair-2026-11-16.md](248-explicit-import-repair-2026-11-16.md)                           | Proposed      | 2026-11-16   | Deferred beyond 0.11; settle repair interfaces and fix semantics before planning. |
 | [249-release-0-11-preparation-2026-11-16.md](249-release-0-11-preparation-2026-11-16.md)                         | Completed     | 2026-11-16   | |
-| [253-resolver-undetermined-elements-2026-11-23.md](253-resolver-undetermined-elements-2026-11-23.md)             | In Progress   | 2026-11-23   | Implement standalone stereo resolution for open configurations (S2c). |
+| [253-resolver-undetermined-elements-2026-11-23.md](253-resolver-undetermined-elements-2026-11-23.md)             | In Progress   | 2026-11-23   | Account for bond defaults and the remaining bond kinds (S2d). |
