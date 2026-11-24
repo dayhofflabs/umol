@@ -580,7 +580,7 @@ plan. Cover omitted, set and variable isotopes on known elements.
 Extend the exact project/resolve roundtrip and resolve idempotence properties across both
 policies, with literal and wildcard atoms, natural composition and explicit masses.
 
-#### S1b — Registry admission
+#### S1b — Registry admission (done)
 
 `umol-graph/src/ops/valence/atom_typing.rs`. Additive (green). [dep: S0b, S0d]
 
