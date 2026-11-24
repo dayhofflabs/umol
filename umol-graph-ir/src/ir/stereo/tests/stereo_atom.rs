@@ -40,6 +40,55 @@ fn test_stereo_atom_form_with_methods(
     assert_eq!(atom.with_constraints([constraint]), expected);
 }
 
+#[rstest]
+#[case::kindless(StereoAtomForm::default(), true)]
+#[case::open_coset(
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+    true
+)]
+#[case::literal(StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32), false)]
+#[case::set(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])), false)]
+#[case::variable(
+    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::var("s"))),
+    false
+)]
+#[case::swap(
+    StereoAtomForm::new(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::swap(StereoTerm::var_in("s", [0, 1]))),
+    ),
+    false
+)]
+#[case::mirror(
+    StereoAtomForm::new(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(0)))
+    ),
+    false
+)]
+#[case::apply(
+    StereoAtomForm::new(
+        StereoKind::Tetrahedral,
+        StereoCoset::term(StereoTerm::apply(StereoTerm::lit_set([0, 1]), Permutation::identity(4))),
+    ),
+    false
+)]
+fn test_stereo_atom_form_is_wildcard(
+    #[case] form: StereoAtomForm,
+    #[case] expected: bool,
+    #[values(
+        StereoAtomConstraintsForm::new(),
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)).into()
+    )]
+    constraints: StereoAtomConstraintsForm,
+) {
+    let form = StereoAtomForm {
+        constraints,
+        ..form
+    };
+    assert_eq!(form.is_wildcard(), expected);
+}
+
 #[rustfmt::skip]
 #[rstest]
 #[case::folds_coset(

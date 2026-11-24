@@ -519,7 +519,7 @@ CRITERION_HOME="$PWD/scratch/253-resolver-baseline/criterion" \
   --baseline s0a --warm-up-time 3 --measurement-time 5 --sample-size 100 --noplot
 ```
 
-#### S0b — Wildcard predicates on the eight entity forms
+#### S0b — Wildcard predicates on the eight entity forms (done)
 
 `umol-graph-ir/src/ir/{atom,bond,dative,aromatic,multicenter,noncovalent,stereo}.rs`.
 Additive (green). [dep: none]
@@ -529,6 +529,10 @@ stored principal field. Both a kindless stereo configuration and a known kind wi
 coset qualify. Test each form with an open and a literal principal value, and all applicable
 set, complement, variable and stereo-expression forms. Vary other inherent fields and
 constraints independently. Groundness, normalization and a chemistry model are unnecessary.
+
+All eight predicates inspect the stored principal field in constant time. The atom and bond
+tests include an empty element complement and an empty conjunction over bond order. Both
+return false for `is_wildcard()` even though normalization produces `Undetermined` in each case.
 
 #### S0c — Molecule wildcard query
 
