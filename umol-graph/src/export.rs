@@ -318,7 +318,8 @@ pub fn export_smiles(input: &Molecule) -> Result<String, SmilesOutputError> {
 ///
 /// # Errors
 ///
-/// Preserves the error from molecular conversion or rendering.
+/// Preserves the error from molecular conversion or rendering. A retained open cis-trans
+/// configuration becomes an Either bond, which the SMILES renderer rejects.
 pub fn export_smiles_with(
     input: &Molecule,
     io_config: &SmilesIoConfig,

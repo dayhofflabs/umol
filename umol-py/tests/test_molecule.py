@@ -73,6 +73,7 @@ from umol import (
     ValenceModel,
     ValenceTable,
     ValenceTieBreak,
+    WildcardPolicy,
     NumForm,
 )
 
@@ -474,6 +475,21 @@ def test_molecule_stereo_mutation_attributes():
         ),
         pytest.param(
             "*", {"resolve": False}, '{:atoms ["*#i=#c0#u0"]}', id="wildcard"
+        ),
+        pytest.param(
+            "*C(O)C",
+            {
+                "resolve_config": ResolveConfig(
+                    aromaticity=AromaticityResolveConfig(),
+                    stereo=StereoResolveConfig(),
+                    isotope=IsotopePolicy.Natural,
+                    wildcards=WildcardPolicy.Admit,
+                ),
+            },
+            '{:atoms ["*#i=#c0#u0" "C#i=#c0#h#n0#u0#s" '
+            '"O#i=#c0#h#n2#u0#s" "C#i=#c0#h3#n0#u0#s"] '
+            ':bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [1 3 "1#c0#u0#s"]]}',
+            id="admitted-wildcard",
         ),
         pytest.param(
             "[13CH3+]", {"resolve": False}, '{:atoms ["C#i13#c+#h3"]}', id="bracket-fields"
@@ -1193,6 +1209,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             id="mdl-pyrrole",
         ),
         ("*", {}, UnderdeterminedError, "resolution underdetermined"),
+        ("*C(O)C", {}, UnderdeterminedError, "resolution underdetermined"),
         (
             "c1ccccc1",
             {
@@ -1865,6 +1882,18 @@ def test_molecule_split():
 def test_molecule_split_empty():
     assert Molecule().split() == []
     assert Molecule().tracked_split() == []
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("{}", False),
+        ('{:atoms ["C#h*"]}', False),
+        ('{:atoms ["C" "*#i1"]}', True),
+    ],
+)
+def test_molecule_has_wildcards(source, expected):
+    assert Molecule.parse(source).has_wildcards() is expected
 
 
 def test_molecule_bonds_error():

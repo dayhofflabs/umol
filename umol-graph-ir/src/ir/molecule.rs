@@ -570,6 +570,41 @@ impl Molecule {
                 .all(|id| self.stereo_bonds.attributes(id).is_concrete())
     }
 
+    /// Returns true if any stored entity has an undetermined principal field or component.
+    ///
+    /// The principal field is the element for atoms, the order for localized and dative bonds,
+    /// the electron counts for aromatic systems and multicenter bonds, and the interaction kind
+    /// for noncovalent bonds. For stereo atoms and bonds, either the kind or the coset can be
+    /// undetermined. The scan stops at the first wildcard. An empty molecule returns false.
+    pub fn has_wildcards(&self) -> bool {
+        self.atoms.iter().any(AtomForm::is_wildcard)
+            || self.bonds.iter().any(BondForm::is_wildcard)
+            || self
+                .dative_bonds
+                .ids()
+                .any(|id| self.dative_bonds.attributes(id).is_wildcard())
+            || self
+                .aromatic_systems
+                .ids()
+                .any(|id| self.aromatic_systems.attributes(id).is_wildcard())
+            || self
+                .multicenter_bonds
+                .ids()
+                .any(|id| self.multicenter_bonds.attributes(id).is_wildcard())
+            || self
+                .noncovalent_bonds
+                .ids()
+                .any(|id| self.noncovalent_bonds.attributes(id).is_wildcard())
+            || self
+                .stereo_atoms
+                .ids()
+                .any(|id| self.stereo_atoms.attributes(id).is_wildcard())
+            || self
+                .stereo_bonds
+                .ids()
+                .any(|id| self.stereo_bonds.attributes(id).is_wildcard())
+    }
+
     /// Rings selected by `model` and computed using `config`.
     ///
     /// Each call enumerates an owned ring set while borrowing this molecule.

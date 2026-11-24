@@ -109,6 +109,11 @@ impl BondForm {
         self
     }
 
+    /// Returns true exactly when the stored bond order is [`NumForm::Undetermined`].
+    pub fn is_wildcard(&self) -> bool {
+        self.order.is_undetermined()
+    }
+
     /// Apply an attribute update, leaving omitted leaves and constraint keys unchanged.
     pub fn update(&self, update: &BondUpdate) -> Self {
         let mut constraints = self.constraints.clone();
@@ -210,6 +215,7 @@ mod tests {
     use super::*;
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
+    use crate::ir::num::PredExpr;
     use crate::ir::traits::{Lattice, Normalize};
     use crate::ir::{BooleanForm, CisTransStereoForm};
 
@@ -275,6 +281,27 @@ mod tests {
             ]) })]
     fn test_bond_form_with_methods(#[case] actual: BondForm, #[case] expected: BondForm) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(NumForm::Undetermined, true)]
+    #[case::literal(NumForm::Lit(1), false)]
+    #[case::set(NumForm::lit_set([1, 2]), false)]
+    #[case::lower_bound(NumForm::range_from(1), false)]
+    #[case::upper_bound(NumForm::range_to(2), false)]
+    #[case::variable(NumForm::var("order"), false)]
+    #[case::predicate(NumForm::pred_expr(PredExpr::And(vec![])), false)]
+    fn test_bond_form_is_wildcard(
+        #[case] order: NumForm,
+        #[case] expected: bool,
+        #[values(
+            BondForm::default(),
+            BondForm::default().with_charge(0_i64),
+            BondForm::default().with_constraint(BondConstraintForm::aromatic(true))
+        )]
+        form: BondForm,
+    ) {
+        assert_eq!(form.with_order(order).is_wildcard(), expected);
     }
 
     #[rustfmt::skip]

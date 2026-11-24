@@ -714,6 +714,11 @@ impl MulticenterBondForm {
         self
     }
 
+    /// Returns true exactly when the stored electron counts are [`ElectronCountsForm::Undetermined`].
+    pub fn is_wildcard(&self) -> bool {
+        self.electrons.is_undetermined()
+    }
+
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
     /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. `electrons`
     /// and `constraints` are preserved. The result is concrete iff `electrons`
@@ -1843,6 +1848,24 @@ mod tests {
         #[case] expected: MulticenterBondForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(ElectronCountsForm::Undetermined, true)]
+    #[case::literal(ElectronCountsForm::Lit(vec![1, 0, 1]), false)]
+    #[case::empty_literal(ElectronCountsForm::Lit(vec![]), false)]
+    fn test_multicenter_bond_form_is_wildcard(
+        #[case] electrons: ElectronCountsForm,
+        #[case] expected: bool,
+        #[values(
+            MulticenterBondForm::default(),
+            MulticenterBondForm::default().with_charge(0_i64),
+            MulticenterBondForm::default().with_constraint(MulticenterBondConstraintForm::electron_count(2))
+        )]
+        form: MulticenterBondForm,
+    ) {
+        let form = MulticenterBondForm { electrons, ..form };
+        assert_eq!(form.is_wildcard(), expected);
     }
 
     #[rustfmt::skip]

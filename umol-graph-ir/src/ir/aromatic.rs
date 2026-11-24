@@ -715,6 +715,11 @@ impl AromaticSystemForm {
         self
     }
 
+    /// Returns true exactly when the stored electron counts are [`ElectronCountsForm::Undetermined`].
+    pub fn is_wildcard(&self) -> bool {
+        self.electrons.is_undetermined()
+    }
+
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
     /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. `electrons`
     /// and `constraints` are preserved. The result is concrete iff `electrons`
@@ -1894,6 +1899,24 @@ mod tests {
         #[case] expected: AromaticSystemForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(ElectronCountsForm::Undetermined, true)]
+    #[case::literal(ElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1]), false)]
+    #[case::empty_literal(ElectronCountsForm::Lit(vec![]), false)]
+    fn test_aromatic_system_form_is_wildcard(
+        #[case] electrons: ElectronCountsForm,
+        #[case] expected: bool,
+        #[values(
+            AromaticSystemForm::default(),
+            AromaticSystemForm::default().with_charge(0_i64),
+            AromaticSystemForm::default().with_constraint(AromaticSystemConstraintForm::electron_count(6))
+        )]
+        form: AromaticSystemForm,
+    ) {
+        let form = AromaticSystemForm { electrons, ..form };
+        assert_eq!(form.is_wildcard(), expected);
     }
 
     #[rustfmt::skip]

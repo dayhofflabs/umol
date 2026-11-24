@@ -332,8 +332,8 @@ impl Reaction {
     /// Ingest a reaction from reaction SMILES, resolving both sides by default.
     /// With resolve=False, preserve the raised sides without resolution;
     /// chemistry_model and resolve_config are ignored.
-    /// Omitted options select OpenSMILES, SMILES valence, and Natural isotope policy.
-    /// With resolution enabled, an explicitly supplied resolve_config is preserved.
+    /// Defaults are OpenSMILES, SMILES valence, Natural isotope completion and Strict wildcard handling.
+    /// With WildcardPolicy.Admit, either resolved side may retain wildcards.
     #[staticmethod]
     #[pyo3(signature = (
         source,

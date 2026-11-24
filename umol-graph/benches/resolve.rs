@@ -6,7 +6,8 @@
 //! flexible fused component).
 //!
 //! The `smiles_roundtrip/resolve` group isolates resolution with the SMILES counts
-//! model. Parsing, raising, resolver construction, and input cloning are outside timing.
+//! model. Both valence models measure Strict and Admit on the same six fixtures.
+//! Parsing, raising, resolver construction, and input cloning are outside timing.
 //! The `valence_readings` group measures counts/registry admission, registry
 //! classification of resolved molecules, and complete resolution with atom typing.
 //! `aromatic_selection/hueckel` stresses joint selection with 128–4096 admitted
@@ -20,7 +21,10 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::measurement::WallTime;
+use criterion::{
+    criterion_group, criterion_main, BatchSize, Bencher, BenchmarkGroup, BenchmarkId, Criterion,
+};
 use smallvec::smallvec;
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
@@ -30,6 +34,7 @@ use umol_graph::ops::resolve::stereo::StereoResolver;
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
     AtomSelectionAlgorithm, BondsResolver, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver,
+    WildcardPolicy,
 };
 use umol_graph::ops::valence::{
     AtomCompletions, AtomTypeRegistry, AtomTypingValence, CountsValence, ResolveReport,
@@ -40,7 +45,7 @@ use umol_graph_ir::ir::{
     AtomId, BondForm, ElementForm, Molecule, MoleculeEntries, NumForm, Reframe, RollbackMethod,
     TryIntoIr, UnpairedElectronsForm,
 };
-use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
+use umol_graph_ir::{atom_dsl, atom_dsl_concrete, bond_dsl_concrete, mol_dsl, mol_dsl_concrete};
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
@@ -66,40 +71,91 @@ fn bench_ingest_smiles(c: &mut Criterion) {
     g.finish();
 }
 
-fn bench_resolve(c: &mut Criterion) {
-    let model = ChemistryModel {
-        valence: ValenceModel::smiles(),
-        ..ChemistryModel::default()
-    };
+const CHAIN_64: &str = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
+
+fn resolve_baseline_cases() -> [(&'static str, &'static str, Molecule); 6] {
+    let mut chain_atoms = vec![atom_dsl_concrete!("C#h2"); 64];
+    chain_atoms[0] = atom_dsl_concrete!("C#h3");
+    chain_atoms[63] = atom_dsl_concrete!("C#h3");
+    let single = bond_dsl_concrete!("1");
+    [
+        (
+            "charged",
+            "[NH4+]",
+            mol_dsl_concrete!(r#"{:atoms ["N#c+#h4"] :bonds []}"#),
+        ),
+        (
+            "branched",
+            "CC(C)(F)C(Cl)CC",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#h3" "C" "C#h3" "F#n3" "C#h" "Cl#n3" "C#h2" "C#h3"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"] [4 5 "1"] [4 6 "1"] [6 7 "1"]]}"#
+            ),
+        ),
+        (
+            "chain_64",
+            CHAIN_64,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: chain_atoms,
+                bonds: (0..63)
+                    .map(|i| (AtomId(i), AtomId(i + 1), single.clone()))
+                    .collect(),
+                ..Default::default()
+            }),
+        ),
+        (
+            "aromatic_fused",
+            "c1ccc2ccccc2c1",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C#h" "C#h" "C#h" "C" "C#h" "C#h" "C#h" "C#h" "C" "C#h"]
+                :bonds [[0 9 "1"] [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 8 "1"] [3 4 "1"]
+                        [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "[1,1,1,1,1,1,1,1,1,1]"}]}"#
+            ),
+        ),
+        (
+            "tetra_four",
+            "[C@](F)(Cl)(Br)I",
+            mol_dsl_concrete!(
+                r#"{:atoms ["C" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs :ccw}]}"#
+            ),
+        ),
+        (
+            "alkene_four",
+            "F/C(Cl)=C(/Br)I",
+            mol_dsl_concrete!(
+                r#"{:atoms ["F#n3" "C" "Cl#n3" "C" "Br#n3" "I#n3"]
+                :bonds [[0 1 "1"] [1 2 "1"] [1 3 "2"] [3 4 "1"] [3 5 "1"]]
+                :stereo-bonds [{:site 2 :ligands [0 2 4 5] :attrs :e}]}"#
+            ),
+        ),
+    ]
+}
+
+fn bench_resolve_cases(
+    group: &mut BenchmarkGroup<'_, WallTime>,
+    operation: Option<&str>,
+    model: &ChemistryModel,
+    wildcards: WildcardPolicy,
+    additional_cases: &[(&str, &str)],
+) {
     let resolver = Resolver::with_config(
-        &model,
+        model,
         ResolveConfig {
             isotope: IsotopePolicy::Natural,
+            wildcards,
             ..Default::default()
         },
     );
-    let mut group = c.benchmark_group("smiles_roundtrip/resolve");
-    for (name, input) in [
-        (
-            "chain_64",
-            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-        ),
-        ("branched", "CC(C)(F)C(Cl)CC"),
-        ("components", "CC.O.[Na+]"),
-        ("aromatic_fused", "c1ccc2ccccc2c1"),
-        ("aromatic_lone_pair", "[nH]1cccc1"),
-        ("charged", "[NH4+]"),
-        ("radical", "[CH3]"),
-        ("tetra_four", "[C@](F)(Cl)(Br)I"),
-        ("tetra_ring", "C[C@H]1CCCCO1"),
-        ("tetra_explicit_h", "C[C@]1([H])CCCCO1"),
-        ("tetra_lone_pair", "C[S@](=O)CC"),
-        ("alkene_four", "F/C(Cl)=C(/Br)I"),
-        ("shared_chain", "C/C=C/C=C/C"),
-        ("partial_triene", "C/C=C/C=CC=C/C"),
-        ("shared_branch", "F/C=C(/C=C/F)C=C"),
-        ("shared_cycle", "C1/C=C/C=C/CCC1"),
-    ] {
+    let baseline = resolve_baseline_cases()
+        .into_iter()
+        .map(|(name, input, expected)| (name, input, Some(expected)));
+    let additional = additional_cases
+        .iter()
+        .map(|&(name, input)| (name, input, None));
+    for (name, input, expected) in baseline.chain(additional) {
         let table = Smiles::parse(input).unwrap().into_table_ir();
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let mut checked = molecule.clone();
@@ -112,7 +168,11 @@ fn bench_resolve(c: &mut Criterion) {
             ),
             "{name}"
         );
-        group.bench_function(name, |b| {
+        if let Some(expected) = expected {
+            assert!(!molecule.has_wildcards(), "{name}");
+            assert_eq!(checked, expected, "{name}");
+        }
+        let run = |b: &mut Bencher<'_>| {
             b.iter_batched_ref(
                 || molecule.clone(),
                 |molecule| {
@@ -122,8 +182,46 @@ fn bench_resolve(c: &mut Criterion) {
                 },
                 BatchSize::SmallInput,
             );
-        });
+        };
+        if let Some(operation) = operation {
+            group.bench_function(BenchmarkId::new(operation, name), run);
+        } else {
+            group.bench_function(name, run);
+        }
     }
+}
+
+fn bench_resolve(c: &mut Criterion) {
+    let model = ChemistryModel {
+        valence: ValenceModel::smiles(),
+        ..ChemistryModel::default()
+    };
+    let mut group = c.benchmark_group("smiles_roundtrip/resolve");
+    bench_resolve_cases(
+        &mut group,
+        None,
+        &model,
+        WildcardPolicy::Strict,
+        &[
+            ("components", "CC.O.[Na+]"),
+            ("aromatic_lone_pair", "[nH]1cccc1"),
+            ("radical", "[CH3]"),
+            ("tetra_ring", "C[C@H]1CCCCO1"),
+            ("tetra_explicit_h", "C[C@]1([H])CCCCO1"),
+            ("tetra_lone_pair", "C[S@](=O)CC"),
+            ("shared_chain", "C/C=C/C=C/C"),
+            ("partial_triene", "C/C=C/C=CC=C/C"),
+            ("shared_branch", "F/C=C(/C=C/F)C=C"),
+            ("shared_cycle", "C1/C=C/C=C/CCC1"),
+        ],
+    );
+    bench_resolve_cases(
+        &mut group,
+        Some("admit"),
+        &model,
+        WildcardPolicy::Admit,
+        &[],
+    );
     group.finish();
 }
 
@@ -132,25 +230,17 @@ fn bench_valence(c: &mut Criterion) {
     let counts = CountsValence::new(ValenceTable::smiles_table());
     let mut model = ChemistryModel::default();
     model.valence.tie_break = ValenceTieBreak::MostSaturated;
-    let resolver = Resolver::with_config(
-        &model,
-        ResolveConfig {
-            isotope: IsotopePolicy::Natural,
-            ..Default::default()
-        },
-    );
     let mut group = c.benchmark_group("valence_readings");
-    for (name, input) in [
+    let additional = [
         ("octane", "CCCCCCCC"),
-        (
-            "chain_64",
-            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-        ),
         ("benzene", "c1ccccc1"),
         ("pyridine", "c1ccncc1"),
-        ("charged", "[NH4+]"),
         ("radical", "[CH3]"),
-    ] {
+    ];
+    for (name, input) in additional
+        .into_iter()
+        .chain([("chain_64", CHAIN_64), ("charged", "[NH4+]")])
+    {
         let table = Smiles::parse(input).unwrap().into_table_ir();
         let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
         let ground = ingest_smiles(input).unwrap();
@@ -162,13 +252,6 @@ fn bench_valence(c: &mut Criterion) {
                 Solution::Determined(())
             );
         }
-        let mut checked = molecule.clone();
-        assert!(matches!(
-            resolver
-                .resolve_into(&mut checked, RollbackMethod::Journal)
-                .unwrap(),
-            Solution::Determined(_)
-        ));
         group.bench_function(BenchmarkId::new("counts_admit", name), |b| {
             b.iter(|| counts.admit(black_box(&molecule)));
         });
@@ -183,18 +266,21 @@ fn bench_valence(c: &mut Criterion) {
                 }
             });
         });
-        group.bench_function(BenchmarkId::new("typing_resolve", name), |b| {
-            b.iter_batched_ref(
-                || molecule.clone(),
-                |molecule| {
-                    resolver
-                        .resolve_into(black_box(molecule), RollbackMethod::Journal)
-                        .unwrap()
-                },
-                BatchSize::SmallInput,
-            );
-        });
     }
+    bench_resolve_cases(
+        &mut group,
+        Some("typing_resolve"),
+        &model,
+        WildcardPolicy::Strict,
+        &additional,
+    );
+    bench_resolve_cases(
+        &mut group,
+        Some("typing_resolve_admit"),
+        &model,
+        WildcardPolicy::Admit,
+        &[],
+    );
     group.finish();
 }
 

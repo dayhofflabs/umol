@@ -128,49 +128,18 @@ impl HueckelAromaticity {
     where
         F: Fn(AtomId) -> AromaticValence,
     {
-        let eligible_cycles: Vec<RingId> = rings
-            .ids()
-            .filter(|&i| self.filter_ring(molecule, rings, i, electrons_at))
-            .filter(|&i| {
-                let atoms = rings.get(i).expect("ring id from this set").atoms();
-                !excluded_bonds
-                    .iter()
-                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
-            })
-            .collect();
-
-        let mut aromatic_atom_sets: Vec<HashSet<AtomId>> = Vec::new();
-
-        for &cycle_idx in &eligible_cycles {
-            let Some(ring) = rings.get(cycle_idx) else {
-                continue;
-            };
-            let ring_atoms: Vec<AtomId> = ring.atoms().to_vec();
-            if let Some(electrons) = ring_electron_count(&ring_atoms, electrons_at) {
-                if check_4n_plus_2(electrons) {
-                    aromatic_atom_sets.push(ring_atoms.into_iter().collect());
+        let mut aromatic_atom_sets = Vec::new();
+        self.visit_eligible_systems(
+            molecule,
+            rings,
+            excluded_bonds,
+            |atom| matches!(electrons_at(atom), AromaticValence::Aromatic(_)),
+            |atoms| {
+                if ring_electron_count(atoms, electrons_at).is_some_and(check_4n_plus_2) {
+                    aromatic_atom_sets.push(atoms.iter().copied().collect());
                 }
-            }
-        }
-
-        if self.ring_limits.include_unions {
-            let fused_aromatic_systems = self.enumerate_unions(rings, &eligible_cycles);
-            for atoms in fused_aromatic_systems {
-                if excluded_bonds
-                    .iter()
-                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
-                {
-                    continue;
-                }
-                let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
-                if let Some(electrons) = ring_electron_count(&atom_vec, electrons_at) {
-                    if check_4n_plus_2(electrons) {
-                        aromatic_atom_sets.push(atoms);
-                    }
-                }
-            }
-        }
-
+            },
+        );
         let merged = merge_overlapping_aromatic_systems(aromatic_atom_sets);
 
         let mut candidates = Vec::new();
@@ -209,40 +178,75 @@ impl HueckelAromaticity {
         candidates
     }
 
-    fn is_atom_eligible<F>(&self, molecule: &Molecule, id: AtomId, electrons_at: &F) -> bool
-    where
-        F: Fn(AtomId) -> AromaticValence,
-    {
-        let in_scope = match &self.element_scope {
-            ElementScope::Any => true,
-            ElementScope::AllowList(elements) => matches!(
-                molecule.atom(id).element(),
-                ElementForm::Lit(element) if elements.contains(element)
-            ),
-        };
-        in_scope && matches!(electrons_at(id), AromaticValence::Aromatic(_))
-    }
-
-    fn filter_ring<F>(
+    /// Eligible rings and unions whose electron total needs a missing contribution.
+    pub(in crate::ops) fn systems_missing_contributions(
         &self,
         molecule: &Molecule,
         rings: &RingSet,
-        ring: RingId,
-        electrons_at: &F,
-    ) -> bool
-    where
-        F: Fn(AtomId) -> AromaticValence,
-    {
-        let Some(ring) = rings.get(ring) else {
-            return false;
-        };
-        let len = ring.len();
-        if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
-            return false;
+        missing: &BTreeSet<AtomId>,
+        can_contribute: impl Fn(AtomId) -> bool,
+    ) -> Vec<Vec<AtomId>> {
+        let mut incomplete = Vec::new();
+        if missing.iter().any(|&atom| rings.contains_atom(atom)) {
+            self.visit_eligible_systems(
+                molecule,
+                rings,
+                &bond_exclusions(molecule),
+                |atom| missing.contains(&atom) || can_contribute(atom),
+                |atoms| {
+                    if atoms.iter().any(|atom| missing.contains(atom)) {
+                        incomplete.push(atoms.to_vec());
+                    }
+                },
+            );
         }
-        ring.atoms()
-            .iter()
-            .all(|&a| self.is_atom_eligible(molecule, a, electrons_at))
+        incomplete
+    }
+
+    /// Visits the member sets allowed by topology, scope and bond assertions before electron counting.
+    fn visit_eligible_systems(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        excluded_bonds: &[[AtomId; 2]],
+        can_contribute: impl Fn(AtomId) -> bool,
+        mut visit: impl FnMut(&[AtomId]),
+    ) {
+        let mut eligible = Vec::new();
+        for ring in rings.iter() {
+            let atoms = ring.atoms();
+            if !(self.ring_limits.min_ring_size..=self.ring_limits.max_ring_size)
+                .contains(&ring.len())
+                || !atoms.iter().all(|&atom| {
+                    let in_scope = match &self.element_scope {
+                        ElementScope::Any => true,
+                        ElementScope::AllowList(elements) => matches!(
+                            molecule.atom(atom).element(),
+                            ElementForm::Lit(element) if elements.contains(element)
+                        ),
+                    };
+                    in_scope && can_contribute(atom)
+                })
+                || excluded_bonds
+                    .iter()
+                    .any(|[a, b]| atoms.contains(a) && atoms.contains(b))
+            {
+                continue;
+            }
+            visit(atoms);
+            eligible.push(ring.id);
+        }
+        if self.ring_limits.include_unions {
+            for members in self.enumerate_unions(rings, &eligible) {
+                if !excluded_bonds
+                    .iter()
+                    .any(|[a, b]| members.contains(a) && members.contains(b))
+                {
+                    let atoms: Vec<_> = members.into_iter().collect();
+                    visit(&atoms);
+                }
+            }
+        }
     }
 
     /// Connected ring unions for acceptance, walking rings that share at

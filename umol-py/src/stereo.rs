@@ -1168,6 +1168,11 @@ macro_rules! stereo_value {
                 $rust_form::from_str(s).map(Self::from_rust).map_err(parse_error)
             }
 
+            /// Whether the stored stereo kind or coset is undetermined.
+            fn is_wildcard(&self) -> bool {
+                self.value.is_wildcard()
+            }
+
             fn __str__(&self) -> String {
                 self.value.to_string()
             }
@@ -1395,6 +1400,13 @@ macro_rules! stereo_view {
                 let molecule = self.owner.try_borrow(py)?;
                 molecule.check_access(self.counter, stringify!($view))?;
                 Ok(self.id.0)
+            }
+
+            /// Whether the stored stereo kind or coset is undetermined.
+            fn is_wildcard(&self, py: Python<'_>) -> PyResult<bool> {
+                let molecule = self.owner.try_borrow(py)?;
+                molecule.check_access(self.counter, stringify!($view))?;
+                Ok(self.view(molecule.to_rust())?.attributes().is_wildcard())
             }
 
             fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

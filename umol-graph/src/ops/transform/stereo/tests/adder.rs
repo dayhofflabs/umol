@@ -14,7 +14,7 @@ use umol_graph_ir::mol_dsl_concrete;
 use umol_utils::solution::Solution;
 
 use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};
-use crate::ops::resolve::{StereoResolveConfig, StereoResolver};
+use crate::ops::resolve::{StereoResolveConfig, StereoResolver, WildcardPolicy};
 use crate::ops::stereo::{
     StereoDerivation, StereoInconsistency, StereoPerceiver, StereoPerceptionError, StereoSelection,
     StereoSite,
@@ -471,7 +471,8 @@ fn test_stereo_adder_transform_resolution(
             StereoResolveConfig {
                 ring_config: config.ring_config,
                 ..Default::default()
-            }
+            },
+            WildcardPolicy::Admit
         )
         .resolve(molecule.clone()),
         Solution::Determined(Molecule::from_entries(resolved))

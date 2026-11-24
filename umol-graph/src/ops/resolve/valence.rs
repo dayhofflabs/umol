@@ -6,7 +6,7 @@ use umol_graph_ir::ir::{AtomConstraintKey, AtomId, Molecule};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::{ValenceCandidateSource, ValenceModel, ValenceTieBreak};
-use crate::ops::resolve::ResolveState;
+use crate::ops::resolve::{ResolveState, WildcardPolicy};
 use crate::ops::valence::{AtomTypingValence, CountsValence, ValenceContradiction};
 use crate::ops::validate::{DerivedKind, IncidenceConstraintInvariantsValidator};
 
@@ -26,27 +26,32 @@ pub enum ValenceError {}
 pub enum ValenceProjectError {}
 
 impl<'a> ValenceResolver<'a> {
+    /// Uses the model's candidate source with strict wildcard admission.
     pub fn new(model: &'a ValenceModel) -> Self {
+        Self::with_config(model, WildcardPolicy::Strict)
+    }
+
+    /// Borrows the model's candidate source and sets its wildcard policy for admission.
+    pub fn with_config(model: &'a ValenceModel, wildcards: WildcardPolicy) -> Self {
         match &model.candidates {
             ValenceCandidateSource::AtomTyping { registry } => {
-                Self::AtomTyping(AtomTypingValence::new(registry.as_ref()))
+                Self::AtomTyping(AtomTypingValence::with_config(registry, wildcards))
             }
             ValenceCandidateSource::Counts { table } => {
-                Self::Counts(CountsValence::new(table.as_ref()))
+                Self::Counts(CountsValence::with_config(table, wildcards))
             }
         }
     }
 
-    /// Admission: the candidate sets of every atom under resolution, with
-    /// the incidence-constraint invariants checked first; no edits are
-    /// produced. The chemistry solution rides `Solution`; the operational
-    /// channel is currently uninhabited.
-    /// Established constraint contradictions take precedence over underdetermination.
+    /// Checks the valence, donated-pair and accepted-pair assertions of every atom,
+    /// including wildcard atoms, and returns the candidate sets for atoms under resolution.
+    /// An assertion that needs an open order makes admission underdetermined.
+    /// An established contradiction from an assertion or the candidate source takes precedence.
     pub fn admit(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<ResolveState, ValenceContradiction>, ValenceError> {
-        let mut underdetermined = false;
+        let mut incidence_underdetermined = false;
         for atom in molecule.atoms().ids() {
             for key in [
                 AtomConstraintKey::Valence,
@@ -63,15 +68,12 @@ impl<'a> ValenceResolver<'a> {
                     .expect("atom id came from the molecule atom store")
                 {
                     Solution::Determined(()) => {}
-                    Solution::Underdetermined(()) => underdetermined = true,
+                    Solution::Underdetermined(()) => incidence_underdetermined = true,
                     Solution::Contradictory(contradiction) => {
                         return Ok(Solution::Contradictory(contradiction.into()));
                     }
                 }
             }
-        }
-        if underdetermined {
-            return Ok(Solution::Underdetermined(ResolveState::default()));
         }
         let completions = match self {
             Self::AtomTyping(resolver) => resolver
@@ -81,6 +83,9 @@ impl<'a> ValenceResolver<'a> {
                 .admit(molecule)
                 .map_contradiction(ValenceContradiction::from),
         };
+        if incidence_underdetermined && !completions.is_contradictory() {
+            return Ok(Solution::Underdetermined(ResolveState::default()));
+        }
         Ok(completions.map(|completions| ResolveState {
             completions,
             aromatic_systems: Vec::new(),
@@ -123,17 +128,25 @@ impl<'a> ValenceResolver<'a> {
 mod tests {
     use std::borrow::Cow;
 
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use smallvec::smallvec;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AtomConstraintForm, AtomForm, AtomId};
+    use umol_graph_ir::ir::{AtomConstraintForm, AtomId, TryIntoIr};
     use umol_graph_ir::{atom_dsl, mol_dsl};
+    use umol_io::smiles::Smiles;
 
     use super::*;
     use crate::ops::valence::{
         AtomCompletions, AtomTypeRegistry, AtomTypingError, CountsError, ValenceTable,
     };
     use crate::ops::validate::IncidenceConstraintInvariantsContradiction;
+
+    #[fixture]
+    fn branched() -> Molecule {
+        (&Smiles::parse("*C(O)C").unwrap().into_table_ir())
+            .try_into_ir(&())
+            .unwrap()
+    }
 
     #[rstest]
     fn test_valence_resolver_new() {
@@ -151,25 +164,76 @@ mod tests {
             ValenceResolver::new(&atom_typing),
             ValenceResolver::AtomTyping(_)
         ));
+        let wildcard = mol_dsl!(r#"{:atoms ["*"]}"#);
+        for model in [&counts, &atom_typing] {
+            assert_eq!(
+                ValenceResolver::new(model).admit(&wildcard),
+                Ok(Solution::Underdetermined(ResolveState::default()))
+            );
+        }
+    }
+
+    #[rstest]
+    #[case::strict(
+        WildcardPolicy::Strict,
+        Solution::Underdetermined(ResolveState::default())
+    )]
+    #[case::admit(WildcardPolicy::Admit, Solution::Determined(ResolveState::default()))]
+    fn test_valence_resolver_with_config(
+        #[case] wildcards: WildcardPolicy,
+        #[case] expected: Solution<ResolveState, ValenceContradiction>,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] model: ValenceModel,
+    ) {
+        let resolver = ValenceResolver::with_config(&model, wildcards);
+        assert_eq!(resolver.admit(&mol_dsl!(r#"{:atoms ["*"]}"#)), Ok(expected));
     }
 
     #[rstest]
     #[case::counts(
         ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
-        atom_dsl!("C#c0#h4#n0#u0#s#v0#a!"),
+        WildcardPolicy::Strict,
+        mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("C#c0#h4#n0#u0#s#v0#a!")])]),
     )]
     #[case::atom_typing(
         ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
             "C#c0#h4#n0#u0#s#v0#a!"
         )]))),
-        atom_dsl!("C#c0#h4#n0#u0#s#v0#a!"),
+        WildcardPolicy::Strict,
+        mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("C#c0#h4#n0#u0#s#v0#a!")])]),
     )]
-    fn test_valence_resolver_admit(#[case] model: ValenceModel, #[case] expected: AtomForm) {
-        let molecule = mol_dsl!(r#"{:atoms ["C#c0#h4#n0#u0#s#v0#a!"]}"#);
-        let mut completions = AtomCompletions::new();
-        completions.insert(AtomId(0), smallvec![expected]);
+    #[case::counts_branched(
+        ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+        WildcardPolicy::Admit, branched(),
+        AtomCompletions::from_iter([
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v3#a!")]),
+            (AtomId(2), smallvec![atom_dsl!("O#i=#c0#h1#n2#u0#s#v1#a!")]),
+            (AtomId(3), smallvec![
+                atom_dsl!("C#i=#c0#h1#n1#u0#s#v1#a!"),
+                atom_dsl!("C#i=#c0#h3#n0#u0#s#v1#a!"),
+            ]),
+        ]),
+    )]
+    #[case::atom_typing_branched(
+        ValenceModel::default(), WildcardPolicy::Admit, branched(),
+        AtomCompletions::from_iter([
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v3#d0#t0#a!#m!")]),
+            (AtomId(2), smallvec![atom_dsl!("O#i=#c0#h1#n2#u0#s#v1#d0#t0#a!#m!")]),
+            (AtomId(3), smallvec![
+                atom_dsl!("C#i=#c0#h3#n0#u0#s#v1#d0#t0#a!#m!"),
+                atom_dsl!("C#i=#c0#h1#n1#u0#s#v1#d0#t0#a!#m!"),
+            ]),
+        ]),
+    )]
+    fn test_valence_resolver_admit(
+        #[case] model: ValenceModel,
+        #[case] wildcards: WildcardPolicy,
+        #[case] molecule: Molecule,
+        #[case] completions: AtomCompletions,
+    ) {
         assert_eq!(
-            ValenceResolver::new(&model).admit(&molecule),
+            ValenceResolver::with_config(&model, wildcards).admit(&molecule),
             Ok(Solution::Determined(ResolveState {
                 completions,
                 ..ResolveState::default()
@@ -258,6 +322,58 @@ mod tests {
     }
 
     #[rstest]
+    #[case::entailed(
+        mol_dsl!(r#"{:atoms ["*#v1#d1" "*" "*#t1"] :bonds [[0 1 "1"]]
+            :dative-bonds [{:donors [0] :acceptor 2 :attrs "1"}]}"#),
+        Solution::Determined(ResolveState::default()),
+    )]
+    #[case::open_valence(
+        mol_dsl!(r#"{:atoms ["*#v1" "*" "C#c0#h4"] :bonds [[0 1 "*"]]}"#),
+        Solution::Underdetermined(ResolveState::default()),
+    )]
+    #[case::open_donation(
+        mol_dsl!(r#"{:atoms ["*#d1" "*"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        Solution::Underdetermined(ResolveState::default()),
+    )]
+    #[case::open_acceptance(
+        mol_dsl!(r#"{:atoms ["*" "*#t1"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        Solution::Underdetermined(ResolveState::default()),
+    )]
+    #[case::valence_mismatch(
+        mol_dsl!(r#"{:atoms ["*#v2" "*"] :bonds [[0 1 "1"]]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintInvariantsContradiction::Atom {
+                atom: AtomId(0), constraint: AtomConstraintForm::valence(2),
+            },
+        )),
+    )]
+    #[case::donation_mismatch(
+        mol_dsl!(r#"{:atoms ["*#d0" "*"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintInvariantsContradiction::Atom {
+                atom: AtomId(0), constraint: AtomConstraintForm::donated_pairs(0),
+            },
+        )),
+    )]
+    #[case::open_valence_acceptance_mismatch(
+        mol_dsl!(r#"{:atoms ["*#v1" "*" "*#t0"] :bonds [[0 1 "*"]]
+            :dative-bonds [{:donors [1] :acceptor 2 :attrs "1"}]}"#),
+        Solution::Contradictory(ValenceContradiction::Constraint(
+            IncidenceConstraintInvariantsContradiction::Atom {
+                atom: AtomId(2), constraint: AtomConstraintForm::accepted_pairs(0),
+            },
+        )),
+    )]
+    fn test_valence_resolver_admit_wildcard_constraints(
+        #[case] molecule: Molecule,
+        #[case] expected: Solution<ResolveState, ValenceContradiction>,
+        #[values(ValenceModel::smiles(), ValenceModel::default())] model: ValenceModel,
+    ) {
+        let resolver = ValenceResolver::with_config(&model, WildcardPolicy::Admit);
+        assert_eq!(resolver.admit(&molecule), Ok(expected));
+    }
+
+    #[rstest]
     #[case::unknown_before_contradiction(
         mol_dsl!(r#"{:atoms ["C#v1" "C" "C#v1"] :bonds [[0 1 "*"]]}"#),
         AtomId(2), AtomConstraintForm::valence(1),
@@ -315,11 +431,13 @@ mod tests {
     #[rstest]
     #[case::counts(
         ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0#h4" "Fe#c0#h0#a+"]}"#),
         ValenceContradiction::Counts(CountsError::UndeterminedAromaticValence)
     )]
     #[case::atom_typing(
         ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4#v0")]))),
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0#h3"]}"#),
         ValenceContradiction::AtomTyping(AtomTypingError::NoMatch {
             atom_id: AtomId(1),
@@ -327,13 +445,26 @@ mod tests {
             charge: Some(0),
         })
     )]
+    #[case::open_valence_counts(
+        ValenceModel::smiles(), WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*#v1" "*" "F#c0#h2"] :bonds [[0 1 "*"]]}"#),
+        ValenceContradiction::Counts(CountsError::NoMatch),
+    )]
+    #[case::open_valence_atom_typing(
+        ValenceModel::default(), WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*#v1" "*" "F#c0#h2"] :bonds [[0 1 "*"]]}"#),
+        ValenceContradiction::AtomTyping(AtomTypingError::NoMatch {
+            atom_id: AtomId(2), element: Element::F, charge: Some(0),
+        }),
+    )]
     fn test_valence_resolver_admit_error(
         #[case] model: ValenceModel,
+        #[case] wildcards: WildcardPolicy,
         #[case] molecule: Molecule,
         #[case] expected: ValenceContradiction,
     ) {
         assert_eq!(
-            ValenceResolver::new(&model).admit(&molecule),
+            ValenceResolver::with_config(&model, wildcards).admit(&molecule),
             Ok(Solution::Contradictory(expected))
         );
     }

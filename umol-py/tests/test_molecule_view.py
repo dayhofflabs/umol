@@ -80,6 +80,26 @@ def entity(request):
     return request.param
 
 
+def test_entity_is_wildcard(molecule, entity):
+    name, _, form = entity
+    collection = getattr(molecule, name)
+    view = collection[0]
+    wildcard = type(form).parse("*")
+
+    assert not form.is_wildcard()
+    assert wildcard.is_wildcard()
+    assert not view.is_wildcard()
+    assert not molecule.has_wildcards()
+
+    collection[0] = wildcard
+    assert view.is_wildcard()
+    assert molecule.has_wildcards()
+
+    collection[0] = form
+    assert not view.is_wildcard()
+    assert not molecule.has_wildcards()
+
+
 @pytest.mark.parametrize("operation", [
     "combine_empty", "combine_nonempty", "transact", "tracked_transact",
 ])
@@ -104,6 +124,7 @@ def test_molecule_view_invalidation(molecule, entity, operation):
     for access in (
         lambda: view.id,
         lambda: first.id,
+        view.is_wildcard,
         lambda: repr(view),
         lambda: getattr(view, field),
         lambda: setattr(view, field, getattr(form, field)),

@@ -251,6 +251,7 @@ PUBLIC_EXPORTS = frozenset(
     ValenceModel
     ValenceTable
     ValenceTieBreak
+    WildcardPolicy
     NumForm
     PredExpr
     ArithExpr

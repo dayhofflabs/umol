@@ -188,8 +188,8 @@ pub fn parse_stereo_atom(input: &str) -> Result<StereoAtomDsl, ParseError> {
     stereo_atom.parse(input).map_err(|e| e.into_inner())
 }
 
-/// Parse the configuration head of a stereo element: `*` (undetermined geometry,
-/// no coset) or `<kind><coset>` (a concrete kind with a coset). `*` and `Th*` are distinct.
+/// Parse the principal field of a stereo entity. It is `*` for an undetermined kind
+/// or `<kind><coset>` for a specified kind, as in `Th*` for an undetermined tetrahedral coset.
 fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationForm> {
     multispace0.parse_next(i)?;
     if opt('*').parse_next(i)?.is_some() {
@@ -832,8 +832,7 @@ macro_rules! stereo_constraint_fmt {
 stereo_constraint_fmt! { fmt_stereo_atom_constraint, StereoAtomConstraintForm }
 stereo_constraint_fmt! { fmt_stereo_bond_constraint, StereoBondConstraintForm }
 
-/// Write the stereo atom DSL
-/// Render the configuration head of a stereo element: `*` or `<kind><coset>`.
+/// Render the stereo entity's principal field as `*` or `<kind><coset>`.
 fn fmt_stereo_configuration(
     f: &mut fmt::Formatter<'_>,
     configuration: &StereoConfigurationForm,
@@ -880,9 +879,10 @@ pub fn parse_stereo_bond_update(input: &str) -> Result<StereoBondUpdateDsl, Pars
 
 /// Surface DSL wrapper around a StereoAtomUpdate.
 ///
-/// Display and ToEdn omit constraints unless the update supplies a kind. Unchanged
-/// and Undetermined configuration heads remain distinct. Source-dependent constraint
-/// changes require lowering against a source before export to preserve their effect.
+/// Display and ToEdn omit constraints unless the update supplies a kind. Omitting the
+/// principal field preserves the source configuration. Writing `*` sets it to undetermined.
+/// Source-dependent constraint changes require lowering against a source before export
+/// to preserve their effect.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoAtomUpdateDsl(pub StereoAtomUpdate);
@@ -1026,9 +1026,10 @@ fn stereo_atom_update(i: &mut &str) -> PResult<StereoAtomUpdateDsl> {
 
 /// Surface DSL wrapper around a StereoBondUpdate.
 ///
-/// Display and ToEdn omit constraints unless the update supplies a kind. Unchanged
-/// and Undetermined configuration heads remain distinct. Source-dependent constraint
-/// changes require lowering against a source before export to preserve their effect.
+/// Display and ToEdn omit constraints unless the update supplies a kind. Omitting the
+/// principal field preserves the source configuration. Writing `*` sets it to undetermined.
+/// Source-dependent constraint changes require lowering against a source before export
+/// to preserve their effect.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StereoBondUpdateDsl(pub StereoBondUpdate);

@@ -1472,6 +1472,15 @@ macro_rules! stereo_element {
                 self
             }
 
+            /// Returns true when the stored stereo kind or coset is undetermined.
+            pub fn is_wildcard(&self) -> bool {
+                matches!(
+                    self.configuration,
+                    StereoConfigurationForm::Undetermined
+                        | StereoConfigurationForm::Kinded(_, StereoCoset::Undetermined)
+                )
+            }
+
             /// Retain the description unchanged; stereo configurations have no concrete default.
             pub fn into_concrete(self) -> Self {
                 self

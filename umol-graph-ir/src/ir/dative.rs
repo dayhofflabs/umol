@@ -727,6 +727,11 @@ impl DativeBondForm {
         self
     }
 
+    /// Returns true exactly when the stored bond order is [`NumForm::Undetermined`].
+    pub fn is_wildcard(&self) -> bool {
+        self.order.is_undetermined()
+    }
+
     /// No-op: `DativeBondForm` has no value-bearing fields besides `order`,
     /// which is essential and never filled. Provided for API symmetry.
     pub fn into_concrete(self) -> Self {
@@ -822,6 +827,7 @@ mod tests {
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
+    use crate::ir::num::PredExpr;
     use crate::ir::traits::{Lattice, Normalize};
 
     #[rstest]
@@ -1821,6 +1827,26 @@ mod tests {
             ]) })]
     fn test_dative_bond_form_with_methods(#[case] actual: DativeBondForm, #[case] expected: DativeBondForm) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(NumForm::Undetermined, true)]
+    #[case::literal(NumForm::Lit(1), false)]
+    #[case::set(NumForm::lit_set([1, 2]), false)]
+    #[case::lower_bound(NumForm::range_from(1), false)]
+    #[case::upper_bound(NumForm::range_to(2), false)]
+    #[case::variable(NumForm::var("order"), false)]
+    #[case::predicate(NumForm::pred_expr(PredExpr::And(vec![])), false)]
+    fn test_dative_bond_form_is_wildcard(
+        #[case] order: NumForm,
+        #[case] expected: bool,
+        #[values(
+            DativeBondForm::default(),
+            DativeBondForm::default().with_constraint(DativeBondConstraintForm::aromatic(true))
+        )]
+        form: DativeBondForm,
+    ) {
+        assert_eq!(form.with_order(order).is_wildcard(), expected);
     }
 
     #[rstest]

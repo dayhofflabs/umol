@@ -556,6 +556,7 @@ mod tests {
     use umol_perm::{Orientation, Permutation};
 
     use super::*;
+    use crate::ops::model::{ElementScope, StereoKindModel};
 
     // Tetrahedral stereocenter, four distinct halide ligands → trivial ligand
     // symmetry, genuinely stereogenic, every ligand pair diastereotopic.
@@ -710,6 +711,30 @@ mod tests {
             .validate(&molecule)
             .unwrap();
         assert_eq!(solution, Solution::Determined(()));
+    }
+
+    #[rstest]
+    #[case::any(ElementScope::Any, Solution::Determined(()))]
+    #[case::carbon(ElementScope::AllowList(vec![Element::C]), Solution::Contradictory(
+        StereoConformanceContradiction::Inconsistency(
+            StereoInconsistency::StereoAtomFailure { stereo_atom: StereoAtomId(0) },
+        ),
+    ))]
+    fn test_stereo_conformance_validator_validate_scope(
+        #[case] scope: ElementScope,
+        #[case] expected: Solution<(), StereoConformanceContradiction>,
+    ) {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["*#h0#n0" "F" "Cl" "Br" "I"]
+            :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
+        );
+        let mut model = StereoModel::default();
+        model.kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel { scope });
+        assert_eq!(
+            StereoConformanceValidator::new(&model).validate(&molecule),
+            Ok(expected)
+        );
     }
 
     #[rstest]

@@ -11,8 +11,6 @@ use smallvec::SmallVec;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_chem::spin::{SpinState, UnpairedElectrons};
-#[cfg(test)]
-use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
     AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId, Lattice, Molecule, NumForm,
@@ -23,6 +21,7 @@ use umol_utils::solution::Solution;
 use super::{AtomCompletions, ValenceEntry, ValenceTable};
 use crate::ops::invariant::ValenceInvariants;
 use crate::ops::model::ValenceTieBreak;
+use crate::ops::resolve::WildcardPolicy;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CountsError {
@@ -119,80 +118,99 @@ impl CountsInput {
 #[derive(Clone, Debug)]
 pub struct CountsValence<'a> {
     table: &'a ValenceTable,
+    wildcards: WildcardPolicy,
 }
 
 impl<'a> CountsValence<'a> {
+    /// Uses strict wildcard handling during admission.
     pub fn new(table: &'a ValenceTable) -> Self {
-        Self { table }
+        Self::with_config(table, WildcardPolicy::Strict)
     }
 
-    /// Admission: every atom under resolution gets its candidate set —
-    /// the counts enumeration per atom — and no edits are produced. A
-    /// non-literal element makes the whole admission underdetermined and
-    /// empty; plurality is state, not a solution.
+    /// Borrows the valence table and sets the wildcard policy for admission.
+    pub fn with_config(table: &'a ValenceTable, wildcards: WildcardPolicy) -> Self {
+        Self { table, wildcards }
+    }
+
+    /// Enumerates candidates for atoms that need a valence completion.
+    /// Strict requires literal elements. Admit skips wildcard atoms and reports
+    /// Underdetermined if a required completion depends on an open bond order.
+    /// Under either policy a symbolic element makes admission underdetermined.
+    /// Underdetermined carries an empty set of completions.
     /// Isotope information is preserved without defaulting or selection.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, CountsError> {
         for atom in molecule.atoms().iter() {
-            if atom.element().as_lit().is_none() {
+            if !atom.element().is_ground()
+                && (self.wildcards == WildcardPolicy::Strict || !atom.attributes().is_wildcard())
+            {
                 return Solution::Underdetermined(AtomCompletions::new());
             }
         }
 
         let mut completions = AtomCompletions::new();
+        let mut underdetermined = false;
         for id in molecule.atoms().ids() {
             match self.admitted_completions(molecule, id) {
-                Ok(Some(candidates)) => completions.insert(id, candidates),
-                Ok(None) => {}
-                Err(contradiction) => return Solution::Contradictory(contradiction),
+                Solution::Determined(Some(candidates)) => completions.insert(id, candidates),
+                Solution::Determined(None) => {}
+                Solution::Underdetermined(()) => underdetermined = true,
+                Solution::Contradictory(contradiction) => {
+                    return Solution::Contradictory(contradiction)
+                }
             }
         }
-        Solution::Determined(completions)
+        if underdetermined {
+            Solution::Underdetermined(AtomCompletions::new())
+        } else {
+            Solution::Determined(completions)
+        }
     }
 
     fn admitted_completions(
         &self,
         molecule: &Molecule,
         atom_id: AtomId,
-    ) -> Result<Option<SmallVec<[AtomForm; 1]>>, CountsError> {
+    ) -> Solution<Option<SmallVec<[AtomForm; 1]>>, CountsError, ()> {
         let atom = molecule.atom(atom_id);
+        let Some(element) = atom.element().as_lit() else {
+            return Solution::Determined(None);
+        };
         let Some(AtomConstraintForm::AromaticValence(aromatic)) = atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::AromaticValence)
         else {
-            return Err(CountsError::NoMatch);
+            return Solution::Contradictory(CountsError::NoMatch);
         };
         if atom.is_ground() {
-            // A field-ground atom whose aromatic evidence is present but
-            // whose contribution is undetermined is still under resolution:
-            // the system entity needs its contribution. Membership in a
-            // stored system determines the contribution, so those atoms are
-            // complete.
-            let contribution_open = matches!(
+            if !matches!(
                 aromatic,
                 AromaticValenceForm::Aromatic(NumForm::Undetermined)
-            );
-            if !contribution_open {
-                return Ok(None);
+            ) {
+                return Solution::Determined(None);
             }
-            let element = atom.element().as_lit().expect("ground element");
-            let charge = atom.charge().as_lit().expect("ground charge");
+            // Completing just the aromatic contribution needs the table entry for the acceptor count.
             let Some(AtomConstraintForm::AcceptedPairs(accepted_pairs)) = atom
                 .constraints()
                 .evidenced_complete(AtomConstraintKey::AcceptedPairs)
             else {
-                return Err(CountsError::NoMatch);
+                return Solution::Contradictory(CountsError::NoMatch);
             };
-            let Some(accepted_pairs) = accepted_pairs.as_lit() else {
-                return Ok(None);
+            let (Some(accepted_pairs), Some(charge)) =
+                (accepted_pairs.as_lit(), atom.charge().as_lit())
+            else {
+                return match self.wildcards {
+                    WildcardPolicy::Strict => Solution::Determined(None),
+                    WildcardPolicy::Admit => Solution::Underdetermined(()),
+                };
             };
             let Some(entry) = element
                 .shift((2 * accepted_pairs - charge) as i8)
                 .and_then(|shifted| self.table.entry(shifted))
             else {
-                return Ok(None);
+                return Solution::Determined(None);
             };
             if entry.aromatic_valences.is_empty() {
-                return Ok(None);
+                return Solution::Determined(None);
             }
             let mut candidates = SmallVec::new();
             for &aromatic_valence in &entry.aromatic_valences {
@@ -204,20 +222,35 @@ impl<'a> CountsValence<'a> {
                     ));
                 candidates.push(candidate);
             }
-            return Ok(Some(candidates));
+            return Solution::Determined(Some(candidates));
         }
-        if atom.element().is_undetermined() {
-            return Ok(None);
-        };
-        if atom.charge().is_undetermined() {
-            return Ok(None);
-        };
-
-        let Some(input) = CountsInput::for_molecule_atom(molecule, atom_id, aromatic)? else {
-            return Ok(None);
-        };
-        let candidates = self.candidate_states(atom.attributes(), input)?;
-        Ok(Some(candidates))
+        let charge = atom.charge().as_lit();
+        if charge.is_none() && self.wildcards == WildcardPolicy::Strict {
+            return Solution::Determined(None);
+        }
+        let needs_contribution = aromatic.is_aromatic() && !aromatic.is_ground();
+        match CountsInput::for_molecule_atom(molecule, atom_id, aromatic) {
+            Ok(Some(input)) => {
+                let Some(charge) = charge else {
+                    return Solution::Determined(None);
+                };
+                match self.candidate_states(atom.attributes(), element, charge, input) {
+                    Ok(candidates) => Solution::Determined(Some(candidates)),
+                    Err(error) => Solution::Contradictory(error),
+                }
+            }
+            Err(error) => Solution::Contradictory(error),
+            Ok(None)
+                if self.wildcards == WildcardPolicy::Admit
+                    && (needs_contribution
+                        || !atom.implicit_hydrogens().is_ground()
+                        || !atom.lone_pairs().is_ground()
+                        || !atom.unpaired_electrons().is_ground()) =>
+            {
+                Solution::Underdetermined(())
+            }
+            Ok(None) => Solution::Determined(None),
+        }
     }
 
     /// Every candidate state admitted by the table and the atom's literals,
@@ -227,6 +260,8 @@ impl<'a> CountsValence<'a> {
     fn candidate_states(
         &self,
         atom: &AtomForm,
+        element: Element,
+        charge: i64,
         input: CountsInput,
     ) -> Result<SmallVec<[AtomForm; 1]>, CountsError> {
         let CountsInput {
@@ -237,9 +272,6 @@ impl<'a> CountsValence<'a> {
             multicenter_valence,
         } = input;
         let is_aromatic = matches!(aromatic_valence, AromaticValenceForm::Aromatic(_));
-        let element = atom.element.as_lit().unwrap();
-        let charge = atom.charge.as_lit().unwrap();
-
         let entry = element
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.table.entry(shifted));
@@ -362,10 +394,10 @@ impl<'a> CountsValence<'a> {
         if !atom.is_ground() {
             return Solution::Underdetermined(());
         }
-        let Some(element) = atom.element().as_lit() else {
+        let (Some(element), Some(charge)) = (atom.element().as_lit(), atom.charge().as_lit())
+        else {
             return Solution::Underdetermined(());
         };
-        let charge = atom.charge().as_lit().unwrap_or(0);
         let input = atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::AromaticValence)
@@ -388,7 +420,7 @@ impl<'a> CountsValence<'a> {
             }
         };
         let valence = input.valence;
-        match self.candidate_states(atom.attributes(), input) {
+        match self.candidate_states(atom.attributes(), element, charge, input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,
@@ -634,10 +666,15 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsForm, count: i64) -
 
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use rstest::rstest;
     use smallvec::smallvec;
-    use umol_graph_ir::ir::{AromaticSystemForm, BondForm, IsotopeMassForm};
+    use umol_graph_ir::ir::{
+        AromaticSystemForm, BondForm, IsotopeMassForm, MoleculeEntries, TryIntoIr,
+    };
     use umol_graph_ir::{atom_dsl, mol_dsl};
+    use umol_io::smiles::Smiles;
 
     use super::*;
     use crate::ops::invariant::ValenceInvariantsValidator;
@@ -710,7 +747,26 @@ mod tests {
     }
 
     #[rstest]
+    fn test_counts_valence_new() {
+        let table = ValenceTable::smiles_table();
+        let resolver = CountsValence::new(table);
+        assert!(ptr::eq(resolver.table, table));
+        assert_eq!(resolver.wildcards, WildcardPolicy::Strict);
+    }
+
+    #[rstest]
+    fn test_counts_valence_with_config(
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+    ) {
+        let table = ValenceTable::smiles_table();
+        let resolver = CountsValence::with_config(table, wildcards);
+        assert!(ptr::eq(resolver.table, table));
+        assert_eq!(resolver.wildcards, wildcards);
+    }
+
+    #[rstest]
     #[case::singleton_methane(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0#h4"]}"#),
         Solution::Determined({
             let mut completions = AtomCompletions::new();
@@ -722,6 +778,7 @@ mod tests {
         })
     )]
     #[case::plural_bare_carbon(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0"]}"#),
         Solution::Determined({
             let mut completions = AtomCompletions::new();
@@ -739,6 +796,7 @@ mod tests {
         })
     )]
     #[case::water_singletons(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
         Solution::Determined({
             let mut completions = AtomCompletions::new();
@@ -756,6 +814,7 @@ mod tests {
         })
     )]
     #[case::ethane_carbons_plural(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#),
         Solution::Determined({
             let mut completions = AtomCompletions::new();
@@ -770,11 +829,81 @@ mod tests {
             completions
         })
     )]
+    #[case::branched(
+        WildcardPolicy::Admit,
+        (&Smiles::parse("*C(O)C").unwrap().into_table_ir()).try_into_ir(&()).unwrap(),
+        Solution::Determined(AtomCompletions::from_iter([
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v3#a!")]),
+            (AtomId(2), smallvec![atom_dsl!("O#i=#c0#h1#n2#u0#s#v1#a!")]),
+            (AtomId(3), smallvec![
+                atom_dsl!("C#i=#c0#h1#n1#u0#s#v1#a!"),
+                atom_dsl!("C#i=#c0#h3#n0#u0#s#v1#a!"),
+            ]),
+        ])),
+    )]
+    #[case::wildcard(WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["*"]}"#), Solution::Determined(AtomCompletions::new()))]
+    #[case::element_set(WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0" "{C,N}"]}"#), Solution::Underdetermined(AtomCompletions::new()))]
+    #[case::element_complement(WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["!{C,N}"]}"#), Solution::Underdetermined(AtomCompletions::new()))]
+    #[case::element_variable(WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["?e"]}"#), Solution::Underdetermined(AtomCompletions::new()))]
+    #[case::open_order_missing_h(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0#n0#u0#s" "C#c0#h3#n0#u0#s"] :bonds [[0 1 "*"]]}"#),
+        Solution::Underdetermined(AtomCompletions::new()),
+    )]
+    #[case::open_order_missing_charge_and_h(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#),
+        Solution::Underdetermined(AtomCompletions::new()),
+    )]
+    #[case::open_order_complete(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u0#s" "C#c0#h3#n0#u0#s"] :bonds [[0 1 "*"]]}"#),
+        Solution::Determined(AtomCompletions::new()),
+    )]
+    #[case::open_donation(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["N#c0#h3#u0#s" "*"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        Solution::Underdetermined(AtomCompletions::new()),
+    )]
+    #[case::open_acceptance(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["*" "B#c0#h3#u0#s"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        Solution::Underdetermined(AtomCompletions::new()),
+    )]
+    #[case::open_dative_complete(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["N#c0#h3#n1#u0#s" "B#c0#h3#n0#u0#s"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        Solution::Determined(AtomCompletions::new()),
+    )]
+    #[case::open_order_aromatic_contribution(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0#h1#n0#u0#s#a+" "*"] :bonds [[0 1 "*"]]}"#),
+        Solution::Underdetermined(AtomCompletions::new()),
+    )]
+    #[case::double_order_aromatic_contribution(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0#h1#n0#u0#s#a+" "*"] :bonds [[0 1 "2"]]}"#),
+        Solution::Determined(AtomCompletions::from_iter([
+            (AtomId(0), smallvec![atom_dsl!("C#c0#h1#n0#u0#s#v2#a1")]),
+        ])),
+    )]
+    #[case::triple_order_aromatic_contribution(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0#h1#n0#u0#s#a+" "*"] :bonds [[0 1 "3"]]}"#),
+        Solution::Determined(AtomCompletions::from_iter([
+            (AtomId(0), smallvec![atom_dsl!("C#c0#h1#n0#u0#s#v3#a0")]),
+        ])),
+    )]
+    #[case::open_acceptance_aromatic_contribution(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s" "*" "*"] :bonds [[0 1 "1#a"]]
+            :dative-bonds [{:donors [2] :acceptor 0 :attrs "*"}]}"#),
+        Solution::Underdetermined(AtomCompletions::new()),
+    )]
+    #[case::symbolic_charge(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c{0,1}"]}"#),
+        Solution::Determined(AtomCompletions::new()),
+    )]
+    #[case::later_mismatch(
+        WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["C#c0" "*" "F#c0#h2"] :bonds [[0 1 "*"]]}"#),
+        Solution::Contradictory(CountsError::NoMatch),
+    )]
     fn test_counts_valence_admit(
+        #[case] wildcards: WildcardPolicy,
         #[case] molecule: Molecule,
         #[case] expected: Solution<AtomCompletions, CountsError>,
     ) {
-        let resolver = CountsValence::new(ValenceTable::default_table());
+        let resolver = CountsValence::with_config(ValenceTable::default_table(), wildcards);
         assert_eq!(resolver.admit(&molecule), expected);
     }
 
@@ -782,75 +911,75 @@ mod tests {
     #[case::multicenter(
         r#"{:atoms ["H#c-#h0" "Cr" "Cr"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
-        Ok(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!")]))
     )]
     #[case::asserted_multicenter(
         r#"{:atoms ["H#c-#h0#m2"]}"#,
-        Ok(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!#m2")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!#m2")]))
     )]
     #[case::multicenter_zero(
         r#"{:atoms ["H#c+#h0" "O" "O"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "[0,1,1]"}]}"#,
-        Ok(Some(smallvec![atom_dsl!("H#c+#h0#n0#u0#s#v0#a!")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("H#c+#h0#n0#u0#s#v0#a!")]))
     )]
     #[case::unknown_multicenter(
         r#"{:atoms ["H#c-#h0" "Cr" "Cr"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
-        Ok(None)
+        Solution::Determined(None)
     )]
-    #[case::asserted_unknown_multicenter(r#"{:atoms ["H#c-#h0#m+"]}"#, Ok(None))]
+    #[case::asserted_unknown_multicenter(r#"{:atoms ["H#c-#h0#m+"]}"#, Solution::Determined(None))]
     #[case::asserted_multicenter_narrows_relation(
         r#"{:atoms ["H#c-#h0#m2" "Cr" "Cr"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#,
-        Ok(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!#m2")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("H#c-#h0#n0#u0#s#v0#a!#m2")]))
     )]
     #[case::conflicting_multicenter(
         r#"{:atoms ["H#c-#h0#m0" "Cr" "Cr"]
             :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#,
-        Err(CountsError::NoMatch)
+        Solution::Contradictory(CountsError::NoMatch)
     )]
     #[case::donated_pair(
         r#"{:atoms ["N#c0#h3" "B"]
             :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
-        Ok(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!")]))
     )]
     #[case::asserted_donated_pair(
         r#"{:atoms ["N#c0#h3#d"]}"#,
-        Ok(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!#d")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!#d")]))
     )]
     #[case::unknown_donated_pair(
         r#"{:atoms ["N#c0#h3" "B"]
             :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
-        Ok(None)
+        Solution::Determined(None)
     )]
     #[case::asserted_donation_narrows_relation(
         r#"{:atoms ["N#c0#h3#d" "B"]
             :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#,
-        Ok(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!#d")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("N#c0#h3#n0#u0#s#v0#a!#d")]))
     )]
     #[case::conflicting_donation(
         r#"{:atoms ["N#c0#h3#d0" "B"]
             :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
-        Err(CountsError::NoMatch)
+        Solution::Contradictory(CountsError::NoMatch)
     )]
     #[case::unknown_accepted_pair(
         r#"{:atoms ["B#c0#h3" "N"]
             :dative-bonds [{:donors [1] :acceptor 0 :attrs "*"}]}"#,
-        Ok(None)
+        Solution::Determined(None)
     )]
     #[case::conflicting_acceptance(
         r#"{:atoms ["B#c0#h3#t0" "N"]
             :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"}]}"#,
-        Err(CountsError::NoMatch)
+        Solution::Contradictory(CountsError::NoMatch)
     )]
     #[case::aromatic_contribution(
         r#"{:atoms ["C#c0#h0" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]
             :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]}"#,
-        Ok(Some(smallvec![atom_dsl!("C#c0#h0#n1#u0#s#v2#a0")]))
+        Solution::Determined(Some(smallvec![atom_dsl!("C#c0#h0#n1#u0#s#v2#a0")]))
     )]
     fn test_counts_valence_admitted_completions_contributions(
         #[case] input: &str,
-        #[case] expected: Result<Option<SmallVec<[AtomForm; 1]>>, CountsError>,
+        #[case] expected: Solution<Option<SmallVec<[AtomForm; 1]>>, CountsError, ()>,
     ) {
         let molecule = mol_dsl!(input);
         let original = molecule.clone();
@@ -1015,6 +1144,7 @@ mod tests {
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    #[case::wildcard(mol_dsl!(r#"{:atoms ["*"]}"#))]
     fn test_counts_valence_admit_partial(#[case] molecule: Molecule) {
         assert_eq!(
             CountsValence::new(ValenceTable::default_table()).admit(&molecule),
@@ -1290,8 +1420,11 @@ mod tests {
         #[case] expected: Vec<&str>,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
+        let atom = atom_dsl!(input);
+        let element = atom.element.as_lit().unwrap();
+        let charge = atom.charge.as_lit().unwrap();
         let candidates = resolver
-            .candidate_states(&atom_dsl!(input), counts_input)
+            .candidate_states(&atom, element, charge, counts_input)
             .unwrap();
         assert_eq!(
             candidates
@@ -1316,8 +1449,11 @@ mod tests {
         #[case] expected: Vec<&str>,
     ) {
         let resolver = CountsValence::new(ValenceTable::smiles_table());
+        let atom = atom_dsl!(input);
+        let element = atom.element.as_lit().unwrap();
+        let charge = atom.charge.as_lit().unwrap();
         let candidates = resolver
-            .candidate_states(&atom_dsl!(input), counts_input)
+            .candidate_states(&atom, element, charge, counts_input)
             .unwrap();
         assert_eq!(
             candidates
@@ -1343,8 +1479,11 @@ mod tests {
         #[case] expected: CountsError,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
+        let atom = atom_dsl!(input);
+        let element = atom.element.as_lit().unwrap();
+        let charge = atom.charge.as_lit().unwrap();
         assert_eq!(
-            resolver.candidate_states(&atom_dsl!(input), counts_input),
+            resolver.candidate_states(&atom, element, charge, counts_input),
             Err(expected)
         );
     }

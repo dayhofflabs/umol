@@ -649,6 +649,11 @@ impl NoncovalentBondForm {
         self
     }
 
+    /// Returns true exactly when the stored interaction kind is [`NoncovalentBondKindForm::Undetermined`].
+    pub fn is_wildcard(&self) -> bool {
+        self.kind.is_undetermined()
+    }
+
     /// No-op on value fields: `NoncovalentBondForm` has no value-bearing field
     /// besides `kind`, which is essential and never filled. Constraints are
     /// preserved. Provided for API symmetry.
@@ -1632,6 +1637,21 @@ mod tests {
         #[case] expected: NoncovalentBondForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(NoncovalentBondKindForm::Undetermined, true)]
+    #[case::literal(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond), false)]
+    fn test_noncovalent_bond_form_is_wildcard(
+        #[case] kind: NoncovalentBondKindForm,
+        #[case] expected: bool,
+        #[values(
+            NoncovalentBondForm::default(),
+            NoncovalentBondForm::default().with_constraint(NoncovalentBondConstraintForm::intramolecular(true))
+        )]
+        form: NoncovalentBondForm,
+    ) {
+        assert_eq!(form.with_kind(kind).is_wildcard(), expected);
     }
 
     #[rstest]

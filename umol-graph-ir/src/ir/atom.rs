@@ -135,6 +135,11 @@ impl AtomForm {
         self
     }
 
+    /// Returns true exactly when the stored element is [`ElementForm::Undetermined`].
+    pub fn is_wildcard(&self) -> bool {
+        self.element.is_undetermined()
+    }
+
     /// Apply an attribute update, leaving omitted fields and constraint keys unchanged.
     pub fn update(&self, update: &AtomUpdate) -> Self {
         let mut constraints = self.constraints.clone();
@@ -908,6 +913,28 @@ mod tests {
         AtomForm { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4)), ..Default::default() })]
     fn test_atom_form_with_methods(#[case] actual: AtomForm, #[case] expected: AtomForm) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(ElementForm::Undetermined, true)]
+    #[case::literal(ElementForm::Lit(Element::C), false)]
+    #[case::set(ElementForm::lit_set([Element::C, Element::N]), false)]
+    #[case::complement(ElementForm::not(Element::H), false)]
+    #[case::empty_complement(ElementForm::not_set([]), false)]
+    #[case::variable(ElementForm::var("e"), false)]
+    #[case::variable_in(ElementForm::var_in("e", [Element::C, Element::N]), false)]
+    #[case::variable_not_in(ElementForm::var_not_in("e", [Element::H]), false)]
+    fn test_atom_form_is_wildcard(
+        #[case] element: ElementForm,
+        #[case] expected: bool,
+        #[values(
+            AtomForm::default(),
+            AtomForm::default().with_isotope_mass(1_u32),
+            AtomForm::default().with_constraint(AtomConstraintForm::valence(4))
+        )]
+        form: AtomForm,
+    ) {
+        assert_eq!(form.with_element(element).is_wildcard(), expected);
     }
 
     #[rustfmt::skip]

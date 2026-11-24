@@ -575,7 +575,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::missing_head("#c+1", ParseError::ExpectedElectronCounts)]
+    #[case::missing_principal("#c+1", ParseError::ExpectedElectronCounts)]
     #[case::unknown("[1,1,1]#x", ParseError::UnknownAromaticSystemPredicate("#x".to_string()))]
     #[case::unknown_a("[1,1,1]#a", ParseError::UnknownAromaticSystemPredicate("#a".to_string()))]
     #[case::dup_charge("[1,1,1]#c+#c-", ParseError::DuplicateAromaticSystemPredicate("#c".to_string()))]

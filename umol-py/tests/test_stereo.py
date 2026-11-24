@@ -352,21 +352,21 @@ def test_stereo_update_constraints_asserted(update_type, container_type, constra
     [StereogenicityForm.Lit(Stereogenicity.Stereogenic), StereogenicityForm.LitSet(set())],
 )
 @pytest.mark.parametrize(
-    ("configuration", "head"),
+    ("configuration", "principal"),
     [
         (StereoConfigurationUpdate.Unchanged(), ""),
         (StereoConfigurationUpdate.Undetermined(), "*"),
     ],
 )
 def test_stereo_update_str_kindless(
-    form_type, update_type, container_type, constraint_type, payload, configuration, head
+    form_type, update_type, container_type, constraint_type, payload, configuration, principal
 ):
     constraints = container_type([constraint_type.Stereogenicity(payload)])
     update = update_type(configuration=configuration, constraints=constraints)
     form = form_type(StereoConfigurationForm.Undetermined(), constraints=constraints)
 
-    assert str(update) == head
-    assert repr(update) == f"{update_type.__name__}.parse('{head}')"
+    assert str(update) == principal
+    assert repr(update) == f"{update_type.__name__}.parse('{principal}')"
     assert update_type.parse(str(update)) == update_type(configuration=configuration)
     assert list(update.constraints.values()) == list(constraints.values())
     key = constraint_type.Stereogenicity(payload).key

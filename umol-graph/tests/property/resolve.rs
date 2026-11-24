@@ -4,6 +4,11 @@
 //! chains and mixed-element chains with charges, lone pairs, and localized bonds. The
 //! input leaves electron fields undetermined; both valence sources and tie-breaks must
 //! produce the expected complete molecule.
+//! With a terminal wildcard, admission preserves that atom and completes the same neighbors.
+//! Literal element and bond-order assignments are checked against the partial result, including
+//! aromatic contributions, stereo frames, and assertions discharged by a relation.
+//! The four aggregate entry points agree on outcomes, reports, and rollback for ring
+//! skeletons and carbons with competing valence completions.
 //!
 //! Valence discharge compares complete outputs for independent NH3/BH3 pairs,
 //! with or without a dative bond, literal or set-valued assertions, and complete
@@ -28,8 +33,9 @@
 //! it during planning; Keep preserves it, and all determined results retain integrity.
 //! This relation checks stored-system handling, not the shared perception algorithm.
 //!
-//! Stereo discharge is checked against independent results for mixtures of stored
+//! Under wildcard admission, stereo discharge is checked against independent results for mixtures of stored
 //! and newly added tetrahedral and cis-trans entities with literal or open configurations.
+//! Strict requires every site to have a stored literal coset.
 //! Bearer hydrogen and lone-pair counts are explicit; unrelated inherent fields remain open.
 //! Existing assertions and unrelated keys are preserved, and resolution is idempotent.
 //!
@@ -50,8 +56,10 @@
 //! this property specifically checks pruning soundness rather than those stages.
 
 use std::collections::BTreeSet;
+use std::mem;
 
 use proptest::prelude::*;
+use proptest::test_runner::TestCaseResult;
 use umol_chem::element::Element;
 use umol_graph::ops::aromaticity::{AromaticityContradiction, AromaticityInconsistency};
 use umol_graph::ops::model::{
@@ -61,21 +69,24 @@ use umol_graph::ops::model::{
 use umol_graph::ops::resolve::{
     AromaticityFailurePolicy, AromaticityResolveConfig, AromaticityResolver,
     AtomSelectionAlgorithm, IsotopePolicy, ProjectFlags, ResolveConfig, Resolver, StereoResolver,
+    WildcardPolicy,
 };
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
     AtomConstraintKey, AtomForm, AtomId, BondConstraintForm, BondConstraintKey, BondForm, BondId,
     BooleanForm, CisTransStereoForm, Constraint, DativeBondForm, ElectronCountsForm, ElementForm,
-    IsotopeMassForm, Lattice, Molecule, MoleculeConstraint, MoleculeEntries, NumForm, Reframe,
-    RollbackMethod, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
+    IsotopeMassForm, Lattice, Molecule, MoleculeConstraint, MoleculeEntries, Normalize, NumForm,
+    Reframe, RollbackMethod, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, StereoLigand,
     StereoLigandKind, TetrahedralStereoForm, TryIntoIr, UnpairedElectronsForm,
 };
-use umol_graph_ir::{atom_dsl, bond_dsl};
+use umol_graph_ir::{atom_dsl, bond_dsl, mol_dsl_concrete};
 use umol_io::ctfile::parser::parse_mol_to_ir;
 use umol_io::smiles::Smiles;
 use umol_utils::solution::Solution;
 
-use crate::strategies::{aromatic_skeleton, atom_selection_skeleton, stored_aromatic_skeleton};
+use crate::strategies::{
+    aromatic_skeleton, atom_selection_skeleton, publication_molecule, stored_aromatic_skeleton,
+};
 
 proptest! {
     #[test]
@@ -205,7 +216,9 @@ proptest! {
         let mut expected = MoleculeEntries::default();
         let mut added_atoms = Vec::new();
         let mut added_bonds = Vec::new();
+        let mut open = false;
         for (cis_trans, stored, coset) in sites {
+            open |= !stored || coset == 2;
             let coset = if coset == 2 { StereoCoset::Undetermined } else { StereoCoset::Lit(coset) };
             let offset = source.atoms.len();
             let a = AtomId::from(offset);
@@ -263,7 +276,18 @@ proptest! {
         expected.stereo_bonds.extend(added_bonds);
         let mut molecule = Molecule::from_entries(source);
         let expected = Molecule::from_entries(expected);
-        let resolver = StereoResolver::new(&StereoModel::default());
+        let strict = StereoResolver::new(&StereoModel::default());
+        let mut strict_input = molecule.clone();
+        if open {
+            prop_assert_eq!(strict.resolve(molecule.clone()), Solution::Underdetermined(()));
+            prop_assert_eq!(strict.resolve_into(&mut strict_input), Solution::Underdetermined(()));
+            prop_assert_eq!(&strict_input, &molecule);
+        } else {
+            prop_assert_eq!(strict.resolve(molecule.clone()), Solution::Determined(expected.clone()));
+            prop_assert_eq!(strict.resolve_into(&mut strict_input), Solution::Determined(()));
+            prop_assert_eq!(&strict_input, &expected);
+        }
+        let resolver = StereoResolver::with_config(&StereoModel::default(), Default::default(), WildcardPolicy::Admit);
         prop_assert_eq!(resolver.resolve(molecule.clone()), Solution::Determined(expected.clone()));
         prop_assert_eq!(resolver.resolve_into(&mut molecule), Solution::Determined(()));
         prop_assert_eq!(&molecule, &expected);
@@ -666,10 +690,7 @@ proptest! {
             tie_break: if most_saturated {ValenceTieBreak::MostSaturated} else {ValenceTieBreak::Strict},
             ..if typing {ValenceModel::default()} else {ValenceModel::smiles()}
         }, ..Default::default()};
-        let resolver = Resolver::new(&model);
-        prop_assert_eq!(resolver.resolve(input.clone()), Ok(Solution::Determined(original.clone())));
-        prop_assert_eq!(resolver.resolve_into(&mut input, RollbackMethod::Journal), Ok(Solution::Determined(())));
-        prop_assert_eq!(input, original);
+        check_chain_completion(&model, &input, &original)?;
     }
 
     #[test]
@@ -720,12 +741,186 @@ proptest! {
                     valence: ValenceModel {tie_break, ..valence.clone()},
                     ..Default::default()
                 };
-                let resolver = Resolver::new(&model);
-                let mut molecule = input.clone();
-                prop_assert_eq!(resolver.resolve_into(&mut molecule, RollbackMethod::Journal), Ok(Solution::Determined(())));
-                prop_assert_eq!(&molecule, &source);
+                check_chain_completion(&model, &input, &source)?;
             }
         }
     }
 
+    #[test]
+    fn test_resolver_resolve_refinement(
+        site in 1u32..4, mass in prop_oneof![Just(IsotopeMassForm::Natural), Just(IsotopeMassForm::Lit(13))],
+        frame in Just(vec![0u32, 6, 7, 8]).prop_shuffle(),
+        typing in any::<bool>(), daylight in any::<bool>(),
+    ) {
+        let mut editor = mol_dsl_concrete!(r#"{:atoms ["C#a1" "C#h#a1" "C#h#a1" "C#h#a1" "N#h#n1#a2"
+                "C#T+" "F#n3" "Cl#n3" "C#h2" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]
+                    [0 5 "1"] [5 6 "1"] [5 7 "1"] [5 8 "1"] [8 9 "*"]]}"#).edit();
+        let ligands: Vec<_> = frame.into_iter().map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect();
+        editor.add_stereo_atom(AtomId(5), &ligands, StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)));
+        let site = AtomId(site);
+        {
+            let mut atom = editor.atom_mut(site);
+            atom.attributes_mut().element = ElementForm::Undetermined;
+            atom.attributes_mut().isotope_mass = mass;
+            atom.attributes_mut().lone_pairs = NumForm::Undetermined;
+        }
+        let source = editor.finish().unwrap();
+        let model = ChemistryModel {
+            valence: if typing { ValenceModel::default() } else { ValenceModel::smiles() },
+            aromaticity: if daylight { AromaticityModel::daylight() } else { AromaticityModel::permissive() },
+            ..Default::default()
+        };
+        let config = ResolveConfig {
+            aromaticity: AromaticityResolveConfig { aromatic_valence_failure: AromaticityFailurePolicy::Keep, ..Default::default() },
+            ..Default::default()
+        };
+        let admitted = Resolver::with_config(&model, ResolveConfig { wildcards: WildcardPolicy::Admit, ..config });
+        let strict = Resolver::with_config(&model, config);
+        let partial = admitted.resolve(source.clone()).unwrap();
+        prop_assert!(partial.is_determined(), "{partial:?}");
+        let partial = partial.into_determined().unwrap().reframe().unwrap();
+        prop_assert_eq!(partial.atom(site).element(), &ElementForm::Undetermined);
+        prop_assert_eq!(partial.bond(BondId(9)).order(), &NumForm::Undetermined);
+        prop_assert_eq!(partial.stereo_atoms().at(AtomId(5)).unwrap().coset_for(ligands), Some(StereoCoset::Lit(1)));
+        prop_assert_eq!(partial.aromatic_systems().count(), usize::from(!daylight));
+        let contribution = AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(NumForm::Lit(1)));
+        prop_assert_eq!(partial.atom(site).attributes().constraints.get(AtomConstraintKey::AromaticValence),
+            daylight.then_some(&contribution));
+
+        for element in [Element::C, Element::N, Element::O] {
+            for order in 1..=3 {
+                let mut assigned = source.clone();
+                assigned.atom_mut(site).attributes_mut().element = ElementForm::Lit(element);
+                assigned.bond_mut(BondId(9)).attributes_mut().order = NumForm::Lit(order);
+                let result = strict.resolve(assigned).unwrap();
+                if element == Element::C && order == 1 {
+                    prop_assert!(result.is_determined(), "{result:?}");
+                }
+                let Solution::Determined(full) = result else { continue; };
+                prop_assert!(full.is_concrete());
+                let full = full.reframe().unwrap();
+                prop_assert_eq!(full.atom(site).element(), &ElementForm::Lit(element));
+                prop_assert_eq!(full.bond(BondId(9)).order(), &NumForm::Lit(order));
+                if element == Element::C && order == 1 {
+                    prop_assert_eq!(full.atom(site).attributes().constraints.get(AtomConstraintKey::AromaticValence), None);
+                    prop_assert_eq!(full.atom(site).constraints().derived(AtomConstraintKey::AromaticValence), Some(contribution.clone()));
+                }
+                prop_assert_eq!(partial.atoms().count(), full.atoms().count());
+                prop_assert_eq!(partial.bonds().count(), full.bonds().count());
+                for atom in partial.atoms().iter() {
+                    let target = full.atom(atom.id());
+                    let mut pattern = atom.attributes().clone();
+                    let assertions = mem::take(&mut pattern.constraints);
+                    prop_assert!(pattern.matches(target.attributes()));
+                    prop_assert!(target.constraints().satisfies(&assertions));
+                }
+                for bond in partial.bonds().iter() {
+                    let target = full.bond(bond.id());
+                    prop_assert_eq!(bond.atom_ids(), target.atom_ids());
+                    prop_assert!(bond.attributes().matches(target.attributes()));
+                }
+                for system in partial.aromatic_systems().iter() {
+                    let target = full.aromatic_systems().of(system.atom_ids()).unwrap();
+                    prop_assert!(system.atom_ids().eq(target.atom_ids()));
+                    prop_assert!(system.attributes().matches(target.attributes()));
+                }
+                for stereo in partial.stereo_atoms().iter() {
+                    let target = full.stereo_atoms().at(stereo.site_id()).unwrap();
+                    prop_assert_eq!(stereo.ligand_ids(), target.ligand_ids());
+                    prop_assert!(stereo.attributes().matches(target.attributes()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolver_resolve_with_report_outcomes(
+        mut source in prop_oneof![
+            publication_molecule(),
+            (1usize..8).prop_map(|count| Molecule::from_entries(MoleculeEntries {
+                atoms: vec![atom_dsl!("C#i=#c0"); count], ..Default::default()
+            })),
+        ],
+        open_element in any::<bool>(), typing in any::<bool>(), saturated in any::<bool>(),
+        rollback in prop_oneof![Just(RollbackMethod::Clone), Just(RollbackMethod::Journal)],
+    ) {
+        if open_element {
+            source.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Undetermined;
+        }
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                tie_break: if saturated { ValenceTieBreak::MostSaturated } else { ValenceTieBreak::Strict },
+                ..if typing { ValenceModel::default() } else { ValenceModel::smiles() }
+            },
+            ..Default::default()
+        };
+        for wildcards in [WildcardPolicy::Strict, WildcardPolicy::Admit] {
+            let resolver = Resolver::with_config(&model, ResolveConfig { isotope: IsotopePolicy::Natural, wildcards, ..Default::default() });
+            let (owned, report) = match resolver.resolve_with_report(source.clone()) {
+                Ok(Solution::Determined((molecule, report))) =>
+                    (Ok(Solution::Determined(molecule)), Ok(Solution::Determined(report))),
+                Ok(Solution::Underdetermined(report)) =>
+                    (Ok(Solution::Underdetermined(())), Ok(Solution::Underdetermined(report))),
+                Ok(Solution::Contradictory(cause)) =>
+                    (Ok(Solution::Contradictory(cause.clone())), Ok(Solution::Contradictory(cause))),
+                Err(error) => (Err(error.clone()), Err(error)),
+            };
+            let mut reported = source.clone();
+            prop_assert_eq!(resolver.resolve_into_with_report(&mut reported, rollback), report.clone());
+            let mut plain = source.clone();
+            prop_assert_eq!(resolver.resolve_into(&mut plain, rollback), report.map(|outcome| outcome.map(|_| ())));
+            prop_assert_eq!(&reported, &plain);
+            if let Ok(Solution::Determined(expected)) = &owned {
+                if wildcards == WildcardPolicy::Strict {
+                    prop_assert!(expected.is_concrete());
+                }
+                prop_assert_eq!(&plain, expected);
+            } else {
+                prop_assert!(plain.normalized_eq(&source));
+            }
+            prop_assert_eq!(resolver.resolve(source.clone()), owned);
+        }
+    }
+}
+
+fn check_chain_completion(
+    model: &ChemistryModel,
+    input: &Molecule,
+    completed: &Molecule,
+) -> TestCaseResult {
+    let terminal = AtomId::from(input.atoms().count() - 1);
+    let mut wildcard = input.clone();
+    wildcard.atom_mut(terminal).attributes_mut().element = ElementForm::Undetermined;
+    let mut partial = completed.clone();
+    *partial.atom_mut(terminal).attributes_mut() = wildcard.atom(terminal).attributes().clone();
+
+    for (policy, source, expected) in [
+        (WildcardPolicy::Strict, input, completed),
+        (WildcardPolicy::Admit, input, completed),
+        (WildcardPolicy::Admit, &wildcard, &partial),
+    ] {
+        let resolver = Resolver::with_config(
+            model,
+            ResolveConfig {
+                wildcards: policy,
+                ..Default::default()
+            },
+        );
+        prop_assert_eq!(
+            resolver.resolve(source.clone()),
+            Ok(Solution::Determined(expected.clone()))
+        );
+        let mut actual = source.clone();
+        prop_assert_eq!(
+            resolver.resolve_into(&mut actual, RollbackMethod::Journal),
+            Ok(Solution::Determined(()))
+        );
+        prop_assert_eq!(&actual, expected);
+    }
+    prop_assert_eq!(
+        Resolver::new(model).resolve(wildcard),
+        Ok(Solution::Underdetermined(()))
+    );
+    Ok(())
 }

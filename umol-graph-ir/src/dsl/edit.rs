@@ -8657,9 +8657,12 @@ mod tests {
     #[case::square_planar("Sp0", StereoKind::SquarePlanar)]
     #[case::trigonal_bipyramidal("Tb0", StereoKind::TrigonalBipyramidal)]
     #[case::octahedral("Oh0", StereoKind::Octahedral)]
-    fn test_edits_dsl_stereo_atom_configurations(#[case] head: &str, #[case] kind: StereoKind) {
+    fn test_edits_dsl_stereo_atom_configurations(
+        #[case] principal: &str,
+        #[case] kind: StereoKind,
+    ) {
         let text = format!(
-            r#"[{{:stereo-atom {{:modify-configuration [[0 {{:expect "*" :update "{head}"}}]]}}}}]"#
+            r#"[{{:stereo-atom {{:modify-configuration [[0 {{:expect "*" :update "{principal}"}}]]}}}}]"#
         );
         let expected = Edits::from_iter([Edit::ModifyStereoAtomConfigurations {
             changes: vec![(
@@ -8683,9 +8686,9 @@ mod tests {
     #[case::missing_coset("Th")]
     #[case::constraint_tail("Th0#g/")]
     #[case::trailing("Th0 Ct0")]
-    fn test_edits_dsl_stereo_atom_configurations_error(#[case] head: &str) {
+    fn test_edits_dsl_stereo_atom_configurations_error(#[case] principal: &str) {
         let text = format!(
-            r#"[{{:stereo-atom {{:modify-configuration [[0 {{:expect "*" :update "{head}"}}]]}}}}]"#
+            r#"[{{:stereo-atom {{:modify-configuration [[0 {{:expect "*" :update "{principal}"}}]]}}}}]"#
         );
         assert!(matches!(
             EditsDsl::from_edn_str(&text),
@@ -8802,9 +8805,12 @@ mod tests {
     #[case::square_planar("Sp0", StereoKind::SquarePlanar)]
     #[case::trigonal_bipyramidal("Tb0", StereoKind::TrigonalBipyramidal)]
     #[case::octahedral("Oh0", StereoKind::Octahedral)]
-    fn test_edits_dsl_stereo_bond_configurations(#[case] head: &str, #[case] kind: StereoKind) {
+    fn test_edits_dsl_stereo_bond_configurations(
+        #[case] principal: &str,
+        #[case] kind: StereoKind,
+    ) {
         let text = format!(
-            r#"[{{:stereo-bond {{:modify-configuration [[0 {{:expect "*" :update "{head}"}}]]}}}}]"#
+            r#"[{{:stereo-bond {{:modify-configuration [[0 {{:expect "*" :update "{principal}"}}]]}}}}]"#
         );
         let expected = Edits::from_iter([Edit::ModifyStereoBondConfigurations {
             changes: vec![(
@@ -8828,9 +8834,9 @@ mod tests {
     #[case::missing_coset("Th")]
     #[case::constraint_tail("Th0#g/")]
     #[case::trailing("Th0 Ct0")]
-    fn test_edits_dsl_stereo_bond_configurations_error(#[case] head: &str) {
+    fn test_edits_dsl_stereo_bond_configurations_error(#[case] principal: &str) {
         let text = format!(
-            r#"[{{:stereo-bond {{:modify-configuration [[0 {{:expect "*" :update "{head}"}}]]}}}}]"#
+            r#"[{{:stereo-bond {{:modify-configuration [[0 {{:expect "*" :update "{principal}"}}]]}}}}]"#
         );
         assert!(matches!(
             EditsDsl::from_edn_str(&text),

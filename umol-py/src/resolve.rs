@@ -8,7 +8,7 @@ use umol_graph::ops::resolve::{
     AtomSelectionAlgorithm as GraphAtomSelectionAlgorithm, IsotopePolicy as GraphIsotopePolicy,
     ResolveConfig as GraphResolveConfig, ResolveContradiction as GraphResolveContradiction,
     StereoFailurePolicy as GraphStereoFailurePolicy,
-    StereoResolveConfig as GraphStereoResolveConfig,
+    StereoResolveConfig as GraphStereoResolveConfig, WildcardPolicy as GraphWildcardPolicy,
 };
 use umol_graph::ops::valence::{
     AtomCompletions as GraphAtomCompletions, ResolveReport as GraphResolveReport,
@@ -41,6 +41,30 @@ impl IsotopePolicy {
         match self {
             Self::Strict => GraphIsotopePolicy::Strict,
             Self::Natural => GraphIsotopePolicy::Natural,
+        }
+    }
+}
+
+/// Whether resolution admits entities with an undetermined principal field or component.
+#[pyclass(eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WildcardPolicy {
+    Strict,
+    Admit,
+}
+
+impl WildcardPolicy {
+    pub(crate) fn from_rust(policy: GraphWildcardPolicy) -> Self {
+        match policy {
+            GraphWildcardPolicy::Strict => Self::Strict,
+            GraphWildcardPolicy::Admit => Self::Admit,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphWildcardPolicy {
+        match self {
+            Self::Strict => GraphWildcardPolicy::Strict,
+            Self::Admit => GraphWildcardPolicy::Admit,
         }
     }
 }
@@ -193,7 +217,7 @@ impl AromaticityResolveConfig {
 }
 
 /// Ring-detection algorithms and policies for unrealizable stereo descriptions.
-/// Ambiguity remains underdetermined under every policy; mismatches always contradict.
+/// Missing evidence for a required frame yields underdetermination. Mismatches are contradictory.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StereoResolveConfig(GraphStereoResolveConfig);
@@ -257,7 +281,7 @@ impl StereoResolveConfig {
     }
 }
 
-/// Operational policy for molecule resolution. Isotope completion defaults to Strict.
+/// Operational policy for molecule resolution. Isotope completion and wildcard handling both default to Strict.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ResolveConfig(GraphResolveConfig);
@@ -265,16 +289,18 @@ pub struct ResolveConfig(GraphResolveConfig);
 #[pymethods]
 impl ResolveConfig {
     #[new]
-    #[pyo3(signature = (*, aromaticity, stereo, isotope=IsotopePolicy::Strict))]
+    #[pyo3(signature = (*, aromaticity, stereo, isotope=IsotopePolicy::Strict, wildcards=WildcardPolicy::Strict))]
     fn new(
         aromaticity: AromaticityResolveConfig,
         stereo: StereoResolveConfig,
         isotope: IsotopePolicy,
+        wildcards: WildcardPolicy,
     ) -> Self {
         Self(GraphResolveConfig {
             isotope: isotope.to_rust(),
             aromaticity: aromaticity.to_rust(),
             stereo: stereo.to_rust(),
+            wildcards: wildcards.to_rust(),
         })
     }
 
@@ -298,15 +324,21 @@ impl ResolveConfig {
         StereoResolveConfig::from_rust(self.0.stereo)
     }
 
+    #[getter]
+    fn wildcards(&self) -> WildcardPolicy {
+        WildcardPolicy::from_rust(self.0.wildcards)
+    }
+
     fn __repr__(&self) -> String {
         if self.0 == GraphResolveConfig::default() {
             return "ResolveConfig.default()".to_owned();
         }
         format!(
-            "ResolveConfig(isotope=IsotopePolicy.{:?}, aromaticity={}, stereo={})",
+            "ResolveConfig(isotope=IsotopePolicy.{:?}, aromaticity={}, stereo={}, wildcards=WildcardPolicy.{:?})",
             self.isotope(),
             self.aromaticity().__repr__(),
             self.stereo().__repr__(),
+            self.wildcards(),
         )
     }
 }
@@ -348,6 +380,26 @@ mod tests {
     fn test_isotope_policy_to_rust(
         #[case] policy: IsotopePolicy,
         #[case] expected: GraphIsotopePolicy,
+    ) {
+        assert_eq!(policy.to_rust(), expected);
+    }
+
+    #[rstest]
+    #[case::strict(GraphWildcardPolicy::Strict, WildcardPolicy::Strict)]
+    #[case::admit(GraphWildcardPolicy::Admit, WildcardPolicy::Admit)]
+    fn test_wildcard_policy_from_rust(
+        #[case] policy: GraphWildcardPolicy,
+        #[case] expected: WildcardPolicy,
+    ) {
+        assert_eq!(WildcardPolicy::from_rust(policy), expected);
+    }
+
+    #[rstest]
+    #[case::strict(WildcardPolicy::Strict, GraphWildcardPolicy::Strict)]
+    #[case::admit(WildcardPolicy::Admit, GraphWildcardPolicy::Admit)]
+    fn test_wildcard_policy_to_rust(
+        #[case] policy: WildcardPolicy,
+        #[case] expected: GraphWildcardPolicy,
     ) {
         assert_eq!(policy.to_rust(), expected);
     }
@@ -557,11 +609,13 @@ mod tests {
             AromaticityFailurePolicy::Error
         ),
         StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, None),
+        WildcardPolicy::Strict,
         GraphResolveConfig::default()
     )]
     #[case::aromaticity(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
         StereoResolveConfig::new(StereoFailurePolicy::Error, StereoFailurePolicy::Error, None),
+        WildcardPolicy::Strict,
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig {
@@ -571,11 +625,13 @@ mod tests {
                 aromatic_system_failure: GraphAromaticityFailurePolicy::Keep,
             },
             stereo: GraphStereoResolveConfig::default(),
+            wildcards: GraphWildcardPolicy::Strict,
         },
     )]
     #[case::stereo(
         AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Error, AromaticityFailurePolicy::Error),
         StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, None),
+        WildcardPolicy::Admit,
         GraphResolveConfig {
             isotope: GraphIsotopePolicy::Strict,
             aromaticity: GraphAromaticityResolveConfig::default(),
@@ -584,15 +640,17 @@ mod tests {
                 stereo_bond_failure: GraphStereoFailurePolicy::Keep,
                 ring_config: Default::default(),
             },
+            wildcards: GraphWildcardPolicy::Admit,
         },
     )]
     fn test_resolve_config_new(
         #[case] aromaticity: AromaticityResolveConfig,
         #[case] stereo: StereoResolveConfig,
+        #[case] wildcards: WildcardPolicy,
         #[case] expected: GraphResolveConfig,
     ) {
         assert_eq!(
-            ResolveConfig::new(aromaticity, stereo, IsotopePolicy::Strict).0,
+            ResolveConfig::new(aromaticity, stereo, IsotopePolicy::Strict, wildcards).0,
             expected
         );
     }
@@ -605,6 +663,7 @@ mod tests {
                 isotope: GraphIsotopePolicy::Strict,
                 aromaticity: GraphAromaticityResolveConfig::default(),
                 stereo: GraphStereoResolveConfig::default(),
+                wildcards: GraphWildcardPolicy::Strict,
             })
         );
     }
@@ -616,8 +675,9 @@ mod tests {
             AromaticityResolveConfig::new(AromaticityConfig::default(), AtomSelectionAlgorithm::BacktrackingDfs, AromaticityFailurePolicy::Keep, AromaticityFailurePolicy::Keep),
             StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, None),
             IsotopePolicy::Strict,
+            WildcardPolicy::Admit,
         ),
-        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())))",
+        "ResolveConfig(isotope=IsotopePolicy.Strict, aromaticity=AromaticityResolveConfig(perception=AromaticityConfig(ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara()), connected_components_algorithm=ConnectedComponentsAlgorithm.Bfs(), maximum_independent_set_algorithm=MaximumIndependentSetAlgorithm.BranchAndBound()), atom_selection_algorithm=AtomSelectionAlgorithm.BacktrackingDfs, aromatic_valence_failure=AromaticityFailurePolicy.Keep, aromatic_system_failure=AromaticityFailurePolicy.Keep), stereo=StereoResolveConfig(stereo_atom_failure=StereoFailurePolicy.Remove, stereo_bond_failure=StereoFailurePolicy.Keep, ring_config=RingConfig(simple_cycle_algorithm=SimpleCycleEnumerationAlgorithm.ReadTarjan(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())), wildcards=WildcardPolicy.Admit)",
     )]
     fn test_resolve_config_repr(#[case] config: ResolveConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
@@ -638,6 +698,7 @@ mod tests {
             stereo_bond_failure: GraphStereoFailurePolicy::Keep,
             ring_config: Default::default(),
         },
+        wildcards: GraphWildcardPolicy::Admit,
     })]
     fn test_resolve_config_from_rust(#[case] config: GraphResolveConfig) {
         assert_eq!(ResolveConfig::from_rust(config).0, config);
@@ -653,7 +714,8 @@ mod tests {
             AromaticityFailurePolicy::Keep
         ),
         StereoResolveConfig::new(StereoFailurePolicy::Remove, StereoFailurePolicy::Keep, None),
-        IsotopePolicy::Strict
+        IsotopePolicy::Strict,
+        WildcardPolicy::Admit,
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);

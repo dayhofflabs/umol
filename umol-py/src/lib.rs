@@ -115,7 +115,7 @@ use crate::{
     resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, AtomCompletions,
         AtomSelectionAlgorithm, IsotopePolicy, ResolveConfig, ResolveContradiction, ResolveReport,
-        Solution, StereoFailurePolicy, StereoResolveConfig,
+        Solution, StereoFailurePolicy, StereoResolveConfig, WildcardPolicy,
     },
     ring::{
         RingAtomView, RingBondView, RingConfig, RingConnection, RingGraph, RingModel, RingRelation,
@@ -316,6 +316,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoResolveConfig>()?;
         module.add_class::<ResolveConfig>()?;
         module.add_class::<IsotopePolicy>()?;
+        module.add_class::<WildcardPolicy>()?;
         module.add_class::<ResolveContradiction>()?;
         module.add_class::<ResolveReport>()?;
         module.add_class::<Solution>()?;

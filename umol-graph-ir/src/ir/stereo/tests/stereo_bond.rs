@@ -40,6 +40,55 @@ fn test_stereo_bond_form_with_methods(
     assert_eq!(bond.with_constraints([constraint]), expected);
 }
 
+#[rstest]
+#[case::kindless(StereoBondForm::default(), true)]
+#[case::open_coset(
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Undetermined),
+    true
+)]
+#[case::literal(StereoBondForm::new(StereoKind::CisTrans, 0_u32), false)]
+#[case::set(StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0, 1])), false)]
+#[case::variable(
+    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::term(StereoTerm::var("s"))),
+    false
+)]
+#[case::swap(
+    StereoBondForm::new(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::swap(StereoTerm::var_in("s", [0, 1]))),
+    ),
+    false
+)]
+#[case::mirror(
+    StereoBondForm::new(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::mirror(StereoTerm::Lit(0)))
+    ),
+    false
+)]
+#[case::apply(
+    StereoBondForm::new(
+        StereoKind::CisTrans,
+        StereoCoset::term(StereoTerm::apply(StereoTerm::lit_set([0, 1]), Permutation::identity(4))),
+    ),
+    false
+)]
+fn test_stereo_bond_form_is_wildcard(
+    #[case] form: StereoBondForm,
+    #[case] expected: bool,
+    #[values(
+        StereoBondConstraintsForm::new(),
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)).into()
+    )]
+    constraints: StereoBondConstraintsForm,
+) {
+    let form = StereoBondForm {
+        constraints,
+        ..form
+    };
+    assert_eq!(form.is_wildcard(), expected);
+}
+
 #[rustfmt::skip]
 #[rstest]
 #[case::folds_coset(

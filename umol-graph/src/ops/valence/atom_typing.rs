@@ -6,17 +6,20 @@ use smallvec::SmallVec;
 use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
-    AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, Lattice,
-    Molecule, NumForm, RingConfig, RingModel,
+    AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, AtomView,
+    Lattice, Molecule, NumForm, RingConfig, RingModel,
 };
 use umol_utils::solution::Solution;
 
 use super::{AtomCompletions, AtomTypeRegistry};
 use crate::ops::model::ValenceTieBreak;
+use crate::ops::resolve::WildcardPolicy;
 
+/// Admits atom completions from a borrowed registry under the selected wildcard policy.
 #[derive(Clone, Debug)]
 pub struct AtomTypingValence<'a> {
     registry: &'a AtomTypeRegistry,
+    wildcards: WildcardPolicy,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -38,27 +41,46 @@ pub struct AtomTypingMismatch {
 }
 
 impl<'a> AtomTypingValence<'a> {
+    /// Uses strict wildcard handling during admission.
     pub fn new(registry: &'a AtomTypeRegistry) -> Self {
-        Self { registry }
+        Self::with_config(registry, WildcardPolicy::Strict)
     }
 
-    /// Admission: determine candidate sets for each atom under resolution,
-    /// Underdetermined if an element or required complete valence is non-literal,
-    /// empty if no atoms are admitted.
+    /// Borrows the registry and sets the wildcard policy for admission.
+    pub fn with_config(registry: &'a AtomTypeRegistry, wildcards: WildcardPolicy) -> Self {
+        Self {
+            registry,
+            wildcards,
+        }
+    }
+
+    /// Determines candidate sets for atoms that need a registry completion.
+    /// Admit skips atoms with an undetermined element. Every other atom requires a
+    /// literal element. A required completion that depends on an open bond order
+    /// yields Underdetermined under Admit. Underdetermined carries an empty set of completions.
     /// Exactly equal post-meet forms occur once, in first-occurrence order.
     /// Registry patterns leave isotope information unchanged, including unresolved forms.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, AtomTypingError> {
         for atom in molecule.atoms().iter() {
-            if atom.element().as_lit().is_none() {
+            if !atom.element().is_ground()
+                && (self.wildcards == WildcardPolicy::Strict || !atom.attributes().is_wildcard())
+            {
                 return Solution::Underdetermined(AtomCompletions::new());
             }
         }
 
         let mut completions = AtomCompletions::new();
-        for id in molecule.atoms().ids() {
-            match self.admitted_completions(molecule, id) {
-                Solution::Determined(Some(admitted)) => completions.insert(id, admitted),
+        let mut underdetermined = false;
+        for atom in molecule.atoms().iter() {
+            let Some(element) = atom.element().as_lit() else {
+                continue;
+            };
+            match self.admitted_completions(molecule, atom, element) {
+                Solution::Determined(Some(admitted)) => completions.insert(atom.id(), admitted),
                 Solution::Determined(None) => {}
+                Solution::Underdetermined(_) if self.wildcards == WildcardPolicy::Admit => {
+                    underdetermined = true;
+                }
                 Solution::Underdetermined(_) => {
                     return Solution::Underdetermined(AtomCompletions::new())
                 }
@@ -67,23 +89,24 @@ impl<'a> AtomTypingValence<'a> {
                 }
             }
         }
-        Solution::Determined(completions)
+        if underdetermined {
+            Solution::Underdetermined(AtomCompletions::new())
+        } else {
+            Solution::Determined(completions)
+        }
     }
 
     /// Determine admitted completions, compatible with the atom's form and constraints.
-    /// `None` when the atom is ground. Lookup uses its complete valence reading.
+    /// A determined `None` means the atom needs no candidate. Lookup uses its complete valence reading.
     fn admitted_completions(
         &self,
         molecule: &Molecule,
-        id: AtomId,
+        atom: AtomView<'_>,
+        element: Element,
     ) -> Solution<Option<SmallVec<[AtomForm; 1]>>, AtomTypingError> {
-        let atom = molecule.atom(id);
-        let Some(element) = atom.element().as_lit() else {
-            return Solution::Underdetermined(None);
-        };
         let charge = atom.charge().as_lit().map(|n| n as i8);
         let mismatch = AtomTypingError::NoMatch {
-            atom_id: id,
+            atom_id: atom.id(),
             element,
             charge,
         };
@@ -94,16 +117,26 @@ impl<'a> AtomTypingValence<'a> {
             return Solution::Contradictory(mismatch);
         };
         let is_ground = atom.is_ground();
-        let ground_contribution_open = is_ground
-            && matches!(
-                aromatic,
-                AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(
-                    NumForm::Undetermined
-                ))
-            );
+        let contribution_open = matches!(&aromatic,
+            AtomConstraintForm::AromaticValence(AromaticValenceForm::Aromatic(value)) if !value.is_ground()
+        );
+        let ground_contribution_open = is_ground && contribution_open;
         if is_ground && !ground_contribution_open {
             return Solution::Determined(None);
         }
+        let open_order_outcome = || {
+            if self.wildcards == WildcardPolicy::Admit
+                && !contribution_open
+                && atom.charge().is_ground()
+                && atom.implicit_hydrogens().is_ground()
+                && atom.lone_pairs().is_ground()
+                && atom.unpaired_electrons().is_ground()
+            {
+                Solution::Determined(None)
+            } else {
+                Solution::Underdetermined(None)
+            }
+        };
         let Some(AtomConstraintForm::Valence(valence)) = atom
             .constraints()
             .evidenced_complete(AtomConstraintKey::Valence)
@@ -111,7 +144,7 @@ impl<'a> AtomTypingValence<'a> {
             return Solution::Contradictory(mismatch);
         };
         let Some(valence) = valence.as_lit() else {
-            return Solution::Underdetermined(None);
+            return open_order_outcome();
         };
         let rows = self.registry.lookup(element, valence as u8);
         let rings = rows
@@ -142,43 +175,53 @@ impl<'a> AtomTypingValence<'a> {
             Some(AtomConstraintForm::valence(valence)),
         ));
         let attributes_first = !atom.implicit_hydrogens().is_undetermined();
+        let check_dative = self.wildcards == WildcardPolicy::Admit && atom.is_in_dative_bond();
         let mut admitted = SmallVec::<[AtomForm; 1]>::new();
-        for candidate in rows
-            .iter()
-            .filter(|row| {
-                // A field-ground atom is under resolution only for its open
-                // aromatic contribution: only aromatic rows complete it.
-                if ground_contribution_open && !row.constraints.aromatic_valence().is_aromatic() {
+        for row in rows {
+            if ground_contribution_open && !row.constraints.aromatic_valence().is_aromatic() {
+                continue;
+            }
+            if !atom.charge().is_compatible(&row.charge)
+                || (attributes_first && !atom.attributes().is_compatible(row))
+            {
+                continue;
+            }
+            let mut needs_dative_order = false;
+            let compatible = row.constraints.iter().all(|entry| {
+                let key = entry.key();
+                let index = match readings.iter().position(|(stored, _)| *stored == key) {
+                    Some(index) => index,
+                    None => {
+                        let index = readings.len();
+                        readings.push((key, constraints.evidenced_complete(key)));
+                        index
+                    }
+                };
+                let Some(host) = &readings[index].1 else {
                     return false;
+                };
+                if check_dative
+                    && matches!(
+                        key,
+                        AtomConstraintKey::DonatedPairs | AtomConstraintKey::AcceptedPairs
+                    )
+                    && !host.is_ground()
+                    && !entry.matches(host)
+                {
+                    needs_dative_order = true;
                 }
-                if !atom.charge().is_compatible(&row.charge) {
-                    return false;
-                }
-                if attributes_first && !atom.attributes().is_compatible(row) {
-                    return false;
-                }
-                row.constraints.iter().all(|entry| {
-                    let key = entry.key();
-                    let index = match readings.iter().position(|(stored, _)| *stored == key) {
-                        Some(index) => index,
-                        None => {
-                            let index = readings.len();
-                            readings.push((key, constraints.evidenced_complete(key)));
-                            index
-                        }
-                    };
-                    readings[index]
-                        .1
-                        .as_ref()
-                        .is_some_and(|host| entry.is_compatible(host))
-                }) && (attributes_first || atom.attributes().is_compatible(row))
-            })
-            .map(|row| {
-                atom.attributes()
-                    .meet(row)
-                    .expect("admission implies the meet exists")
-            })
-        {
+                entry.is_compatible(host)
+            });
+            if !compatible || (!attributes_first && !atom.attributes().is_compatible(row)) {
+                continue;
+            }
+            if needs_dative_order {
+                return open_order_outcome();
+            }
+            let candidate = atom
+                .attributes()
+                .meet(row)
+                .expect("admission implies the meet exists");
             if !admitted.contains(&candidate) {
                 admitted.push(candidate);
             }
@@ -315,13 +358,15 @@ impl<'a> AtomTypingValence<'a> {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::ptr;
 
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
     use umol_graph_ir::ir::{
-        BondForm, IsotopeMassForm, MoleculeEntries, RingMembershipForm, RingScope,
+        BondForm, IsotopeMassForm, MoleculeEntries, RingMembershipForm, RingScope, TryIntoIr,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
+    use umol_io::smiles::Smiles;
 
     use super::*;
     use crate::ops::valence::AtomTypeRegistry;
@@ -343,11 +388,70 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_typing_valence_admit(atom_type_registry: AtomTypeRegistry) {
+    fn test_atom_typing_valence_new(atom_type_registry: AtomTypeRegistry) {
         let resolver = AtomTypingValence::new(&atom_type_registry);
-        let molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
-        let mut expected = AtomCompletions::new();
-        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4#D1#v0")]);
+        assert!(ptr::eq(resolver.registry, &atom_type_registry));
+        assert_eq!(resolver.wildcards, WildcardPolicy::Strict);
+        assert_eq!(
+            resolver.admit(&mol_dsl!(r#"{:atoms ["*"]}"#)),
+            Solution::Underdetermined(AtomCompletions::new())
+        );
+    }
+
+    #[rstest]
+    fn test_atom_typing_valence_with_config(
+        atom_type_registry: AtomTypeRegistry,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+    ) {
+        let resolver = AtomTypingValence::with_config(&atom_type_registry, wildcards);
+        assert!(ptr::eq(resolver.registry, &atom_type_registry));
+        assert_eq!(resolver.wildcards, wildcards);
+    }
+
+    #[rstest]
+    #[case::degree(
+        &atom_type_registry(), WildcardPolicy::Strict, mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("C#c0#h4#D1#v0")])]),
+    )]
+    #[case::branched(
+        AtomTypeRegistry::default_registry(), WildcardPolicy::Admit,
+        (&Smiles::parse("*C(O)C").unwrap().into_table_ir()).try_into_ir(&()).unwrap(),
+        AtomCompletions::from_iter([
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h1#n0#u0#s#v3#d0#t0#a!#m!")]),
+            (AtomId(2), smallvec![atom_dsl!("O#i=#c0#h1#n2#u0#s#v1#d0#t0#a!#m!")]),
+            (AtomId(3), smallvec![
+                atom_dsl!("C#i=#c0#h3#n0#u0#s#v1#d0#t0#a!#m!"),
+                atom_dsl!("C#i=#c0#h1#n1#u0#s#v1#d0#t0#a!#m!"),
+            ]),
+        ]),
+    )]
+    #[case::wildcard(
+        &atom_type_registry(), WildcardPolicy::Admit, mol_dsl!(r#"{:atoms ["*"]}"#),
+        AtomCompletions::new(),
+    )]
+    #[case::complete_localized(
+        &atom_type_registry(), WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u0#s" "*"] :bonds [[0 1 "*"]]}"#),
+        AtomCompletions::new(),
+    )]
+    #[case::complete_dative(
+        AtomTypeRegistry::default_registry(), WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["N#c0#h3#n1#u0#s" "*"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        AtomCompletions::new(),
+    )]
+    #[case::unrestricted_dative(
+        &AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h2#v0#d1#t1"), atom_dsl!("C#c0#h4#v0")]),
+        WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["C#c0" "*"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("C#c0#h4#v0")])]),
+    )]
+    fn test_atom_typing_valence_admit(
+        #[case] registry: &AtomTypeRegistry,
+        #[case] wildcards: WildcardPolicy,
+        #[case] molecule: Molecule,
+        #[case] expected: AtomCompletions,
+    ) {
+        let resolver = AtomTypingValence::with_config(registry, wildcards);
         assert_eq!(resolver.admit(&molecule), Solution::Determined(expected));
     }
 
@@ -539,19 +643,37 @@ mod tests {
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
+    #[case::complement(mol_dsl!(r#"{:atoms ["!{C,N}"]}"#))]
+    #[case::variable(mol_dsl!(r#"{:atoms ["?e"]}"#))]
     #[case::bond_order(mol_dsl!(r#"{:atoms ["C#c0" "C#c0"] :bonds [[0 1 "*"]]}"#))]
     fn test_atom_typing_valence_admit_partial(
         atom_type_registry: AtomTypeRegistry,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            AtomTypingValence::new(&atom_type_registry).admit(&molecule),
+            AtomTypingValence::with_config(&atom_type_registry, wildcards).admit(&molecule),
+            Solution::Underdetermined(AtomCompletions::new())
+        );
+    }
+
+    #[rstest]
+    #[case::donor(mol_dsl!(r#"{:atoms ["N#c0" "*"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#))]
+    #[case::acceptor(mol_dsl!(r#"{:atoms ["*" "B#c0"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "*"}]}"#))]
+    fn test_atom_typing_valence_admit_dative(#[case] molecule: Molecule) {
+        let resolver = AtomTypingValence::with_config(
+            AtomTypeRegistry::default_registry(),
+            WildcardPolicy::Admit,
+        );
+        assert_eq!(
+            resolver.admit(&molecule),
             Solution::Underdetermined(AtomCompletions::new())
         );
     }
 
     #[rstest]
     #[case::no_match(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0#h3"]}"#),
         AtomTypingError::NoMatch {
             atom_id: AtomId(0),
@@ -560,6 +682,7 @@ mod tests {
         }
     )]
     #[case::later_atom_contradiction(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0#h3"]}"#),
         AtomTypingError::NoMatch {
             atom_id: AtomId(1),
@@ -568,16 +691,23 @@ mod tests {
         }
     )]
     #[case::ground_aromatic_conflict(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c0#h3#n0#u0#s#a!" "C"] :bonds [[0 1 "1#a"]]}"#),
         AtomTypingError::NoMatch { atom_id: AtomId(0), element: Element::C, charge: Some(0) }
     )]
+    #[case::mismatch_after_open_order(
+        WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["C#c0" "*" "N#c0"] :bonds [[0 1 "*"]]}"#),
+        AtomTypingError::NoMatch { atom_id: AtomId(2), element: Element::N, charge: Some(0) },
+    )]
     fn test_atom_typing_valence_admit_error(
         atom_type_registry: AtomTypeRegistry,
+        #[case] wildcards: WildcardPolicy,
         #[case] molecule: Molecule,
         #[case] expected: AtomTypingError,
     ) {
         assert_eq!(
-            AtomTypingValence::new(&atom_type_registry).admit(&molecule),
+            AtomTypingValence::with_config(&atom_type_registry, wildcards).admit(&molecule),
             Solution::Contradictory(expected)
         );
     }

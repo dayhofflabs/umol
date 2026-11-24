@@ -47,6 +47,7 @@ from umol import (
     ValenceEntry,
     ValenceModel,
     ValenceTable,
+    WildcardPolicy,
     NumForm,
 )
 
@@ -958,7 +959,16 @@ def test_reaction_from_reaction_smiles_isotope(isotope, source, atom):
     )
 
 
-def test_reaction_from_reaction_smiles_io_config():
+@pytest.mark.parametrize("resolve_config", [
+    None,
+    ResolveConfig(
+        aromaticity=AromaticityResolveConfig(),
+        stereo=StereoResolveConfig(),
+        isotope=IsotopePolicy.Natural,
+        wildcards=WildcardPolicy.Admit,
+    ),
+], ids=["default-strict", "admit"])
+def test_reaction_from_reaction_smiles_io_config(resolve_config):
     with pytest.raises(
         UnderdeterminedError,
         match="^reactants: resolution underdetermined$",
@@ -966,7 +976,24 @@ def test_reaction_from_reaction_smiles_io_config():
         Reaction.from_reaction_smiles(
             "C~C>>C.C",
             io_config=SmilesIoConfig.lenient(),
+            resolve_config=resolve_config,
         )
+
+
+def test_reaction_from_reaction_smiles_wildcard():
+    reaction = Reaction.from_reaction_smiles(
+        "[1*:1][CH3:2]>>[1*:1][CH3:2]",
+        resolve_config=ResolveConfig(
+            aromaticity=AromaticityResolveConfig(),
+            stereo=StereoResolveConfig(),
+            isotope=IsotopePolicy.Natural,
+            wildcards=WildcardPolicy.Admit,
+        ),
+    )
+    assert reaction == Reaction.parse(
+        '{:lhs {:atoms ["*#i1#c0#h0" "C#i=#c0#h3#n0#u0#s"] '
+        ':bonds [[0 1 "1#c0#u0#s"]]} :deltas []}'
+    )
 
 
 def test_reaction_from_reaction_smiles_resolve_config():

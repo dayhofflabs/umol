@@ -30,6 +30,7 @@ pub fn parse_mol_bytes(input: &[u8]) -> Result<Molecule, Box<dyn UmolError>> {
 }
 
 /// Parse MOL to a resolved [`Molecule`] with explicit IO, model, and resolve config.
+/// With wildcard admission, the returned molecule may retain an open cis-trans configuration.
 pub fn parse_mol_with(
     input: &str,
     io_config: &CtfileIoConfig,
@@ -76,6 +77,7 @@ mod tests {
     };
     use crate::ops::resolve::{
         ResolveConfig, ResolveUnderdetermined, Resolver, StereoFailurePolicy, StereoResolveConfig,
+        WildcardPolicy,
     };
     use crate::ops::valence::ValenceTable;
     use crate::ops::validate::ConnectivityModel;
@@ -137,11 +139,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::z(1.0, StereoCoset::Lit(0))]
-    #[case::e(-1.0, StereoCoset::Lit(1))]
+    #[case::z(1.0, 0, StereoCoset::Lit(0))]
+    #[case::e(-1.0, 0, StereoCoset::Lit(1))]
+    #[case::either(1.0, 3, StereoCoset::Undetermined)]
     fn test_parse_mol_bytes_with_stereo(
         #[case] ligand_y: f64,
+        #[case] stereo_code: u8,
         #[case] coset: StereoCoset,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
         #[values(0, 8, 64)] stereo_bond_min_ring_size: u32,
         #[values(
             StereoFailurePolicy::Error,
@@ -161,7 +166,7 @@ mod tests {
     2.0000    2.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
    -1.0000    2.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
    -1.0000{ligand_y:10.4}    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  2  0  0  0  0
+  1  2  2{stereo_code:3}  0  0  0
   2  3  1  0  0  0  0
   3  4  1  0  0  0  0
   4  5  1  0  0  0  0
@@ -204,7 +209,7 @@ M  END
         expected
             .stereo_bond_mut(StereoBondId(0))
             .attributes_mut()
-            .configuration = StereoConfigurationForm::kinded(StereoKind::CisTrans, coset);
+            .configuration = StereoConfigurationForm::kinded(StereoKind::CisTrans, coset.clone());
         let model = ChemistryModel {
             valence: ValenceModel::mdl(),
             stereo: StereoModel {
@@ -220,17 +225,26 @@ M  END
                 stereo_bond_failure: failure,
                 ..Default::default()
             },
+            wildcards,
             ..Default::default()
         };
-        assert_eq!(
-            parse_mol_bytes_with(input.as_bytes(), &CtfileIoConfig::basic(), &model, &config)
-                .unwrap(),
-            expected
-        );
-        assert_eq!(
-            parse_mol_with(&input, &CtfileIoConfig::basic(), &model, &config).unwrap(),
-            expected
-        );
+        let io = CtfileIoConfig::basic();
+        for result in [
+            parse_mol_with(&input, &io, &model, &config),
+            parse_mol_bytes_with(input.as_bytes(), &io, &model, &config),
+        ] {
+            if coset == StereoCoset::Undetermined && wildcards == WildcardPolicy::Strict {
+                assert_eq!(
+                    result
+                        .unwrap_err()
+                        .as_any()
+                        .downcast_ref::<ResolveUnderdetermined>(),
+                    Some(&ResolveUnderdetermined)
+                );
+            } else {
+                assert_eq!(result.unwrap(), expected);
+            }
+        }
         assert_eq!(input, original);
     }
 

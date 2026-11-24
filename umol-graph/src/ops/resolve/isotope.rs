@@ -1,8 +1,10 @@
-//! Isotope completion and projection under one policy, independent of valence resolution.
+//! Isotope completion and projection, independent of valence resolution.
 
 use thiserror::Error;
 use umol_graph_ir::ir::{AtomHandle, AtomId, Edits, IsotopeMassForm, Lattice, Molecule};
 use umol_utils::solution::Solution;
+
+use super::WildcardPolicy;
 
 /// How isotope resolution handles an Undetermined isotope.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -14,28 +16,30 @@ pub enum IsotopePolicy {
     Natural,
 }
 
-/// Resolves and projects isotope fields using the same policy.
+/// Resolves and projects isotope fields using the same isotope and wildcard policies.
 ///
-/// Only isotope fields participate. Other atom fields, topology, entities, and
-/// constraints are preserved, whether determined or not. Supplied masses, sets,
-/// and variables are neither normalized nor interpreted.
+/// WildcardPolicy::Strict applies the isotope policy to every atom. WildcardPolicy::Admit
+/// skips atoms whose element is undetermined during completion and default elision.
+/// Projection requires ground isotopes on every atom. Only isotope fields can change.
+/// Supplied masses, sets, and variables are preserved.
 ///
 /// # Semantic properties
 ///
 /// Resolution is idempotent and preserves every supplied non-Undetermined isotope.
-/// It publishes changes only when every isotope is ground after completion.
-/// resolve_into preserves the caller's molecule on underdetermination or error;
-/// resolve consumes it on every outcome.
+/// It returns Determined when every participating atom has a ground isotope after
+/// completion. resolve_into preserves the caller's molecule
+/// on underdetermination or error. resolve consumes it on every outcome.
 ///
 /// For every molecule with ground isotope fields, successful projection followed
-/// by resolution under the same policy recovers the original molecule exactly.
+/// by resolution under the same policies recovers the original molecule exactly.
 /// This law does not require the molecule's other fields to be ground.
 ///
 /// Plans apply to their input and preserve molecule integrity. Consuming and in-place
-/// operations agree on outcomes and determined molecules for the same input and policy.
+/// operations agree on outcomes and determined molecules for the same input and policies.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct IsotopeResolver {
     policy: IsotopePolicy,
+    wildcards: WildcardPolicy,
 }
 
 /// Isotope defaulting has no semantic contradiction outcomes.
@@ -54,29 +58,37 @@ pub enum IsotopeProjectError {
 }
 
 impl IsotopeResolver {
-    /// Constructs an isotope resolver with the selected policy.
-    pub fn new(policy: IsotopePolicy) -> Self {
-        Self { policy }
+    /// Constructs an isotope resolver with strict isotope and wildcard policies.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Constructs an isotope resolver with the selected isotope and wildcard policies.
+    pub fn with_config(policy: IsotopePolicy, wildcards: WildcardPolicy) -> Self {
+        Self { policy, wildcards }
     }
 
     /// Plans isotope defaults without mutating the molecule.
     ///
-    /// Under Natural, only Undetermined becomes Natural. Strict makes no edits.
-    /// Remaining non-ground isotopes yield Underdetermined with any proposed
-    /// default edits retained in the plan.
+    /// WildcardPolicy::Admit skips wildcard atoms. On participating atoms, IsotopePolicy::Natural
+    /// completes an Undetermined isotope with natural composition. IsotopePolicy::Strict makes no edits.
+    /// A remaining non-ground isotope on a participating atom yields Underdetermined
+    /// with any proposed defaults retained in the plan.
     pub fn plan_resolve(&self, molecule: &Molecule) -> Solution<Edits, IsotopeContradiction> {
         let mut isotope_masses = Vec::new();
         let mut determined = true;
         for atom in molecule.atoms().iter() {
-            if self.policy == IsotopePolicy::Natural
-                && atom.attributes().isotope_mass.is_undetermined()
-            {
+            let attributes = atom.attributes();
+            if self.wildcards == WildcardPolicy::Admit && attributes.is_wildcard() {
+                continue;
+            }
+            if self.policy == IsotopePolicy::Natural && attributes.isotope_mass.is_undetermined() {
                 isotope_masses.push((
                     AtomHandle::Id(atom.id()),
                     IsotopeMassForm::Undetermined,
                     IsotopeMassForm::Natural,
                 ));
-            } else if !atom.attributes().isotope_mass.is_ground() {
+            } else if !attributes.isotope_mass.is_ground() {
                 determined = false;
             }
         }
@@ -158,9 +170,10 @@ impl IsotopeResolver {
 
     /// Elides Natural isotope composition when this policy restores it on resolution.
     ///
-    /// Natural becomes Undetermined only under Natural; Strict retains it. Both
-    /// policies preserve explicit masses. Other fields may remain unresolved.
-    /// Planning finishes before mutation; the plan applies without a recovery journal.
+    /// IsotopePolicy::Natural elides natural composition on participating atoms.
+    /// Admitted wildcard atoms retain it. IsotopePolicy::Strict retains all isotope fields.
+    /// Explicit masses are preserved and other fields may remain unresolved.
+    /// Planning finishes before mutation and the plan applies without a recovery journal.
     ///
     /// # Errors
     ///
@@ -177,22 +190,25 @@ impl IsotopeResolver {
         Ok(Solution::Determined(()))
     }
 
-    /// Plans isotope default elision under this policy without mutating the molecule.
+    /// Plans to elide natural isotope composition wherever resolution would restore it.
     ///
     /// Applying the returned edits to the same molecule produces the result of
     /// [IsotopeResolver::project]. The molecule remains unchanged while planning.
     ///
     /// # Errors
     ///
-    /// Returns IsotopeProjectError::NonGroundIsotope for the first non-ground isotope.
+    /// Returns IsotopeProjectError::NonGroundIsotope for the first non-ground isotope,
+    /// including one on an admitted wildcard atom.
     pub fn plan_project(&self, molecule: &Molecule) -> Result<Edits, IsotopeProjectError> {
         let mut isotope_masses = Vec::new();
         for atom in molecule.atoms().iter() {
-            if !atom.attributes().isotope_mass.is_ground() {
+            let attributes = atom.attributes();
+            if !attributes.isotope_mass.is_ground() {
                 return Err(IsotopeProjectError::NonGroundIsotope { atom: atom.id() });
             }
             if self.policy == IsotopePolicy::Natural
-                && matches!(atom.attributes().isotope_mass, IsotopeMassForm::Natural)
+                && matches!(attributes.isotope_mass, IsotopeMassForm::Natural)
+                && (self.wildcards == WildcardPolicy::Strict || !attributes.is_wildcard())
             {
                 isotope_masses.push((
                     AtomHandle::Id(atom.id()),
@@ -220,8 +236,31 @@ mod tests {
     use super::*;
 
     #[rstest]
+    fn test_isotope_resolver_new() {
+        assert_eq!(
+            IsotopeResolver::new(),
+            IsotopeResolver {
+                policy: IsotopePolicy::Strict,
+                wildcards: WildcardPolicy::Strict
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_isotope_resolver_with_config(
+        #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+    ) {
+        assert_eq!(
+            IsotopeResolver::with_config(policy, wildcards),
+            IsotopeResolver { policy, wildcards },
+        );
+    }
+
+    #[rstest]
     #[case::natural(
         IsotopePolicy::Natural,
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#h4" "C#i13" "N#i="]}"#),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomIsotopeMasses {
             changes: vec![(
@@ -233,11 +272,13 @@ mod tests {
     )]
     #[case::strict(
         IsotopePolicy::Strict,
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C" "C#i13"]}"#),
         Solution::Underdetermined(Edits::new()),
     )]
     #[case::partial(
         IsotopePolicy::Natural,
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C" "C#i?mass" "O"]}"#),
         Solution::Underdetermined(Edits::from_iter([Edit::ModifyAtomIsotopeMasses {
             changes: vec![
@@ -246,13 +287,47 @@ mod tests {
             ],
         }])),
     )]
+    #[case::strict_mixed(
+        IsotopePolicy::Natural, WildcardPolicy::Strict,
+        mol_dsl!(r#"{:atoms ["*" "C"]}"#),
+        Solution::Determined(Edits::from_iter([Edit::ModifyAtomIsotopeMasses {
+            changes: vec![
+                (AtomHandle::Id(AtomId(0)), IsotopeMassForm::Undetermined, IsotopeMassForm::Natural),
+                (AtomHandle::Id(AtomId(1)), IsotopeMassForm::Undetermined, IsotopeMassForm::Natural),
+            ],
+        }])),
+    )]
+    #[case::admit_mixed(
+        IsotopePolicy::Natural, WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*" "C"]}"#),
+        Solution::Determined(Edits::from_iter([Edit::ModifyAtomIsotopeMasses {
+            changes: vec![(AtomHandle::Id(AtomId(1)), IsotopeMassForm::Undetermined, IsotopeMassForm::Natural)],
+        }])),
+    )]
+    #[case::admit_wildcard(
+        IsotopePolicy::Natural, WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*"]}"#), Solution::Determined(Edits::new()),
+    )]
+    #[case::admit_wildcard_strict_isotope(
+        IsotopePolicy::Strict, WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*"]}"#), Solution::Determined(Edits::new()),
+    )]
+    #[case::admit_mass(
+        IsotopePolicy::Natural, WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*#i1"]}"#), Solution::Determined(Edits::new()),
+    )]
+    #[case::admit_strict_isotope(
+        IsotopePolicy::Strict, WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*" "C"]}"#), Solution::Underdetermined(Edits::new()),
+    )]
     fn test_isotope_resolver_plan_resolve(
         #[case] policy: IsotopePolicy,
+        #[case] wildcards: WildcardPolicy,
         #[case] molecule: Molecule,
         #[case] expected: Solution<Edits, IsotopeContradiction>,
     ) {
         assert_eq!(
-            IsotopeResolver::new(policy).plan_resolve(&molecule),
+            IsotopeResolver::with_config(policy, wildcards).plan_resolve(&molecule),
             expected
         );
     }
@@ -262,10 +337,11 @@ mod tests {
     #[case::ground(mol_dsl!(r#"{:atoms ["C#i=" "C#i13"]}"#))]
     fn test_isotope_resolver_plan_resolve_identity(
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            IsotopeResolver::new(policy).plan_resolve(&molecule),
+            IsotopeResolver::with_config(policy, wildcards).plan_resolve(&molecule),
             Solution::Determined(Edits::new()),
         );
     }
@@ -288,7 +364,7 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(
-            IsotopeResolver::new(policy).plan_resolve(&molecule),
+            IsotopeResolver::with_config(policy, WildcardPolicy::Strict).plan_resolve(&molecule),
             Solution::Underdetermined(Edits::new()),
         );
     }
@@ -297,7 +373,8 @@ mod tests {
     fn test_isotope_resolver_plan_resolve_stale() {
         let mut molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
         let Solution::Determined(edits) =
-            IsotopeResolver::new(IsotopePolicy::Natural).plan_resolve(&molecule)
+            IsotopeResolver::with_config(IsotopePolicy::Natural, WildcardPolicy::Strict)
+                .plan_resolve(&molecule)
         else {
             panic!("fixture must produce a determined edit plan");
         };
@@ -320,20 +397,37 @@ mod tests {
 
     #[rstest]
     #[case::partial_fields(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#c?charge#h{1,2}" "O#i18"] :bonds [[0 1 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C#i=#c?charge#h{1,2}" "O#i18"] :bonds [[0 1 "1"]]}"#),
     )]
     #[case::dative(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["N#c+#h3" "B#i11#c-"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         mol_dsl!(r#"{:atoms ["N#i=#c+#h3" "B#i11#c-"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
     )]
-    fn test_isotope_resolver_resolve(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
+    #[case::admit(
+        WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*" "*#i1" "*#i{1,2}" "*#i?mass" "C"]}"#),
+        mol_dsl!(r#"{:atoms ["*" "*#i1" "*#i{1,2}" "*#i?mass" "C#i="]}"#),
+    )]
+    #[case::symbolic_elements(
+        WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["{C,N}" "?e"]}"#),
+        mol_dsl!(r#"{:atoms ["{C,N}#i=" "?e#i="]}"#),
+    )]
+    fn test_isotope_resolver_resolve(
+        #[case] wildcards: WildcardPolicy,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        let resolver = IsotopeResolver::with_config(IsotopePolicy::Natural, wildcards);
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).resolve(molecule.clone()),
+            resolver.resolve(molecule.clone()),
             Ok(Solution::Determined(expected.clone()))
         );
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).resolve_into(&mut molecule),
+            resolver.resolve_into(&mut molecule),
             Ok(Solution::Determined(())),
         );
         assert_eq!(molecule, expected);
@@ -346,12 +440,13 @@ mod tests {
     #[case::set(mol_dsl!(r#"{:atoms ["C#i{12,13}"]}"#), Solution::Underdetermined(()))]
     fn test_isotope_resolver_resolve_into_identity(
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
         #[case] mut molecule: Molecule,
         #[case] expected: Solution<(), IsotopeContradiction>,
     ) {
         let original = molecule.clone();
         assert_eq!(
-            IsotopeResolver::new(policy).resolve_into(&mut molecule),
+            IsotopeResolver::with_config(policy, wildcards).resolve_into(&mut molecule),
             Ok(expected)
         );
         assert_eq!(molecule, original);
@@ -359,9 +454,9 @@ mod tests {
 
     #[rstest]
     #[case::default(IsotopeResolver::default(), mol_dsl!(r#"{:atoms ["C"]}"#))]
-    #[case::strict(IsotopeResolver::new(IsotopePolicy::Strict), mol_dsl!(r#"{:atoms ["C"]}"#))]
-    #[case::natural_late_variable(IsotopeResolver::new(IsotopePolicy::Natural), mol_dsl!(r#"{:atoms ["C" "O#i?mass"]}"#))]
-    #[case::natural_early_variable(IsotopeResolver::new(IsotopePolicy::Natural), mol_dsl!(r#"{:atoms ["C#i?mass" "O"]}"#))]
+    #[case::strict(IsotopeResolver::new(), mol_dsl!(r#"{:atoms ["C"]}"#))]
+    #[case::natural_late_variable(IsotopeResolver::with_config(IsotopePolicy::Natural, WildcardPolicy::Strict), mol_dsl!(r#"{:atoms ["C" "O#i?mass"]}"#))]
+    #[case::natural_early_variable(IsotopeResolver::with_config(IsotopePolicy::Natural, WildcardPolicy::Strict), mol_dsl!(r#"{:atoms ["C#i?mass" "O"]}"#))]
     fn test_isotope_resolver_resolve_partial(
         #[case] resolver: IsotopeResolver,
         #[case] mut molecule: Molecule,
@@ -380,32 +475,47 @@ mod tests {
 
     #[rstest]
     #[case::partial_fields(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["C#i=#c?charge#h{1,2}" "O#i18"] :bonds [[0 1 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C#c?charge#h{1,2}" "O#i18"] :bonds [[0 1 "1"]]}"#),
     )]
     #[case::dative(
+        WildcardPolicy::Strict,
         mol_dsl!(r#"{:atoms ["N#i=#c+#h3" "B#i11#c-"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         mol_dsl!(r#"{:atoms ["N#c+#h3" "B#i11#c-"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
     )]
-    fn test_isotope_resolver_project(#[case] mut molecule: Molecule, #[case] expected: Molecule) {
+    #[case::admit(
+        WildcardPolicy::Admit,
+        mol_dsl!(r#"{:atoms ["*#i=" "*#i1" "C#i=" "C#i13"]}"#),
+        mol_dsl!(r#"{:atoms ["*#i=" "*#i1" "C" "C#i13"]}"#),
+    )]
+    fn test_isotope_resolver_project(
+        #[case] wildcards: WildcardPolicy,
+        #[case] mut molecule: Molecule,
+        #[case] expected: Molecule,
+    ) {
+        let resolver = IsotopeResolver::with_config(IsotopePolicy::Natural, wildcards);
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).project(molecule.clone()),
+            resolver.project(molecule.clone()),
             Ok(Solution::Determined(expected.clone()))
         );
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).project_into(&mut molecule),
+            resolver.project_into(&mut molecule),
             Ok(Solution::Determined(())),
         );
         assert_eq!(molecule, expected);
     }
 
     #[rstest]
-    #[case::strict_natural(IsotopeResolver::new(IsotopePolicy::Strict), mol_dsl!(r#"{:atoms ["C#i=" "O#i18"]}"#))]
+    #[case::strict_natural(IsotopeResolver::new(), mol_dsl!(r#"{:atoms ["C#i=" "O#i18"]}"#))]
     #[case::default_natural(IsotopeResolver::default(), mol_dsl!(r#"{:atoms ["C#i=" "O#i18"]}"#))]
-    #[case::strict_mass(IsotopeResolver::new(IsotopePolicy::Strict), mol_dsl!(r#"{:atoms ["C#i13"]}"#))]
-    #[case::natural_mass(IsotopeResolver::new(IsotopePolicy::Natural), mol_dsl!(r#"{:atoms ["C#i13"]}"#))]
-    #[case::strict_empty(IsotopeResolver::new(IsotopePolicy::Strict), Molecule::new())]
-    #[case::natural_empty(IsotopeResolver::new(IsotopePolicy::Natural), Molecule::new())]
+    #[case::strict_mass(IsotopeResolver::new(), mol_dsl!(r#"{:atoms ["C#i13"]}"#))]
+    #[case::natural_mass(IsotopeResolver::with_config(IsotopePolicy::Natural, WildcardPolicy::Strict), mol_dsl!(r#"{:atoms ["C#i13"]}"#))]
+    #[case::strict_empty(IsotopeResolver::new(), Molecule::new())]
+    #[case::natural_empty(
+        IsotopeResolver::with_config(IsotopePolicy::Natural, WildcardPolicy::Strict),
+        Molecule::new()
+    )]
     fn test_isotope_resolver_project_identity(
         #[case] resolver: IsotopeResolver,
         #[case] mut molecule: Molecule,
@@ -431,6 +541,7 @@ mod tests {
     #[case::restricted_variable(IsotopeMassForm::var_in("mass", [12, 13]))]
     fn test_isotope_resolver_project_error(
         #[values(IsotopePolicy::Strict, IsotopePolicy::Natural)] policy: IsotopePolicy,
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
         #[case] isotope: IsotopeMassForm,
     ) {
         let mut molecule = Molecule::from_entries(MoleculeEntries {
@@ -446,13 +557,14 @@ mod tests {
             ],
             ..Default::default()
         });
+        let resolver = IsotopeResolver::with_config(policy, wildcards);
         let original = molecule.clone();
         assert_eq!(
-            IsotopeResolver::new(policy).project(molecule.clone()),
+            resolver.project(molecule.clone()),
             Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
         );
         assert_eq!(
-            IsotopeResolver::new(policy).project_into(&mut molecule),
+            resolver.project_into(&mut molecule),
             Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
         );
         assert_eq!(molecule, original);
@@ -471,7 +583,7 @@ mod tests {
     fn test_isotope_resolver_plan_project(#[case] policy: IsotopePolicy, #[case] expected: Edits) {
         let molecule = mol_dsl!(r#"{:atoms ["C#i=" "O#i18" "N#i="]}"#);
         assert_eq!(
-            IsotopeResolver::new(policy).plan_project(&molecule),
+            IsotopeResolver::with_config(policy, WildcardPolicy::Strict).plan_project(&molecule),
             Ok(expected)
         );
     }
@@ -479,9 +591,13 @@ mod tests {
     #[rstest]
     #[case::undetermined(mol_dsl!(r#"{:atoms ["C#i=" "O"]}"#))]
     #[case::set(mol_dsl!(r#"{:atoms ["C#i=" "O#i{16,18}"]}"#))]
-    fn test_isotope_resolver_plan_project_error(#[case] molecule: Molecule) {
+    #[case::wildcard(mol_dsl!(r#"{:atoms ["C#i=" "*"]}"#))]
+    fn test_isotope_resolver_plan_project_error(
+        #[values(WildcardPolicy::Strict, WildcardPolicy::Admit)] wildcards: WildcardPolicy,
+        #[case] molecule: Molecule,
+    ) {
         assert_eq!(
-            IsotopeResolver::new(IsotopePolicy::Natural).plan_project(&molecule),
+            IsotopeResolver::with_config(IsotopePolicy::Natural, wildcards).plan_project(&molecule),
             Err(IsotopeProjectError::NonGroundIsotope { atom: AtomId(1) }),
         );
     }
