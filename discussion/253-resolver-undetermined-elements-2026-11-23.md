@@ -691,7 +691,7 @@ specified spin, a residual non-wildcard field, and a `#m` assertion with complet
 evidence. Test the dative and noncovalent field readings here. S3b exercises both policies on
 otherwise complete molecules with those bonds.
 
-### S3 — Aggregate resolution and its callers
+### S3 — Aggregate resolution and its callers (done)
 
 #### S3a — Derive the strict aggregate outcome from the phases (done)
 
@@ -777,7 +777,7 @@ double bond marked “either”, test strict rejection with restoration and admi
 with the stored open cis-trans coset. SMILES rendering returns `UnsupportedBond` for `Either`.
 A successful resolve alone establishes no format roundtrip.
 
-#### S3d — Cross-phase properties
+#### S3d — Cross-phase properties (done)
 
 `umol-graph/tests/property/{resolve,isotope,project}.rs`. Additive coverage (green).
 [dep: S3b, S3c]
@@ -796,6 +796,12 @@ discharged. Include inputs with accepted assignments and compare fields in corre
 participant frames. Retain the strict implication that
 every determined aggregate result is concrete. `is_concrete()` is a suitable test assertion.
 Check parity of reports, outcomes and recovered input across the four aggregate routes.
+
+The refinement property tries C, N and O at a wildcard ring atom and orders 1, 2 and 3
+at a separate bond. The C assignment with order 1 must succeed. Under Daylight with
+`Keep`, the partial result retains the atom's `#a1`. The aromatic system in the full
+result supplies that contribution. The property compares retained relations in corresponding
+participant frames, including shuffled tetrahedral ligands.
 
 ### S4 — Python surfaces
 

@@ -7,6 +7,8 @@
 //! Composite projection of supported SMILES is compared with independent complete graph-IR
 //! expectations, including aromatic contributions, retained stereo entities, and isotope elision.
 //! Resolving those projected values reproduces the source under the same model and policies.
+//! A terminal wildcard retains its isotope through projection and resolution beside the
+//! retained stereo entities and the reconstructed aromatic system.
 //! Convey compares H omission with independent allowed-H sets for custom registries and bounded
 //! counts tables, including isotope retention, field preservation, and repeated conversion.
 //! Stage selection is compared with standalone composition for every flag combination on
@@ -477,8 +479,7 @@ proptest! {
             isotope: if natural { IsotopePolicy::Natural } else { IsotopePolicy::Strict },
             ..Default::default()
         };
-        let mut molecule = ingest_smiles_with(&input, &SmilesIoConfig::opensmiles(), &model, &config).unwrap();
-        let source = molecule.clone();
+        let source = ingest_smiles_with(&input, &SmilesIoConfig::opensmiles(), &model, &config).unwrap();
         let base = mol_dsl_concrete!(r#"{:atoms ["C#h3" "C#h1" "F#n3" "C#h1" "C#h1" "C#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1" "C#h1#a1"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [3 4 "2"] [4 5 "1"]
                 [5 10 "1#a"] [5 6 "1#a"] [6 7 "1#a"] [7 8 "1#a"] [8 9 "1#a"] [9 10 "1#a"]]}"#);
@@ -498,13 +499,24 @@ proptest! {
             editor.add_stereo_bond(stereo.site_id(), stereo.ligand_ids(), stereo.attributes().clone());
         }
         let expected = editor.finish().unwrap();
-        let resolver = Resolver::with_config(&model, config);
-        prop_assert_eq!(resolver.project_into(&mut molecule, ProjectFlags::all(), RollbackMethod::Journal), Ok(Solution::Determined(())));
-        prop_assert_eq!(&molecule, &expected);
-        let Solution::Determined(restored) = resolver.resolve(molecule).unwrap() else {
-            return Err(TestCaseError::fail("projected molecule did not resolve"));
-        };
-        prop_assert!(restored.framed_eq(&source));
+        for wildcards in [WildcardPolicy::Strict, WildcardPolicy::Admit] {
+            let mut original = source.clone();
+            let mut projected = expected.clone();
+            if wildcards == WildcardPolicy::Admit {
+                original.atom_mut(AtomId(0)).attributes_mut().element = ElementForm::Undetermined;
+                let mut terminal = projected.atom_mut(AtomId(0));
+                terminal.attributes_mut().element = ElementForm::Undetermined;
+                terminal.attributes_mut().isotope_mass = source.atom(AtomId(0)).isotope_mass().clone();
+            }
+            let resolver = Resolver::with_config(&model, ResolveConfig { wildcards, ..config });
+            let mut molecule = original.clone();
+            prop_assert_eq!(resolver.project_into(&mut molecule, ProjectFlags::all(), RollbackMethod::Journal), Ok(Solution::Determined(())));
+            prop_assert_eq!(&molecule, &projected);
+            let Solution::Determined(restored) = resolver.resolve(molecule).unwrap() else {
+                return Err(TestCaseError::fail("projected molecule did not resolve"));
+            };
+            prop_assert!(restored.framed_eq(&original));
+        }
     }
 
     #[test]

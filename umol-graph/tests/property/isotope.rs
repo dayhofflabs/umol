@@ -2,7 +2,7 @@
 //! Generated chains carry independently varied elements, isotopes and charges, with
 //! other valence fields unresolved. The inverse property checks the projected
 //! molecule as well as the roundtrip, so paired no-op implementations cannot pass.
-//! Raw isotope forms additionally exercise planning agreement and nonpublication;
+//! Raw isotope forms additionally exercise planning agreement and rollback;
 //! these include unnormalized singleton sets and unconstrained variables.
 
 use proptest::prelude::*;
@@ -18,14 +18,15 @@ use umol_graph_ir::ir::{
 use umol_utils::solution::Solution;
 
 proptest! {
-    // Fixed-H carbon chains separate isotope policy from valence selection. Exact
-    // publication/nonpublication and idempotence are checked for every policy/model pair.
+    // Fixed-H carbon chains separate isotope completion from wildcard admission.
     #[test]
     fn test_resolver_resolve_into_isotope(
         isotopes in prop::collection::vec(prop_oneof![
             Just(IsotopeMassForm::Undetermined), Just(IsotopeMassForm::Natural),
             (12u32..15).prop_map(IsotopeMassForm::Lit),
         ], 1..16),
+        symbolic in prop_oneof![Just(IsotopeMassForm::lit_set([12, 13])),
+            Just(IsotopeMassForm::Var(Box::new(("mass".into(), None))))],
     ) {
         let size = isotopes.len();
         let omitted = isotopes.contains(&IsotopeMassForm::Undetermined);
@@ -41,6 +42,8 @@ proptest! {
             })).collect(),
             ..Default::default()
         });
+        let mut symbolic_source = source.clone();
+        symbolic_source.atom_mut(AtomId(0)).attributes_mut().isotope_mass = symbolic;
         let mut expected = source.clone();
         for index in 0..expected.atoms().count() {
             let mut view = expected.atom_mut(AtomId(index as u32));
@@ -57,19 +60,24 @@ proptest! {
                     valence: ValenceModel { tie_break, ..valence.clone() }, ..Default::default()
                 };
                 for isotope in [IsotopePolicy::Strict, IsotopePolicy::Natural] {
-                    let resolver = Resolver::with_config(&model, ResolveConfig { isotope, ..Default::default() });
-                    let mut molecule = source.clone();
-                    let result = resolver.resolve_into(&mut molecule, RollbackMethod::Journal).unwrap();
-                    if isotope == IsotopePolicy::Strict && omitted {
-                        prop_assert_eq!(&result, &Solution::Underdetermined(()));
-                        prop_assert_eq!(&molecule, &source);
-                    } else {
-                        prop_assert_eq!(&result, &Solution::Determined(()));
-                        prop_assert_eq!(&molecule, &expected);
+                    for wildcards in [WildcardPolicy::Strict, WildcardPolicy::Admit] {
+                        let resolver = Resolver::with_config(&model, ResolveConfig { isotope, wildcards, ..Default::default() });
+                        let mut molecule = source.clone();
+                        let result = resolver.resolve_into(&mut molecule, RollbackMethod::Journal).unwrap();
+                        if isotope == IsotopePolicy::Strict && omitted {
+                            prop_assert_eq!(&result, &Solution::Underdetermined(()));
+                            prop_assert_eq!(&molecule, &source);
+                        } else {
+                            prop_assert_eq!(&result, &Solution::Determined(()));
+                            prop_assert_eq!(&molecule, &expected);
+                        }
+                        let once = molecule.clone();
+                        prop_assert_eq!(resolver.resolve_into(&mut molecule, RollbackMethod::Journal), Ok(result));
+                        prop_assert_eq!(molecule, once);
+                        let mut symbolic = symbolic_source.clone();
+                        prop_assert_eq!(resolver.resolve_into(&mut symbolic, RollbackMethod::Journal), Ok(Solution::Underdetermined(())));
+                        prop_assert_eq!(&symbolic, &symbolic_source);
                     }
-                    let once = molecule.clone();
-                    prop_assert_eq!(resolver.resolve_into(&mut molecule, RollbackMethod::Journal), Ok(result));
-                    prop_assert_eq!(molecule, once);
                 }
             }
         }
