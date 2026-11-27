@@ -887,5 +887,435 @@ pub(crate) fn rank_colors<T: Ord>(
     }
 }
 
+/// Node budget for canonical bottom-up Sims subgroup search. When exceeded,
+/// [`extract_subgroup_generators`] falls back to the exact pointwise stabilizer `Stab(base)`,
+/// which is always a sound subgroup and invariant across [`AutomorphismAlgorithm`] variants.
+const SUBGROUP_SEARCH_NODE_BUDGET: usize = 8192;
+
+const SCHREIER_UNVISITED: u32 = u32::MAX;
+const SCHREIER_ROOT_GEN: u32 = u32::MAX;
+
+/// Project permutation generators onto a prefix domain `0..prefix_len`, dropping identity
+/// projections.
+pub(crate) fn project_generators(
+    generators: &[Vec<NodeId>],
+    prefix_len: usize,
+) -> Vec<Vec<NodeId>> {
+    let mut projected = Vec::with_capacity(generators.len());
+    for generator in generators {
+        let slice = &generator[..prefix_len];
+        debug_assert!(slice.iter().all(|node| node.index() < prefix_len));
+        if slice
+            .iter()
+            .enumerate()
+            .any(|(index, node)| node.index() != index)
+        {
+            projected.push(slice.to_vec());
+        }
+    }
+    projected
+}
+
+enum SubgroupSearchOutcome {
+    Found(Vec<u32>),
+    NotFound,
+    BudgetExceeded,
+}
+
+/// Extract a generating set for the subgroup `H <= <generators>` whose elements satisfy
+/// `check_at_depth(depth, perm)` for every `depth` in `0..base.len()`.
+///
+/// The caller supplies a deterministic vertex `base` such that:
+/// - every element of `Stab(base)` satisfies the subgroup property, and
+/// - `check_at_depth(depth, perm)` depends only on the images of `base[0..=depth]`.
+///
+/// Branch candidates are sorted canonically by `perm[x]`, so the generated subgroup (including
+/// any `Stab(base)` budget fallback) is strictly invariant across generating bases and
+/// [`AutomorphismAlgorithm`] variants.
+pub(crate) fn extract_subgroup_generators<F>(
+    node_count: usize,
+    generators: &[Vec<NodeId>],
+    base: &[usize],
+    mut check_at_depth: F,
+) -> Vec<Vec<NodeId>>
+where
+    F: FnMut(usize, &[u32]) -> bool,
+{
+    if generators.is_empty() {
+        return Vec::new();
+    }
+    if base.is_empty() {
+        return generators.to_vec();
+    }
+
+    let mut init_filter = SimsFilter::new(node_count);
+    for generator in generators {
+        let perm: Vec<u32> = generator.iter().map(|node| node.0).collect();
+        if first_moved(&perm).is_some() {
+            init_filter.insert(perm);
+        }
+    }
+    let mut current_gens = init_filter.into_generators();
+    let mut levels: Vec<Option<SchreierTree>> = vec![None; base.len()];
+    for (level_idx, &base_vertex) in base.iter().enumerate() {
+        if current_gens.is_empty() {
+            break;
+        }
+        let tree = SchreierTree::build(base_vertex, node_count, &current_gens);
+        if tree.orbit.len() <= 1 {
+            continue;
+        }
+        let next_gens = stabilize_point(&tree, node_count);
+        levels[level_idx] = Some(tree);
+        current_gens = next_gens;
+    }
+
+    // Every element of `K = Stab(base)` fixes `base` pointwise and belongs to the subgroup.
+    let k_gens = current_gens;
+    let mut subgroup_filter = SimsFilter::new(node_count);
+    for generator in &k_gens {
+        subgroup_filter.insert(generator.clone());
+    }
+
+    let mut nodes_visited = 0usize;
+    let mut g_start = vec![0u32; node_count];
+    let mut tmp = vec![0u32; node_count];
+    let mut in_hi_orbit = vec![false; node_count];
+    let mut failed_targets = vec![false; node_count];
+    let mut bfs_queue = Vec::with_capacity(node_count);
+
+    for level_idx in (0..base.len()).rev() {
+        let Some(tree_i) = levels[level_idx].as_ref() else {
+            continue;
+        };
+        let base_vertex = base[level_idx];
+        let h_next_gens = subgroup_filter.generators().to_vec();
+
+        let mut candidates: Vec<u32> = tree_i
+            .orbit
+            .iter()
+            .copied()
+            .filter(|&target| target as usize != base_vertex)
+            .collect();
+        candidates.sort_unstable();
+
+        in_hi_orbit.fill(false);
+        in_hi_orbit[base_vertex] = true;
+        failed_targets.fill(false);
+
+        for target_u32 in candidates {
+            let target = target_u32 as usize;
+            if in_hi_orbit[target] || failed_targets[target] {
+                continue;
+            }
+            tree_i.coset_rep_into(target, &mut g_start, &mut tmp);
+            let outcome = if check_at_depth(level_idx, &g_start) {
+                find_subgroup_extension(
+                    level_idx + 1,
+                    &g_start,
+                    &levels,
+                    &mut check_at_depth,
+                    &mut nodes_visited,
+                )
+            } else {
+                SubgroupSearchOutcome::NotFound
+            };
+
+            match outcome {
+                SubgroupSearchOutcome::Found(perm) => {
+                    subgroup_filter.insert(perm);
+                    mark_orbit(
+                        base_vertex,
+                        subgroup_filter.generators(),
+                        &mut in_hi_orbit,
+                        &mut bfs_queue,
+                    );
+                }
+                SubgroupSearchOutcome::NotFound => {
+                    mark_orbit(target, &h_next_gens, &mut failed_targets, &mut bfs_queue);
+                }
+                SubgroupSearchOutcome::BudgetExceeded => {
+                    return k_gens
+                        .into_iter()
+                        .map(|perm| perm.into_iter().map(NodeId).collect())
+                        .collect();
+                }
+            }
+        }
+    }
+
+    subgroup_filter
+        .into_generators()
+        .into_iter()
+        .map(|perm| perm.into_iter().map(NodeId).collect())
+        .collect()
+}
+
+fn find_subgroup_extension<F>(
+    depth: usize,
+    g_cur: &[u32],
+    levels: &[Option<SchreierTree>],
+    check_at_depth: &mut F,
+    nodes_visited: &mut usize,
+) -> SubgroupSearchOutcome
+where
+    F: FnMut(usize, &[u32]) -> bool,
+{
+    if depth == levels.len() {
+        return SubgroupSearchOutcome::Found(g_cur.to_vec());
+    }
+    if *nodes_visited >= SUBGROUP_SEARCH_NODE_BUDGET {
+        return SubgroupSearchOutcome::BudgetExceeded;
+    }
+    *nodes_visited += 1;
+
+    let Some(tree) = levels[depth].as_ref() else {
+        if !check_at_depth(depth, g_cur) {
+            return SubgroupSearchOutcome::NotFound;
+        }
+        return find_subgroup_extension(depth + 1, g_cur, levels, check_at_depth, nodes_visited);
+    };
+
+    let mut branches: Vec<(u32, usize)> = tree
+        .orbit
+        .iter()
+        .map(|&x| (g_cur[x as usize], x as usize))
+        .collect();
+    branches.sort_unstable_by_key(|&(image, _)| image);
+
+    let node_count = g_cur.len();
+    let mut g_next = vec![0u32; node_count];
+    let mut tmp = vec![0u32; node_count];
+
+    for (_, x) in branches {
+        tree.compose_right_coset_rep(g_cur, x, &mut g_next, &mut tmp);
+        if !check_at_depth(depth, &g_next) {
+            continue;
+        }
+        match find_subgroup_extension(depth + 1, &g_next, levels, check_at_depth, nodes_visited) {
+            SubgroupSearchOutcome::NotFound => {}
+            other => return other,
+        }
+    }
+
+    SubgroupSearchOutcome::NotFound
+}
+
+fn mark_orbit(start: usize, generators: &[Vec<u32>], visited: &mut [bool], queue: &mut Vec<usize>) {
+    queue.clear();
+    if !visited[start] {
+        visited[start] = true;
+        queue.push(start);
+    } else {
+        for (vertex, &is_visited) in visited.iter().enumerate() {
+            if is_visited {
+                queue.push(vertex);
+            }
+        }
+    }
+    let mut head = 0;
+    while head < queue.len() {
+        let vertex = queue[head];
+        head += 1;
+        for generator in generators {
+            let next = generator[vertex] as usize;
+            if !visited[next] {
+                visited[next] = true;
+                queue.push(next);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct SchreierTree {
+    base: u32,
+    orbit: Vec<u32>,
+    parent_pt: Vec<u32>,
+    parent_gen: Vec<u32>,
+    generators: Vec<Vec<u32>>,
+    inv_generators: Vec<Vec<u32>>,
+}
+
+impl SchreierTree {
+    fn build(base: usize, node_count: usize, generators: &[Vec<u32>]) -> Self {
+        let mut parent_pt = vec![SCHREIER_UNVISITED; node_count];
+        let mut parent_gen = vec![SCHREIER_ROOT_GEN; node_count];
+        let mut orbit = Vec::new();
+        parent_pt[base] = base as u32;
+        orbit.push(base as u32);
+
+        let mut head = 0;
+        while head < orbit.len() {
+            let x = orbit[head] as usize;
+            head += 1;
+            for (gen_idx, generator) in generators.iter().enumerate() {
+                let y = generator[x] as usize;
+                if parent_pt[y] == SCHREIER_UNVISITED {
+                    parent_pt[y] = x as u32;
+                    parent_gen[y] = gen_idx as u32;
+                    orbit.push(y as u32);
+                }
+            }
+        }
+
+        let inv_generators = generators.iter().map(|g| invert_perm(g)).collect();
+        Self {
+            base: base as u32,
+            orbit,
+            parent_pt,
+            parent_gen,
+            generators: generators.to_vec(),
+            inv_generators,
+        }
+    }
+
+    fn coset_rep_into(&self, target: usize, out: &mut [u32], tmp: &mut [u32]) {
+        for (index, slot) in out.iter_mut().enumerate() {
+            *slot = index as u32;
+        }
+        let mut cur = target;
+        while cur != self.base as usize {
+            let generator = &self.generators[self.parent_gen[cur] as usize];
+            for (index, slot) in tmp.iter_mut().enumerate() {
+                *slot = out[generator[index] as usize];
+            }
+            out.copy_from_slice(tmp);
+            cur = self.parent_pt[cur] as usize;
+        }
+    }
+
+    fn compose_right_coset_rep(
+        &self,
+        g_cur: &[u32],
+        target: usize,
+        out: &mut [u32],
+        tmp: &mut [u32],
+    ) {
+        out.copy_from_slice(g_cur);
+        let mut cur = target;
+        while cur != self.base as usize {
+            let generator = &self.generators[self.parent_gen[cur] as usize];
+            for (index, slot) in tmp.iter_mut().enumerate() {
+                *slot = out[generator[index] as usize];
+            }
+            out.copy_from_slice(tmp);
+            cur = self.parent_pt[cur] as usize;
+        }
+    }
+
+    fn apply_left_inv_coset_rep(&self, target: usize, perm: &mut [u32]) {
+        let mut cur = target;
+        while cur != self.base as usize {
+            let inv_generator = &self.inv_generators[self.parent_gen[cur] as usize];
+            for slot in perm.iter_mut() {
+                *slot = inv_generator[*slot as usize];
+            }
+            cur = self.parent_pt[cur] as usize;
+        }
+    }
+}
+
+struct SimsFilter {
+    buckets: Vec<Vec<(u32, usize)>>,
+    generators: Vec<Vec<u32>>,
+    inv_generators: Vec<Vec<u32>>,
+}
+
+impl SimsFilter {
+    fn new(node_count: usize) -> Self {
+        Self {
+            buckets: vec![Vec::new(); node_count],
+            generators: Vec::new(),
+            inv_generators: Vec::new(),
+        }
+    }
+
+    fn insert(&mut self, mut perm: Vec<u32>) {
+        while let Some(i) = first_moved(&perm) {
+            let j = perm[i];
+            if let Some(&(_, gen_idx)) = self.buckets[i].iter().find(|&&(img, _)| img == j) {
+                let g_inv = &self.inv_generators[gen_idx];
+                for slot in &mut perm {
+                    *slot = g_inv[*slot as usize];
+                }
+            } else {
+                let gen_idx = self.generators.len();
+                let inv = invert_perm(&perm);
+                self.buckets[i].push((j, gen_idx));
+                self.generators.push(perm);
+                self.inv_generators.push(inv);
+                break;
+            }
+        }
+    }
+
+    fn generators(&self) -> &[Vec<u32>] {
+        &self.generators
+    }
+
+    fn into_generators(self) -> Vec<Vec<u32>> {
+        self.generators
+    }
+}
+
+fn stabilize_point(tree: &SchreierTree, node_count: usize) -> Vec<Vec<u32>> {
+    if tree.generators.is_empty() {
+        return Vec::new();
+    }
+    let base = tree.base as usize;
+    if tree.orbit.len() <= 1 {
+        return tree.generators.clone();
+    }
+
+    let mut filter = SimsFilter::new(node_count);
+    for generator in &tree.generators {
+        if generator[base] as usize == base {
+            filter.insert(generator.clone());
+        }
+    }
+
+    let mut u_x = vec![0u32; node_count];
+    let mut tmp = vec![0u32; node_count];
+    let mut candidate = vec![0u32; node_count];
+
+    for &x_u32 in &tree.orbit {
+        let x = x_u32 as usize;
+        tree.coset_rep_into(x, &mut u_x, &mut tmp);
+        for (gen_idx, generator) in tree.generators.iter().enumerate() {
+            let y = generator[x] as usize;
+            if x == base && y == base {
+                continue;
+            }
+            if tree.parent_pt[y] as usize == x && tree.parent_gen[y] as usize == gen_idx {
+                continue;
+            }
+            for vertex in 0..node_count {
+                candidate[vertex] = generator[u_x[vertex] as usize];
+            }
+            tree.apply_left_inv_coset_rep(y, &mut candidate);
+            if first_moved(&candidate).is_some() {
+                filter.insert(candidate.clone());
+            }
+        }
+    }
+
+    filter.into_generators()
+}
+
+fn invert_perm(perm: &[u32]) -> Vec<u32> {
+    let mut inv = vec![0u32; perm.len()];
+    for (index, &image) in perm.iter().enumerate() {
+        inv[image as usize] = index as u32;
+    }
+    inv
+}
+
+fn first_moved(perm: &[u32]) -> Option<usize> {
+    perm.iter()
+        .enumerate()
+        .find_map(|(index, &image)| (image as usize != index).then_some(index))
+}
+
 #[cfg(test)]
 mod tests;

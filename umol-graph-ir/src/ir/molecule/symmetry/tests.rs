@@ -3,10 +3,12 @@
 //! configurations and literal incidence weights, independently of production colors and search.
 
 use std::cmp::Ordering;
+use std::collections::{BTreeSet, VecDeque};
 
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_chem::element::Element;
+use umol_graph_core::QuerySymmetryConstraints;
 use umol_perm::Orientation;
 
 use super::*;
@@ -2776,4 +2778,159 @@ fn test_graph_symmetry_config_default() {
     );
     assert_eq!(config.max_classification_trials, 4096);
     assert_eq!(config.include_constraints, false);
+}
+
+fn subgroup_elements(node_count: usize, generators: &[Vec<NodeId>]) -> BTreeSet<Vec<u32>> {
+    let identity: Vec<u32> = (0..node_count as u32).collect();
+    let mut seen = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    seen.insert(identity.clone());
+    queue.push_back(identity);
+    while let Some(cur) = queue.pop_front() {
+        for generator in generators {
+            let next: Vec<u32> = cur.iter().map(|&v| generator[v as usize].0).collect();
+            if seen.insert(next.clone()) {
+                queue.push_back(next);
+            }
+        }
+    }
+    seen
+}
+
+#[rstest]
+#[case::benzene(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"] [3 4 "2"] [4 5 "1"] [5 0 "2"]]}"#),
+    true,
+    6
+)]
+#[case::cyclohexane(
+    mol_dsl!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+    true,
+    12
+)]
+#[case::chiral_tetrahedral(
+    mol_dsl!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"#),
+    true,
+    1
+)]
+#[case::tetrahedral_methane_a4(
+    mol_dsl!(r#"{:atoms ["C" "H" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#),
+    true,
+    12
+)]
+#[case::tetrahedral_methane_with_methyl_stabilizer(
+    mol_dsl!(r#"{:atoms ["C" "H" "H" "H" "C" "H" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [4 5 "1"] [4 6 "1"] [4 7 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#),
+    true,
+    18
+)]
+#[case::rr_tartaric_c2(
+    mol_dsl!(r#"{:atoms ["C #h1" "O #h1" "C #h0" "C #h1" "O #h1" "C #h0"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [3 4 "1"] [3 5 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"} {:site 3 :ligands [4 5 0 [:h 3]] :attrs "Th0"}]}"#),
+    true,
+    2
+)]
+#[case::meso_tartaric_trivial(
+    mol_dsl!(r#"{:atoms ["C #h1" "O #h1" "C #h0" "C #h1" "O #h1" "C #h0"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [3 4 "1"] [3 5 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"} {:site 3 :ligands [4 5 0 [:h 3]] :attrs "Th1"}]}"#),
+    true,
+    1
+)]
+#[case::cis_trans_symmetric_alkene_c2(
+    mol_dsl!(r#"{:atoms ["C" "C" "F" "Cl" "F" "Cl"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#),
+    true,
+    2
+)]
+#[case::cis_trans_single_end_swap_excluded(
+    mol_dsl!(r#"{:atoms ["C" "C" "F" "F" "Cl" "Br"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]] :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#),
+    true,
+    1
+)]
+#[case::aromatic_nonuniform_electrons(
+    mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[2,1,1]"}]}"#),
+    true,
+    2
+)]
+#[case::atom_constraint_included(
+    mol_dsl!(r#"{:atoms ["C#R1" "C"] :bonds [[0 1 "1"]]}"#),
+    true,
+    1
+)]
+#[case::atom_constraint_excluded(
+    mol_dsl!(r#"{:atoms ["C#R1" "C"] :bonds [[0 1 "1"]]}"#),
+    false,
+    2
+)]
+#[case::malformed_aromatic_electron_length_fallback(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1, 1])),
+        )],
+        ..Default::default()
+    }),
+    true,
+    1
+)]
+fn test_molecule_proper_generators(
+    #[case] molecule: Molecule,
+    #[case] include_constraints: bool,
+    #[case] expected_order: usize,
+) {
+    let atom_count = molecule.atoms().count();
+    let incidence = molecule.incidence_graph(IncidenceLevel::Constitution);
+
+    let trail_atom_gens =
+        molecule.proper_atom_generators(AutomorphismAlgorithm::TrailIr, include_constraints);
+    let nauty_atom_gens =
+        molecule.proper_atom_generators(AutomorphismAlgorithm::Nauty, include_constraints);
+    let trail_atoms = subgroup_elements(atom_count, &trail_atom_gens);
+    let nauty_atoms = subgroup_elements(atom_count, &nauty_atom_gens);
+    assert_eq!(trail_atoms, nauty_atoms);
+    assert_eq!(trail_atoms.len(), expected_order);
+
+    let trail_sym = molecule
+        .graph_symmetry(&GraphSymmetryConfig {
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            include_constraints,
+            ..GraphSymmetryConfig::default()
+        })
+        .into_graph_symmetry();
+    let nauty_sym = molecule
+        .graph_symmetry(&GraphSymmetryConfig {
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            include_constraints,
+            ..GraphSymmetryConfig::default()
+        })
+        .into_graph_symmetry();
+    let trail_inc_gens = molecule.proper_incidence_generators(&trail_sym);
+    let nauty_inc_gens = molecule.proper_incidence_generators(&nauty_sym);
+    let trail_inc = subgroup_elements(incidence.graph().node_count(), &trail_inc_gens);
+    let nauty_inc = subgroup_elements(incidence.graph().node_count(), &nauty_inc_gens);
+    assert_eq!(trail_inc, nauty_inc);
+    assert_eq!(trail_inc.len(), expected_order);
+
+    // Every orbit induced by `proper_atom_generators` agrees with `Molecule::proper_orbit_of`.
+    for atom in molecule.atoms().ids() {
+        let mut from_gens: Vec<AtomId> = trail_atoms
+            .iter()
+            .map(|perm| AtomId(perm[atom.index()]))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        from_gens.sort();
+        assert_eq!(from_gens, molecule.proper_orbit_of(&trail_sym, atom));
+    }
+
+    let q_atom_trail =
+        QuerySymmetryConstraints::try_from_generators(molecule.raw_graph(), &trail_atom_gens)
+            .unwrap();
+    let q_atom_nauty =
+        QuerySymmetryConstraints::try_from_generators(molecule.raw_graph(), &nauty_atom_gens)
+            .unwrap();
+    assert_eq!(q_atom_trail.constraints(), q_atom_nauty.constraints());
+
+    let q_inc_trail =
+        QuerySymmetryConstraints::try_from_generators(incidence.graph(), &trail_inc_gens).unwrap();
+    let q_inc_nauty =
+        QuerySymmetryConstraints::try_from_generators(incidence.graph(), &nauty_inc_gens).unwrap();
+    assert_eq!(q_inc_trail.constraints(), q_inc_nauty.constraints());
 }

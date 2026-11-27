@@ -134,7 +134,8 @@ pub use stereo::{
     TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
-    SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,
+    PreparedSubstructureHost, PreparedSubstructurePattern, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig, SubstructureMatchError,
 };
 pub use traits::{
     AsLit, EntityPatch, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Reframe, ReframeKind,

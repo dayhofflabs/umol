@@ -8,7 +8,7 @@ use umol_perm::{Orientation, Permutation};
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
-use super::super::id::{AtomId, AtomPosition};
+use super::super::id::{AtomId, AtomPosition, BondId, StereoAtomId, StereoBondId};
 use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
@@ -16,8 +16,9 @@ use super::super::stereo::{
     coset_apply_permutation, StereoConfigurationForm, StereoCoset, StereoKind, StereogenicSiteKind,
 };
 use super::super::symmetry::{
-    rank_colors, remapping_exists, remapping_preserves_incidences, visit_remapping_candidates,
-    AutomorphismAdapter, InitialColors, OrderedPartition,
+    extract_subgroup_generators, project_generators, rank_colors, remapping_exists,
+    remapping_preserves_incidences, visit_remapping_candidates, AutomorphismAdapter, InitialColors,
+    OrderedPartition,
 };
 use super::super::traits::{AsColor, AsLit, FrameTransport, Normalize};
 use super::super::view::GraphSymmetryView;
@@ -235,6 +236,167 @@ impl Molecule {
             .ids()
             .filter(|&b| self.same_star_orbit(symmetry, a, b))
             .collect()
+    }
+
+    /// Generating set for the proper (`Orientation::Proper`) automorphism subgroup over
+    /// `symmetry.incidence` (`IncidenceLevel::Constitution`).
+    ///
+    /// The generated subgroup is invariant across [`AutomorphismAlgorithm`] variants and never
+    /// includes improper (mirror) symmetries.
+    pub(crate) fn proper_incidence_generators(&self, symmetry: &GraphSymmetry) -> Vec<Vec<NodeId>> {
+        let Some(automorphisms) = &symmetry.automorphisms else {
+            return Vec::new();
+        };
+        let generators = automorphisms.generators();
+        if generators.is_empty() {
+            return Vec::new();
+        }
+        if self.stereo_atoms().count() == 0 && self.stereo_bonds().count() == 0 {
+            return generators.to_vec();
+        }
+
+        let node_count = symmetry.incidence.graph().node_count();
+        let identity: Vec<NodeId> = (0..node_count as u32).map(NodeId).collect();
+        let include_constraints = symmetry.config.include_constraints;
+        if !remapping_matches_stereo(
+            self,
+            &symmetry.incidence,
+            &identity,
+            include_constraints,
+            Orientation::Proper,
+            None,
+        ) {
+            return Vec::new();
+        }
+
+        if generators.iter().all(|generator| {
+            remapping_matches_stereo(
+                self,
+                &symmetry.incidence,
+                generator,
+                include_constraints,
+                Orientation::Proper,
+                None,
+            )
+        }) {
+            return generators.to_vec();
+        }
+
+        // Deterministic base covering every stereo site and ligand atom in the constitution
+        // incidence graph, grouped by stereo record so partial checks prune early.
+        let mut base = Vec::new();
+        let mut base_pos = vec![usize::MAX; node_count];
+        let mut add_base = |node: NodeId| -> usize {
+            let idx = node.index();
+            if base_pos[idx] == usize::MAX {
+                base_pos[idx] = base.len();
+                base.push(idx);
+            }
+            base_pos[idx]
+        };
+
+        let mut tagged_records =
+            Vec::with_capacity(self.stereo_atoms().count() + self.stereo_bonds().count());
+        for stereo in self.stereo_atoms().iter() {
+            let mut max_pos = add_base(symmetry.incidence.node_of(Entity::Atom(stereo.site_id())));
+            for ligand in stereo.ligand_ids() {
+                max_pos = max_pos.max(add_base(
+                    symmetry.incidence.node_of(Entity::Atom(ligand.atom_id)),
+                ));
+            }
+            tagged_records.push((max_pos, StereoRecordId::Atom(stereo.id())));
+        }
+        for stereo in self.stereo_bonds().iter() {
+            let mut max_pos = add_base(symmetry.incidence.node_of(Entity::Bond(stereo.site_id())));
+            for ligand in stereo.ligand_ids() {
+                max_pos = max_pos.max(add_base(
+                    symmetry.incidence.node_of(Entity::Atom(ligand.atom_id)),
+                ));
+            }
+            tagged_records.push((max_pos, StereoRecordId::Bond(stereo.id())));
+        }
+
+        let mut records_at_depth = vec![Vec::new(); base.len()];
+        for (depth, record) in tagged_records {
+            records_at_depth[depth].push(record);
+        }
+
+        let proper = extract_subgroup_generators(node_count, generators, &base, |depth, images| {
+            records_at_depth[depth].iter().all(|&record| {
+                stereo_record_matches_proper(
+                    self,
+                    &symmetry.incidence,
+                    images,
+                    record,
+                    include_constraints,
+                )
+            })
+        });
+
+        debug_assert!(proper.iter().all(|generator| {
+            remapping_matches_stereo(
+                self,
+                &symmetry.incidence,
+                generator,
+                include_constraints,
+                Orientation::Proper,
+                None,
+            )
+        }));
+        proper
+    }
+
+    /// Generating set for the proper (`Orientation::Proper`) automorphism subgroup projected to
+    /// atom space (`0..atom_count`).
+    ///
+    /// Uses `raw_graph().automorphisms(...)` directly when the molecule carries no overlays or
+    /// stereo records; otherwise derives the exact subgroup from [`Self::graph_symmetry`] and
+    /// [`Self::proper_incidence_generators`].
+    pub(crate) fn proper_atom_generators(
+        &self,
+        algorithm: AutomorphismAlgorithm,
+        include_constraints: bool,
+    ) -> Vec<Vec<NodeId>> {
+        let atom_count = self.atoms().count();
+        let has_overlays = self.dative_bonds().count() > 0
+            || self.aromatic_systems().count() > 0
+            || self.multicenter_bonds().count() > 0
+            || self.noncovalent_bonds().count() > 0
+            || self.stereo_atoms().count() > 0
+            || self.stereo_bonds().count() > 0;
+        if !has_overlays {
+            if atom_count <= 1 {
+                return Vec::new();
+            }
+            let group = if include_constraints {
+                self.raw_graph().automorphisms(
+                    |node| self.atom(AtomId::from(node)).attributes().as_color(),
+                    |edge| self.bond(BondId::from(edge)).attributes().as_color(),
+                    algorithm,
+                )
+            } else {
+                self.raw_graph().automorphisms(
+                    |node| self.atom(AtomId::from(node)).attributes().as_field_color(),
+                    |edge| self.bond(BondId::from(edge)).attributes().as_field_color(),
+                    algorithm,
+                )
+            };
+            return if group.orbit_count() == atom_count {
+                Vec::new()
+            } else {
+                group.generators().to_vec()
+            };
+        }
+
+        let symmetry = self
+            .graph_symmetry(&GraphSymmetryConfig {
+                automorphism_algorithm: algorithm,
+                include_constraints,
+                ..GraphSymmetryConfig::default()
+            })
+            .into_graph_symmetry();
+        let incidence_generators = self.proper_incidence_generators(&symmetry);
+        project_generators(&incidence_generators, atom_count)
     }
 
     /// Classify all kinded stereo records together, independently of their stored cosets.
@@ -839,6 +1001,103 @@ fn molecule_remapping_exists(
             }
         },
     )
+}
+
+#[derive(Clone, Copy, Debug)]
+enum StereoRecordId {
+    Atom(StereoAtomId),
+    Bond(StereoBondId),
+}
+
+fn stereo_record_matches_proper(
+    molecule: &Molecule,
+    incidence: &IncidenceGraph,
+    images: &[u32],
+    record: StereoRecordId,
+    include_constraints: bool,
+) -> bool {
+    let mapped_ligands = |ligands: &[StereoLigand], target_ligands: &[StereoLigand]| {
+        let mapped = ligands
+            .iter()
+            .map(|ligand| {
+                let image = NodeId(images[incidence.node_of(Entity::Atom(ligand.atom_id)).index()]);
+                let Entity::Atom(atom) = incidence.entity(image) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, target_ligands)
+    };
+
+    let (source_config, target_config, frame, constraints_ok) = match record {
+        StereoRecordId::Atom(id) => {
+            let source = molecule.stereo_atom(id);
+            let site_image =
+                NodeId(images[incidence.node_of(Entity::Atom(source.site_id())).index()]);
+            let Entity::Atom(target_site) = incidence.entity(site_image) else {
+                return false;
+            };
+            let Some(target) = molecule.atom(target_site).stereo_atom() else {
+                return false;
+            };
+            let Some(frame) = mapped_ligands(source.ligand_ids(), target.ligand_ids()) else {
+                return false;
+            };
+            let constraints_ok = !include_constraints
+                || source
+                    .attributes()
+                    .constraints
+                    .clone()
+                    .reframe_by(&frame)
+                    .is_some_and(|mapped| mapped == target.attributes().constraints);
+            (
+                &source.attributes().configuration,
+                &target.attributes().configuration,
+                frame,
+                constraints_ok,
+            )
+        }
+        StereoRecordId::Bond(id) => {
+            let source = molecule.stereo_bond(id);
+            let site_image =
+                NodeId(images[incidence.node_of(Entity::Bond(source.site_id())).index()]);
+            let Entity::Bond(target_site) = incidence.entity(site_image) else {
+                return false;
+            };
+            let Some(target) = molecule.bond(target_site).stereo_bond() else {
+                return false;
+            };
+            let Some(frame) = mapped_ligands(source.ligand_ids(), target.ligand_ids()) else {
+                return false;
+            };
+            let constraints_ok = !include_constraints
+                || source
+                    .attributes()
+                    .constraints
+                    .clone()
+                    .reframe_by(&frame)
+                    .is_some_and(|mapped| mapped == target.attributes().constraints);
+            (
+                &source.attributes().configuration,
+                &target.attributes().configuration,
+                frame,
+                constraints_ok,
+            )
+        }
+    };
+
+    let transported = match source_config {
+        StereoConfigurationForm::Undetermined => Some(StereoConfigurationForm::Undetermined),
+        StereoConfigurationForm::Kinded(kind, coset) => {
+            if kind.degree() != frame.degree() {
+                return false;
+            }
+            coset_apply_permutation(coset, frame, *kind)
+                .map(|coset| StereoConfigurationForm::kinded(*kind, coset))
+        }
+    };
+    transported.as_ref() == Some(target_config) && constraints_ok
 }
 
 fn remapping_frame_action(

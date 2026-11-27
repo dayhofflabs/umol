@@ -7,8 +7,11 @@
 //! overlays; `Incidence` matches the incidence (Levi) graph for hyperedge-only
 //! connectivity.
 
+mod prepared;
+
 use std::ops::ControlFlow;
 
+pub use prepared::{PreparedSubstructureHost, PreparedSubstructurePattern};
 use thiserror::Error;
 use umol_graph_core::{
     AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
