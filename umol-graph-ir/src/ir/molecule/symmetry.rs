@@ -122,7 +122,7 @@ impl Molecule {
                 || !matches!(incidence.entity(cell[0]), Entity::Atom(_))
         });
         let partition = if atom_colors_distinct {
-            partition.refine(adapter.graph())
+            partition.refine(adapter.graph(), adapter.edge_colors())
         } else {
             partition
         };
@@ -134,7 +134,7 @@ impl Molecule {
         } else {
             let automorphisms = adapter.graph().automorphisms(
                 |node| adapter.color(node),
-                |_| 0u8,
+                |edge| adapter.edge_color(edge),
                 config.automorphism_algorithm,
             );
             let descriptors = adapter
@@ -380,7 +380,7 @@ impl Molecule {
                     .unwrap();
                 partition = partition
                     .individualize(cell, node)
-                    .refine(symmetry.adapter.graph());
+                    .refine(symmetry.adapter.graph(), symmetry.adapter.edge_colors());
             }
             let cells = partition.cell_indices(symmetry.adapter.graph().node_count());
             let constitutional = records
@@ -511,7 +511,7 @@ impl Molecule {
                         .unwrap();
                     let focus_partition = partition
                         .individualize(cell, node)
-                        .refine(symmetry.adapter.graph());
+                        .refine(symmetry.adapter.graph(), symmetry.adapter.edge_colors());
                     let focus_cells =
                         focus_partition.cell_indices(symmetry.adapter.graph().node_count());
                     let moved = records

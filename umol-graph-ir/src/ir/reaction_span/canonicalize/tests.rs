@@ -1015,11 +1015,7 @@ fn test_same_colors(
         ..Default::default()
     }),
     Graph::new(2, &[[0, 1]]),
-    vec![AutomorphismColor::Entity(0); 2],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-    ],
+    vec![0; 2],
     vec![vec![NodeId(0), NodeId(1)]],
 )]
 #[case::added_atom(
@@ -1032,11 +1028,7 @@ fn test_same_colors(
         ..Default::default()
     }),
     Graph::new(2, &[[0, 1]]),
-    vec![AutomorphismColor::Entity(0), AutomorphismColor::Entity(1)],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-    ],
+    vec![0, 1],
     vec![vec![NodeId(0)], vec![NodeId(1)]],
 )]
 #[case::modified_bond(
@@ -1057,18 +1049,7 @@ fn test_same_colors(
         ..Default::default()
     }),
     Graph::new(4, &[[0, 1], [1, 2], [0, 3], [3, 2]]),
-    vec![
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(2),
-    ],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-        AdapterNodeSource::Node(NodeId(2)),
-        AdapterNodeSource::Node(NodeId(3)),
-    ],
+    vec![0, 0, 0, 2],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
 #[case::removed_and_added_bond(
@@ -1081,25 +1062,13 @@ fn test_same_colors(
         ..Default::default()
     }),
     Graph::new(4, &[[0, 3], [3, 1], [1, 2]]),
-    vec![
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(2),
-    ],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-        AdapterNodeSource::Node(NodeId(2)),
-        AdapterNodeSource::Node(NodeId(3)),
-    ],
+    vec![0, 0, 0, 2],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
 fn test_topology_search_input(
     #[case] span: ReactionSpan,
     #[case] expected_graph: Graph,
-    #[case] expected_colors: Vec<AutomorphismColor>,
-    #[case] expected_node_sources: Vec<AdapterNodeSource>,
+    #[case] expected_colors: Vec<u32>,
     #[case] expected_partition: Vec<Vec<NodeId>>,
 ) {
     let span = span.normalize().unwrap();
@@ -1109,7 +1078,6 @@ fn test_topology_search_input(
 
     assert_eq!(input.adapter.graph, expected_graph);
     assert_eq!(input.adapter.colors, expected_colors);
-    assert_eq!(input.adapter.node_sources, expected_node_sources);
     assert_eq!(input.adapter.source_node_count, span.atoms().len());
     assert_eq!(input.initial_partition.cells, expected_partition);
 }

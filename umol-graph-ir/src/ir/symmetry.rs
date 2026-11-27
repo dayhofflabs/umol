@@ -1,19 +1,17 @@
 //! Search over colored incidence graphs: partitions and their refinement, the canonical search,
 //! and the search for a remapping that passes a check.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::ops::ControlFlow;
 use std::{iter, mem};
 
-use umol_graph_core::{AutomorphismAlgorithm, CanonicalLabeling, EdgeId, Graph, NodeId, UnionFind};
+use umol_graph_core::{
+    AutomorphismAlgorithm, AutomorphismGroup, AutomorphismScratch, CanonicalLabeling, EdgeId,
+    Graph, NodeId, UnionFind,
+};
 
-use super::incidence::{Incidence, IncidenceGraph};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum AdapterNodeSource {
-    Node(NodeId),
-    Edge(EdgeId),
-}
+use super::incidence::IncidenceGraph;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct InitialColors {
@@ -21,26 +19,18 @@ pub(crate) struct InitialColors {
     pub(crate) incidences: Vec<u32>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum AutomorphismColor {
-    Entity(u32),
-    Incidence(u32),
-}
-
-/// Colored simple graph and source-domain projection used by canonical search.
+/// Edge-colored simple graph and source-domain projection used by canonical search.
 ///
-/// Source nodes occupy the leading `source_node_count` positions. Remaining vertices encode
-/// subdivided incidences or bonds and are excluded when backend automorphisms are projected onto
-/// the search domain.
+/// Source nodes occupy the leading `source_node_count` positions.
 #[derive(Clone, Debug)]
 pub(crate) struct AutomorphismAdapter {
     pub(crate) graph: Graph,
-    pub(crate) colors: Vec<AutomorphismColor>,
-    pub(crate) node_sources: Vec<AdapterNodeSource>,
+    pub(crate) colors: Vec<u32>,
+    pub(crate) edge_colors: Vec<u32>,
     pub(crate) source_node_count: usize,
 }
 
-/// Automorphism data over both the source-entity and complete adapter-node domains.
+/// Automorphism data projected onto the source-entity domain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AutomorphismAdapterOutput {
     pub(crate) source_orbits: Vec<NodeId>,
@@ -50,65 +40,16 @@ pub(crate) struct AutomorphismAdapterOutput {
 }
 
 impl AutomorphismAdapter {
-    /// Construct the exact graph adapter used by canonicalization.
+    /// Construct the exact edge-colored simple graph adapter used by canonicalization.
     pub(crate) fn new(incidence_graph: &IncidenceGraph, initial_colors: &InitialColors) -> Self {
         let source = incidence_graph.graph();
         debug_assert_eq!(initial_colors.entities.len(), source.node_count());
         debug_assert_eq!(initial_colors.incidences.len(), source.edge_count());
 
-        let mut colors = initial_colors
-            .entities
-            .iter()
-            .copied()
-            .map(AutomorphismColor::Entity)
-            .collect::<Vec<_>>();
-        let mut node_sources = source
-            .node_ids()
-            .map(AdapterNodeSource::Node)
-            .collect::<Vec<_>>();
-        let mut edges = Vec::new();
-
-        let direct_pair_counts = source
-            .edge_ids()
-            .filter(|&edge| {
-                matches!(
-                    incidence_graph.incidence(edge),
-                    Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
-                )
-            })
-            .fold(BTreeMap::<[NodeId; 2], usize>::new(), |mut counts, edge| {
-                *counts.entry(source.edge_endpoints(edge)).or_default() += 1;
-                counts
-            });
-
-        let mut push_edge = |endpoints: [NodeId; 2]| {
-            edges.push([endpoints[0].0, endpoints[1].0]);
-        };
-        for edge in source.edge_ids() {
-            let endpoints = source.edge_endpoints(edge);
-            let direct = matches!(
-                incidence_graph.incidence(edge),
-                Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
-            ) && direct_pair_counts[&endpoints] == 1;
-            if direct {
-                push_edge(endpoints);
-                continue;
-            }
-
-            let occurrence = NodeId(node_sources.len() as u32);
-            node_sources.push(AdapterNodeSource::Edge(edge));
-            colors.push(AutomorphismColor::Incidence(
-                initial_colors.incidences[edge.index()],
-            ));
-            push_edge([endpoints[0], occurrence]);
-            push_edge([occurrence, endpoints[1]]);
-        }
-        let graph = Graph::new(node_sources.len(), &edges);
-
         Self {
-            graph,
-            colors,
-            node_sources,
+            graph: source.clone(),
+            colors: initial_colors.entities.clone(),
+            edge_colors: initial_colors.incidences.clone(),
             source_node_count: source.node_count(),
         }
     }
@@ -117,69 +58,89 @@ impl AutomorphismAdapter {
         &self.graph
     }
 
-    pub(crate) fn color(&self, node: NodeId) -> AutomorphismColor {
+    pub(crate) fn edge_colors(&self) -> &[u32] {
+        &self.edge_colors
+    }
+
+    pub(crate) fn color(&self, node: NodeId) -> u32 {
         self.colors[node.index()]
     }
 
-    pub(crate) fn node_source(&self, node: NodeId) -> AdapterNodeSource {
-        self.node_sources[node.index()]
+    pub(crate) fn edge_color(&self, edge: EdgeId) -> u32 {
+        self.edge_colors[edge.index()]
     }
 
     fn automorphisms_for_partition(
         &self,
         partition: &OrderedPartition,
         algorithm: AutomorphismAlgorithm,
+        scratch: &mut AutomorphismScratch,
+    ) -> (Vec<NodeId>, Vec<Vec<NodeId>>) {
+        let cell_indices = partition.cell_indices(self.graph().node_count());
+        // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
+        // exact adapter color here keeps orbit pruning restricted to true automorphisms.
+        let group = self.graph().automorphisms_with_scratch(
+            |node| (self.color(node), cell_indices[node.index()]),
+            |edge| self.edge_color(edge),
+            algorithm,
+            scratch,
+        );
+        self.project_automorphism_group(&group)
+    }
+
+    fn canonical_labeling_for_partition(
+        &self,
+        partition: &OrderedPartition,
+        algorithm: AutomorphismAlgorithm,
+        scratch: &mut AutomorphismScratch,
     ) -> AutomorphismAdapterOutput {
         let cell_indices = partition.cell_indices(self.graph().node_count());
         // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
         // exact adapter color here keeps orbit pruning restricted to true automorphisms.
-        let labeling = self.graph().canonical_labeling(
+        let labeling = self.graph().canonical_labeling_with_scratch(
             |node| (self.color(node), cell_indices[node.index()]),
-            |_| 0u8,
+            |edge| self.edge_color(edge),
             algorithm,
+            scratch,
         );
-
-        self.project_automorphisms(&labeling)
+        self.project_canonical_labeling(&labeling)
     }
 
-    pub(crate) fn project_automorphisms(
+    fn project_automorphism_group(
         &self,
-        labeling: &CanonicalLabeling,
-    ) -> AutomorphismAdapterOutput {
-        let automorphisms = labeling.automorphisms();
-        let source_node = |node| match self.node_source(node) {
-            AdapterNodeSource::Node(source) if source.index() < self.source_node_count => source,
-            AdapterNodeSource::Node(_) => {
-                unreachable!("disjoint colors preserve the source-node domain")
-            }
-            AdapterNodeSource::Edge(_) => {
-                unreachable!("disjoint colors preserve the adapter node domain")
-            }
-        };
+        group: &AutomorphismGroup,
+    ) -> (Vec<NodeId>, Vec<Vec<NodeId>>) {
         let source_orbits = (0..self.source_node_count)
-            .map(|index| source_node(automorphisms.orbit_of(NodeId(index as u32))))
-            .collect();
-        let source_canonical_labels = labeling
-            .labels()
-            .iter()
-            .filter_map(|&node| match self.node_source(node) {
-                AdapterNodeSource::Node(source) if source.index() < self.source_node_count => {
-                    Some(source)
-                }
-                AdapterNodeSource::Node(_) => None,
-                AdapterNodeSource::Edge(_) => None,
+            .map(|index| {
+                let representative = group.orbit_of(NodeId(index as u32));
+                debug_assert!(representative.index() < self.source_node_count);
+                representative
             })
             .collect();
-        let source_generators = automorphisms
+        let source_generators = group
             .generators()
             .iter()
             .map(|generator| {
-                generator[..self.source_node_count]
+                debug_assert!(generator[..self.source_node_count]
                     .iter()
-                    .copied()
-                    .map(source_node)
-                    .collect()
+                    .all(|node| node.index() < self.source_node_count));
+                generator[..self.source_node_count].to_vec()
             })
+            .collect();
+        (source_orbits, source_generators)
+    }
+
+    pub(crate) fn project_canonical_labeling(
+        &self,
+        labeling: &CanonicalLabeling,
+    ) -> AutomorphismAdapterOutput {
+        let (source_orbits, source_generators) =
+            self.project_automorphism_group(labeling.automorphisms());
+        let source_canonical_labels = labeling
+            .labels()
+            .iter()
+            .copied()
+            .filter(|node| node.index() < self.source_node_count)
             .collect();
         AutomorphismAdapterOutput {
             source_orbits,
@@ -250,25 +211,29 @@ impl OrderedPartition {
         Self { cells }
     }
 
-    pub(crate) fn refine(self, graph: &Graph) -> Self {
+    pub(crate) fn refine(self, graph: &Graph, edge_colors: &[u32]) -> Self {
+        debug_assert_eq!(edge_colors.len(), graph.edge_count());
         if graph.node_count() < ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT {
-            self.refine_by_all_cells(graph)
+            self.refine_by_all_cells(graph, edge_colors)
         } else {
-            self.refine_by_active_cells(graph)
+            self.refine_by_active_cells(graph, edge_colors)
         }
     }
 
-    pub(crate) fn refine_by_active_cells(mut self, graph: &Graph) -> Self {
+    pub(crate) fn refine_by_active_cells(mut self, graph: &Graph, edge_colors: &[u32]) -> Self {
+        debug_assert_eq!(edge_colors.len(), graph.edge_count());
         let node_count = graph.node_count();
         let mut active_cells = vec![true; self.cells.len()];
-        let mut node_active_columns = vec![usize::MAX; node_count];
-        let mut signatures = Vec::<u32>::new();
+        let mut node_active_columns = vec![u32::MAX; node_count];
         let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
         let mut next_active_cells = Vec::<bool>::with_capacity(self.cells.len());
+        let mut sig_ranges = vec![(0_usize, 0_usize); node_count];
+        let mut sig_entries = Vec::<(u32, u32, u32)>::new();
+        let mut node_buf = Vec::<(u32, u32)>::new();
 
         loop {
-            node_active_columns.fill(usize::MAX);
-            let mut active_count = 0;
+            node_active_columns.fill(u32::MAX);
+            let mut active_count = 0_u32;
             for (cell_index, cell) in self.cells.iter().enumerate() {
                 if active_cells[cell_index] {
                     for node in cell {
@@ -277,27 +242,42 @@ impl OrderedPartition {
                     active_count += 1;
                 }
             }
-            signatures.clear();
-            signatures.resize(node_count * active_count, 0);
-            for node in graph.node_ids() {
-                let offset = node.index() * active_count;
-                for neighbor in graph.neighbors(node) {
-                    let column = node_active_columns[neighbor.node.index()];
-                    if column != usize::MAX {
-                        signatures[offset + column] += 1;
-                    }
-                }
-            }
 
             let mut changed = false;
             for mut cell in self.cells.drain(..) {
+                if cell.len() <= 1 {
+                    next_cells.push(cell);
+                    next_active_cells.push(false);
+                    continue;
+                }
+
+                sig_entries.clear();
+                for &node in &cell {
+                    node_buf.clear();
+                    for neighbor in graph.neighbors(node) {
+                        let column = node_active_columns[neighbor.node.index()];
+                        if column != u32::MAX {
+                            node_buf.push((column, edge_colors[neighbor.edge.index()]));
+                        }
+                    }
+                    let start = sig_entries.len();
+                    encode_sparse_signature(&mut node_buf, &mut sig_entries);
+                    sig_ranges[node.index()] = (start, sig_entries.len());
+                }
+
+                if sig_entries.is_empty() {
+                    cell.sort_unstable();
+                    next_cells.push(cell);
+                    next_active_cells.push(false);
+                    continue;
+                }
+
                 let signature = |node: NodeId| {
-                    let offset = node.index() * active_count;
-                    &signatures[offset..offset + active_count]
+                    let (start, end) = sig_ranges[node.index()];
+                    &sig_entries[start..end]
                 };
                 cell.sort_unstable_by(|lhs, rhs| {
-                    signature(*rhs)
-                        .cmp(signature(*lhs))
+                    cmp_sparse_signature(signature(*rhs), signature(*lhs))
                         .then_with(|| lhs.cmp(rhs))
                 });
 
@@ -328,11 +308,14 @@ impl OrderedPartition {
         }
     }
 
-    pub(crate) fn refine_by_all_cells(mut self, graph: &Graph) -> Self {
+    pub(crate) fn refine_by_all_cells(mut self, graph: &Graph, edge_colors: &[u32]) -> Self {
+        debug_assert_eq!(edge_colors.len(), graph.edge_count());
         let node_count = graph.node_count();
-        let mut cell_indices = vec![0; node_count];
-        let mut signatures = Vec::<u32>::new();
+        let mut cell_indices = vec![0_u32; node_count];
         let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
+        let mut sig_ranges = vec![(0_usize, 0_usize); node_count];
+        let mut sig_entries = Vec::<(u32, u32, u32)>::new();
+        let mut node_buf = Vec::<(u32, u32)>::new();
 
         loop {
             for (cell_index, cell) in self.cells.iter().enumerate() {
@@ -340,25 +323,40 @@ impl OrderedPartition {
                     cell_indices[node.index()] = cell_index as u32;
                 }
             }
-            let cell_count = self.cells.len();
-            signatures.clear();
-            signatures.resize(node_count * cell_count, 0);
-            for node in graph.node_ids() {
-                let offset = node.index() * cell_count;
-                for neighbor in graph.neighbors(node) {
-                    signatures[offset + cell_indices[neighbor.node.index()] as usize] += 1;
-                }
-            }
 
             let mut changed = false;
             for mut cell in self.cells.drain(..) {
+                if cell.len() <= 1 {
+                    next_cells.push(cell);
+                    continue;
+                }
+
+                sig_entries.clear();
+                for &node in &cell {
+                    node_buf.clear();
+                    for neighbor in graph.neighbors(node) {
+                        node_buf.push((
+                            cell_indices[neighbor.node.index()],
+                            edge_colors[neighbor.edge.index()],
+                        ));
+                    }
+                    let start = sig_entries.len();
+                    encode_sparse_signature(&mut node_buf, &mut sig_entries);
+                    sig_ranges[node.index()] = (start, sig_entries.len());
+                }
+
+                if sig_entries.is_empty() {
+                    cell.sort_unstable();
+                    next_cells.push(cell);
+                    continue;
+                }
+
                 let signature = |node: NodeId| {
-                    let offset = node.index() * cell_count;
-                    &signatures[offset..offset + cell_count]
+                    let (start, end) = sig_ranges[node.index()];
+                    &sig_entries[start..end]
                 };
                 cell.sort_unstable_by(|lhs, rhs| {
-                    signature(*rhs)
-                        .cmp(signature(*lhs))
+                    cmp_sparse_signature(signature(*rhs), signature(*lhs))
                         .then_with(|| lhs.cmp(rhs))
                 });
 
@@ -432,6 +430,42 @@ impl OrderedPartition {
     }
 }
 
+fn encode_sparse_signature(pairs: &mut [(u32, u32)], out: &mut Vec<(u32, u32, u32)>) {
+    if pairs.is_empty() {
+        return;
+    }
+    pairs.sort_unstable();
+    let mut current = pairs[0];
+    let mut count = 1_u32;
+    for &pair in &pairs[1..] {
+        if pair == current {
+            count += 1;
+        } else {
+            out.push((current.0, current.1, count));
+            current = pair;
+            count = 1;
+        }
+    }
+    out.push((current.0, current.1, count));
+}
+
+fn cmp_sparse_signature(lhs: &[(u32, u32, u32)], rhs: &[(u32, u32, u32)]) -> Ordering {
+    let limit = lhs.len().min(rhs.len());
+    for i in 0..limit {
+        let (lc, le, ln) = lhs[i];
+        let (rc, re, rn) = rhs[i];
+        match (lc, le).cmp(&(rc, re)) {
+            Ordering::Less => return Ordering::Greater,
+            Ordering::Greater => return Ordering::Less,
+            Ordering::Equal => match ln.cmp(&rn) {
+                Ordering::Equal => {}
+                ord => return ord,
+            },
+        }
+    }
+    lhs.len().cmp(&rhs.len())
+}
+
 /// Whether two partitions agree in the number, the size, and the color of their cells, position by
 /// position. Every cell holds nodes of one color.
 pub(crate) fn same_cells(
@@ -455,8 +489,6 @@ pub(crate) fn same_cells(
 /// the same color and the same incidences.
 ///
 /// `images` holds the image of each entity node of `source`, and `target` has as many entity nodes.
-/// Two entity nodes are incident when an edge joins them or a subdivision node lies between them.
-/// The color of an incidence is the color of its subdivision node; an edge has none.
 pub(crate) fn remapping_preserves_incidences(
     source: &AutomorphismAdapter,
     target: &AutomorphismAdapter,
@@ -466,12 +498,12 @@ pub(crate) fn remapping_preserves_incidences(
         adapter: &AutomorphismAdapter,
         node: NodeId,
         image: impl Fn(NodeId) -> NodeId,
-        incidences: &mut Vec<(NodeId, Option<AutomorphismColor>)>,
+        incidences: &mut Vec<(NodeId, u32)>,
     ) {
         incidences.clear();
         for neighbor in adapter.graph().neighbors(node) {
             if neighbor.node.index() < adapter.source_node_count {
-                incidences.push((image(neighbor.node), None));
+                incidences.push((image(neighbor.node), adapter.edge_color(neighbor.edge)));
             } else {
                 let other = adapter
                     .graph()
@@ -480,7 +512,7 @@ pub(crate) fn remapping_preserves_incidences(
                     .map(|endpoint| endpoint.node)
                     .find(|&endpoint| endpoint != node)
                     .expect("a subdivision node joins two entity nodes");
-                incidences.push((image(other), Some(adapter.color(neighbor.node))));
+                incidences.push((image(other), adapter.color(neighbor.node)));
             }
         }
         incidences.sort_unstable();
@@ -617,8 +649,9 @@ where
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    let initial = initial.refine(adapter.graph());
+    let initial = initial.refine(adapter.graph(), adapter.edge_colors());
     let mut best = None;
+    let mut scratch = AutomorphismScratch::new();
     #[cfg(test)]
     let mut stats = CanonicalSearchStats {
         initial_residual_cell_sizes: initial
@@ -640,6 +673,7 @@ where
         adapter,
         initial,
         algorithm,
+        &mut scratch,
         leaf_candidate,
         apply_generator_filter,
         filter_generators,
@@ -660,6 +694,7 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
+    scratch: &mut AutomorphismScratch,
     leaf_candidate: &LeafCandidate,
     apply_generator_filter: bool,
     filter_generators: &FilterGenerators,
@@ -698,7 +733,8 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     {
         stats.backend_calls += 1;
     }
-    let mut automorphisms = adapter.automorphisms_for_partition(&partition, algorithm);
+    let mut automorphisms =
+        adapter.canonical_labeling_for_partition(&partition, algorithm, scratch);
     if apply_generator_filter {
         filter_generators(&mut automorphisms.source_generators);
         automorphisms.source_orbits = source_orbits_from_generators(
@@ -738,11 +774,12 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
         }
         let child = partition
             .individualize(cell_index, candidate)
-            .refine(adapter.graph());
+            .refine(adapter.graph(), adapter.edge_colors());
         search_partition(
             adapter,
             child,
             algorithm,
+            scratch,
             leaf_candidate,
             apply_generator_filter,
             filter_generators,
@@ -818,8 +855,8 @@ where
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
     let entity_count = source.source_node_count;
-    let source_root = source_partition.refine(source.graph());
-    let target_root = target_partition.refine(target.graph());
+    let source_root = source_partition.refine(source.graph(), source.edge_colors());
+    let target_root = target_partition.refine(target.graph(), target.edge_colors());
     if !same_cells(source, &source_root, target, &target_root) {
         return ControlFlow::Continue(());
     }
@@ -845,12 +882,13 @@ where
     while let Some(cell_index) = source_path.first_non_singleton_entity_cell(entity_count) {
         target_path = target_path.map(|path| {
             let node = path.cells[cell_index][0];
-            path.individualize(cell_index, node).refine(target.graph())
+            path.individualize(cell_index, node)
+                .refine(target.graph(), target.edge_colors())
         });
         let node = source_path.cells[cell_index][0];
         source_path = source_path
             .individualize(cell_index, node)
-            .refine(source.graph());
+            .refine(source.graph(), source.edge_colors());
         if target_path
             .as_ref()
             .is_some_and(|path| !same_cells(source, &source_path, target, path))
@@ -867,9 +905,10 @@ where
         }
     }
 
+    let mut scratch = AutomorphismScratch::new();
     let mut pending = vec![target_root];
     while let Some(partition) = pending.pop() {
-        let partition = partition.refine(target.graph());
+        let partition = partition.refine(target.graph(), target.edge_colors());
         let Some(cell_index) = partition.first_non_singleton_entity_cell(entity_count) else {
             let images = images(&source_order, &partition.entity_order(entity_count));
             if first_images.as_deref() != Some(images.as_slice()) {
@@ -880,25 +919,20 @@ where
             continue;
         };
 
-        let mut automorphisms = target.automorphisms_for_partition(&partition, algorithm);
+        let (mut source_orbits, mut source_generators) =
+            target.automorphisms_for_partition(&partition, algorithm, &mut scratch);
         if apply_generator_filter {
-            filter_generators(&mut automorphisms.source_generators);
-            automorphisms.source_orbits =
-                source_orbits_from_generators(entity_count, &automorphisms.source_generators);
+            filter_generators(&mut source_generators);
+            source_orbits = source_orbits_from_generators(entity_count, &source_generators);
         }
         let mut representatives = BTreeMap::<NodeId, NodeId>::new();
         for &candidate in &partition.cells[cell_index] {
             representatives
-                .entry(automorphisms.source_orbits[candidate.index()])
+                .entry(source_orbits[candidate.index()])
                 .and_modify(|representative| *representative = (*representative).min(candidate))
                 .or_insert(candidate);
         }
-        let mut candidates = representatives.into_values().collect::<Vec<_>>();
-        let mut ranks = vec![0; entity_count];
-        for (rank, node) in automorphisms.source_canonical_labels.iter().enumerate() {
-            ranks[node.index()] = rank;
-        }
-        candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+        let candidates = representatives.into_values().collect::<Vec<_>>();
         pending.extend(
             candidates
                 .into_iter()

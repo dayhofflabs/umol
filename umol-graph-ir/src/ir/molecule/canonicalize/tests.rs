@@ -402,10 +402,12 @@ impl AutomorphismAdapter {
         &self,
         algorithm: AutomorphismAlgorithm,
     ) -> AutomorphismAdapterOutput {
-        let labeling = self
-            .graph()
-            .canonical_labeling(|node| self.color(node), |_| 0u8, algorithm);
-        self.project_automorphisms(&labeling)
+        let labeling = self.graph().canonical_labeling(
+            |node| self.color(node),
+            |edge| self.edge_color(edge),
+            algorithm,
+        );
+        self.project_canonical_labeling(&labeling)
     }
 }
 
@@ -1160,11 +1162,7 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
         ..Default::default()
     }),
     Graph::new(2, &[[0, 1]]),
-    vec![AutomorphismColor::Entity(0); 2],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-    ],
+    vec![0; 2],
     vec![vec![NodeId(0), NodeId(1)]],
 )]
 #[case::modal_majority(
@@ -1178,18 +1176,7 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
         ..Default::default()
     }),
     Graph::new(4, &[[0, 1], [1, 2], [0, 3], [3, 2]]),
-    vec![
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(1),
-    ],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-        AdapterNodeSource::Node(NodeId(2)),
-        AdapterNodeSource::Node(NodeId(3)),
-    ],
+    vec![0, 0, 0, 1],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
 #[case::modal_tie(
@@ -1202,25 +1189,13 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
         ..Default::default()
     }),
     Graph::new(4, &[[0, 3], [3, 1], [1, 2]]),
-    vec![
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(2),
-    ],
-    vec![
-        AdapterNodeSource::Node(NodeId(0)),
-        AdapterNodeSource::Node(NodeId(1)),
-        AdapterNodeSource::Node(NodeId(2)),
-        AdapterNodeSource::Node(NodeId(3)),
-    ],
+    vec![0, 0, 0, 2],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
 fn test_topology_search_input(
     #[case] molecule: Molecule,
     #[case] expected_graph: Graph,
-    #[case] expected_colors: Vec<AutomorphismColor>,
-    #[case] expected_node_sources: Vec<AdapterNodeSource>,
+    #[case] expected_colors: Vec<u32>,
     #[case] expected_partition: Vec<Vec<NodeId>>,
 ) {
     let molecule = molecule.normalize().unwrap();
@@ -1236,7 +1211,6 @@ fn test_topology_search_input(
 
     assert_eq!(input.adapter.graph, expected_graph);
     assert_eq!(input.adapter.colors, expected_colors);
-    assert_eq!(input.adapter.node_sources, expected_node_sources);
     assert_eq!(
         input.adapter.source_node_count,
         incidence_graph.entity_count(EntityKind::Atom),
@@ -1531,7 +1505,6 @@ fn test_entity_order(
             ..Default::default()
         }),
         vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
-        0,
     )]
 #[case::mixed_virtual_ligand_anchor(
         Molecule::from_entries(MoleculeEntries {
@@ -1567,12 +1540,10 @@ fn test_entity_order(
             Incidence::StereoLigand,
             Incidence::StereoLigand,
         ],
-        3,
     )]
 fn test_automorphism_adapter_new(
     #[case] molecule: Molecule,
     #[case] expected_incidences: Vec<Incidence>,
-    #[case] expected_occurrence_nodes: usize,
 ) {
     let molecule = molecule.normalize().unwrap();
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -1593,32 +1564,10 @@ fn test_automorphism_adapter_new(
             .collect::<Vec<_>>(),
         expected_incidences,
     );
-    assert_eq!(
-        adapter.graph().node_count(),
-        source.node_count() + expected_occurrence_nodes,
-    );
-    assert_eq!(
-        adapter.graph().edge_count(),
-        source.edge_count() + expected_occurrence_nodes,
-    );
-
-    for node in source.node_ids() {
-        assert_eq!(adapter.node_source(node), AdapterNodeSource::Node(node));
-        assert_eq!(
-            adapter.color(node),
-            AutomorphismColor::Entity(colors.entities[node.index()]),
-        );
-    }
-    for adapter_node in adapter.graph().node_ids().skip(source.node_count()) {
-        let AdapterNodeSource::Edge(edge) = adapter.node_source(adapter_node) else {
-            panic!("a node after the source nodes subdivides an incidence");
-        };
-        assert_eq!(
-            adapter.color(adapter_node),
-            AutomorphismColor::Incidence(colors.incidences[edge.index()]),
-        );
-        assert_eq!(adapter.graph().degree(adapter_node), 2);
-    }
+    assert_eq!(adapter.graph(), source);
+    assert_eq!(adapter.source_node_count, source.node_count());
+    assert_eq!(adapter.colors, colors.entities);
+    assert_eq!(adapter.edge_colors(), colors.incidences.as_slice());
 }
 
 #[rstest]
@@ -1724,12 +1673,16 @@ fn test_ordered_partition_refine_exhaustive_domain(
         graph: &Graph,
         renumbered_graph: &Graph,
     ) {
-        let reference = partition.clone().refine_by_all_cells(graph);
-        let active = partition.clone().refine_by_active_cells(graph);
-        let actual = partition.refine(graph);
+        let edge_colors = vec![0_u32; graph.edge_count()];
+        let renumbered_edge_colors = vec![0_u32; renumbered_graph.edge_count()];
+        let reference = partition.clone().refine_by_all_cells(graph, &edge_colors);
+        let active = partition
+            .clone()
+            .refine_by_active_cells(graph, &edge_colors);
+        let actual = partition.refine(graph, &edge_colors);
         assert_eq!(active, reference);
         assert_eq!(actual, reference);
-        let renumbered = renumbered_partition.refine(renumbered_graph);
+        let renumbered = renumbered_partition.refine(renumbered_graph, &renumbered_edge_colors);
         let node_count = graph.node_count();
         let transported = OrderedPartition {
             cells: renumbered
@@ -1861,10 +1814,10 @@ fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] e
         )
         .unwrap(),
     );
-    let source_partition =
-        OrderedPartition::from_descriptors(&source_adapter.colors).refine(source_adapter.graph());
-    let target_partition =
-        OrderedPartition::from_descriptors(&target_adapter.colors).refine(target_adapter.graph());
+    let source_partition = OrderedPartition::from_descriptors(&source_adapter.colors)
+        .refine(source_adapter.graph(), source_adapter.edge_colors());
+    let target_partition = OrderedPartition::from_descriptors(&target_adapter.colors)
+        .refine(target_adapter.graph(), target_adapter.edge_colors());
 
     assert_eq!(
         same_cells(
@@ -1991,12 +1944,14 @@ fn test_canonical_search_color_labels() {
     .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let mut relabeled = adapter.clone();
-    relabeled.colors.iter_mut().for_each(|color| {
-        *color = match *color {
-            AutomorphismColor::Entity(value) => AutomorphismColor::Entity(u32::MAX - value),
-            AutomorphismColor::Incidence(value) => AutomorphismColor::Incidence(u32::MAX - value),
-        }
-    });
+    relabeled
+        .colors
+        .iter_mut()
+        .for_each(|color| *color = u32::MAX - *color);
+    relabeled
+        .edge_colors
+        .iter_mut()
+        .for_each(|color| *color = u32::MAX - *color);
     let descriptors = adapter.colors.clone();
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(

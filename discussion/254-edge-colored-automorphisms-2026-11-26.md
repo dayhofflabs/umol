@@ -758,10 +758,11 @@ test_fingerprint.py, test_workflow.py}}`; **breaking (red→green)** (restores w
 
 ### S5 — Native edge-colored `umol-graph-ir` search and stereo symmetry
 
-#### S5a — Zero-subdivision `AutomorphismAdapter`, sparse edge-colored `OrderedPartition::refine`, and `AutomorphismScratch` reuse
+#### S5a — Zero-subdivision `AutomorphismAdapter`, sparse edge-colored `OrderedPartition::refine`, and `AutomorphismScratch` reuse [Done]
 
-**Module:** `umol-graph-ir/src/ir/{symmetry.rs, symmetry/tests.rs, molecule/symmetry.rs}`;
-**additive/internal (green)**. `[dep: S4b]`
+**Module:** `umol-graph-ir/src/ir/{symmetry.rs, symmetry/tests.rs, molecule/symmetry.rs,
+molecule/canonicalize.rs, molecule/canonicalize/tests.rs, reaction_span/canonicalize.rs,
+reaction_span/canonicalize/tests.rs}`; **additive/internal (green)**. `[dep: S4b]`
 
 - Replace `AutomorphismAdapter::new`'s subdivision builder with direct `source.clone()` +
   `edge_colors = initial_colors.incidences.clone()`, removing all subdivision state and
@@ -774,6 +775,22 @@ test_fingerprint.py, test_workflow.py}}`; **breaking (red→green)** (restores w
   (`automorphisms_with_scratch`), honoring the caller's selected `AutomorphismAlgorithm`.
 - Switch `Molecule::graph_symmetry` to `Graph::automorphisms` (`AutomorphismGroup`, `get_canon =
   false`).
+- **Findings:**
+  - Retired both temporary `AdapterNodeSource` and `AutomorphismColor` (`AutomorphismAdapter` now
+    stores `colors: Vec<u32>` and `edge_colors: Vec<u32>` directly), eliminating the `unreachable!()`
+    unwraps in `molecule/canonicalize.rs` and `reaction_span/canonicalize.rs`.
+  - Because `topology_search_input` in `molecule/canonicalize.rs` and `reaction_span/canonicalize.rs`
+    still subdivides non-modal bonds until `S5b` (and `canonical_eq` at `DescriptionLevel::Topology`
+    passes those adapters to `remapping_preserves_incidences`), `source_node_count` and the
+    subdivision fallback in `remapping_preserves_incidences` remain temporarily in `S5a` with
+    uniform `edge_colors = vec![direct_bond_color.unwrap_or(0); graph.edge_count()]`, ready for
+    removal in `S5b`.
+  - `encode_sparse_signature` uses stdlib `slice::sort_unstable` directly rather than a hand-rolled
+    small-slice sort, and `visit_remapping_candidates` now skips canonical-labeling computation
+    entirely (`automorphisms_with_scratch`).
+  - `umol-graph-ir` passed all `13,270` unit tests, integration suites (including `mol_macro_ui`),
+    `577` `proptest` property tests, and `clippy --all-targets --features proptest -- -D warnings`
+    without triggering any backend-pinned assertion failures under `Nauty`.
 
 #### S5b — Zero-subdivision `topology_search_input` and algorithm-independent test contracts
 

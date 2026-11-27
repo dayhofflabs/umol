@@ -24,8 +24,8 @@ use super::super::stereo::{
 };
 use super::super::symmetry::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    remapping_exists, remapping_preserves_incidences, AdapterNodeSource, AutomorphismAdapter,
-    AutomorphismColor, CanonicalCandidate, CanonicalSearchResult, InitialColors, OrderedPartition,
+    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, CanonicalCandidate,
+    CanonicalSearchResult, InitialColors, OrderedPartition,
 };
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::symmetry::{
@@ -224,14 +224,7 @@ fn topology_search_input(
         .map(|(color, _)| color as u32);
 
     let atom_count = span.atoms().len();
-    let mut colors = entity_colors[..atom_count]
-        .iter()
-        .copied()
-        .map(AutomorphismColor::Entity)
-        .collect::<Vec<_>>();
-    let mut node_sources = (0..atom_count)
-        .map(|index| AdapterNodeSource::Node(NodeId(index as u32)))
-        .collect::<Vec<_>>();
+    let mut colors = entity_colors[..atom_count].to_vec();
     let mut edges = Vec::<[u32; 2]>::with_capacity(span.bonds().len() * 2);
 
     for (index, edge) in span.graph().edge_ids().enumerate() {
@@ -240,27 +233,22 @@ fn topology_search_input(
         if direct_bond_color == Some(color) {
             edges.push([first, second]);
         } else {
-            let subdivision = NodeId(node_sources.len() as u32);
-            node_sources.push(AdapterNodeSource::Node(subdivision));
-            colors.push(AutomorphismColor::Entity(color));
-            edges.push([first, subdivision.0]);
-            edges.push([subdivision.0, second]);
+            let subdivision = colors.len() as u32;
+            colors.push(color);
+            edges.push([first, subdivision]);
+            edges.push([subdivision, second]);
         }
     }
 
-    let graph = Graph::new(node_sources.len(), &edges);
-    let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
-        let AutomorphismColor::Entity(color) = *color else {
-            unreachable!("the topology search input uses entity colors")
-        };
-        color
-    }));
+    let graph = Graph::new(colors.len(), &edges);
+    let edge_colors = vec![direct_bond_color.unwrap_or(0); graph.edge_count()];
+    let initial_partition = OrderedPartition::from_color_ranks(colors.iter().copied());
 
     TopologySearchInput {
         adapter: AutomorphismAdapter {
             graph,
             colors,
-            node_sources,
+            edge_colors,
             source_node_count: atom_count,
         },
         initial_partition,
