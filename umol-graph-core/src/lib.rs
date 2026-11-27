@@ -46,7 +46,7 @@ pub use algorithms::refinement::{
 pub use algorithms::subgraph_isomorphism::{
     PreparedSubgraphQuery, PreparedSubgraphTarget, QuerySymmetryConstraints,
     SubgraphIsomorphismAlgorithm, SubgraphIsomorphismPredicate, SubgraphIsomorphismScratch,
-    SymmetryGeneratorError, TargetSymmetry, ARCMATCH_DEFAULT_PATH_LENGTH,
+    SymmetryGeneratorError, TargetSymmetry,
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::{

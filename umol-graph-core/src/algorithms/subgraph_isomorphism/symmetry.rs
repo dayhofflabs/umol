@@ -999,7 +999,8 @@ pub(crate) fn is_canonical_double_orbit_with_built_chain(
 ///
 /// Returns `true` if and only if `embedding` is the unique lexicographic minimum of its
 /// `(G_Q × G_H)`-orbit `{h ∘ embedding ∘ g : g ∈ G_Q, h ∈ G_H}` ordered along `priority_order`.
-pub(crate) fn is_canonical_double_orbit_embedding(
+#[cfg(test)]
+fn is_canonical_double_orbit_embedding(
     embedding: &[usize],
     priority_order: &[u32],
     query_sym: &QuerySymmetryConstraints,

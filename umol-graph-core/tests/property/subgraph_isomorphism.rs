@@ -36,14 +36,11 @@ use std::ops::ControlFlow;
 
 use proptest::prelude::*;
 use rstest::rstest;
-use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-    ArcMatch, BitsetRi, Glasgow, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
-};
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismScratch, EdgeId, Graph, NodeId, PreparedSubgraphQuery,
     PreparedSubgraphTarget, QuerySymmetryConstraints, SubgraphIsomorphismAlgorithm,
     SubgraphIsomorphismPredicate, SubgraphIsomorphismScratch, TargetSymmetry,
-    ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 use self::exhaustive::{
@@ -53,19 +50,6 @@ use self::exhaustive::{
 use super::corpus::simple_graphs;
 
 const CORE_ALGORITHMS: [SubgraphIsomorphismAlgorithm; 4] = [Vf2Rdkit, RayKirsch, BitsetRi, Glasgow];
-
-const ALL_ALGORITHMS: [SubgraphIsomorphismAlgorithm; 8] = [
-    Vf2,
-    Ullmann,
-    Ri,
-    ArcMatch {
-        path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-    },
-    Vf2Rdkit,
-    RayKirsch,
-    BitsetRi,
-    Glasgow,
-];
 
 const AUTOMORPHISM_ALGORITHMS: [AutomorphismAlgorithm; 2] =
     [AutomorphismAlgorithm::TrailIr, AutomorphismAlgorithm::Nauty];
@@ -1845,7 +1829,7 @@ proptest! {
             |qe: EdgeId, te: EdgeId| query.edge_labels[qe.index()] == target.edge_labels[te.index()];
         let expected = exhaustive_monomorphisms(&query.graph, &target.graph, &mut nm, &mut em);
 
-        for alg in ALL_ALGORITHMS {
+        for alg in CORE_ALGORITHMS {
             verify_direct_modes_against_expected(&query, &target, alg, &expected);
         }
     }
@@ -1870,7 +1854,7 @@ proptest! {
         let expected = exhaustive_monomorphisms(&query.graph, &target.graph, &mut nm, &mut em);
         prop_assert!(!expected.is_empty(), "planted non-induced query must embed in its source");
 
-        for alg in ALL_ALGORITHMS {
+        for alg in CORE_ALGORITHMS {
             verify_direct_modes_against_expected(&query, &target, alg, &expected);
         }
     }
@@ -1886,7 +1870,7 @@ proptest! {
             |qe: EdgeId, te: EdgeId| query.edge_labels[qe.index()] == target.edge_labels[te.index()];
         let all_expected = exhaustive_monomorphisms(&query.graph, &target.graph, &mut nm, &mut em);
 
-        for alg in ALL_ALGORITHMS {
+        for alg in CORE_ALGORITHMS {
             for qa in 0..query.graph.node_count() {
                 for ta in 0..target.graph.node_count() {
                     let anchor = (NodeId(qa as u32), NodeId(ta as u32));

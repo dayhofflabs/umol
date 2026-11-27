@@ -10,23 +10,10 @@ mod fixtures;
 use std::ops::ControlFlow;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-    ArcMatch, BitsetRi, Glasgow, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
-};
-use umol_graph_core::{
-    EdgeId, Graph, NodeId, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
-};
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
+use umol_graph_core::{EdgeId, Graph, NodeId, SubgraphIsomorphismAlgorithm};
 
-const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
-    Vf2,
-    Ullmann,
-    Ri,
-    ArcMatch {
-        path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-    },
-    Vf2Rdkit,
-    RayKirsch,
-];
+const SUBISO: [SubgraphIsomorphismAlgorithm; 4] = [Vf2Rdkit, RayKirsch, BitsetRi, Glasgow];
 
 const VISIT_MODE_PAIRS: [(&str, &str); 3] = [
     ("naphthalene", "path_3"),
@@ -36,10 +23,6 @@ const VISIT_MODE_PAIRS: [(&str, &str); 3] = [
 
 fn subiso_name(algorithm: SubgraphIsomorphismAlgorithm) -> &'static str {
     match algorithm {
-        Vf2 => "vf2",
-        Ullmann => "ullmann",
-        Ri => "ri",
-        ArcMatch { .. } => "arcmatch",
         Vf2Rdkit => "vf2rdkit",
         RayKirsch => "raykirsch",
         BitsetRi => "bitset_ri",

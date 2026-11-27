@@ -6,14 +6,12 @@
 //! across 1-pattern × many-targets and many-patterns × 1-target loops without caching semantic
 //! state inside scratch buffers.
 
-use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::ops::ControlFlow;
 
 use super::predicate::SubgraphIsomorphismPredicate;
 use super::symmetry::{
-    is_canonical_double_orbit_embedding, query_priority_order, QuerySymmetryConstraints,
-    TargetStabilizerChain, TargetSymmetry,
+    query_priority_order, QuerySymmetryConstraints, TargetStabilizerChain, TargetSymmetry,
 };
 use super::{bitset_ri, glasgow, ray_kirsch, vf2_rdkit, SubgraphIsomorphismAlgorithm};
 use crate::correspondence::Correspondence;
@@ -185,8 +183,7 @@ pub(crate) enum RkStep {
 pub(crate) enum PreparedQueryPlan {
     Vf2Rdkit(StaticOrderPlan),
     RayKirsch(Vec<RkStep>),
-    /// Placeholder for algorithms compiled dynamically per target (`BitsetRi`, `Glasgow`) or
-    /// legacy variants scheduled for removal.
+    /// Placeholder for algorithms compiled dynamically per target (`BitsetRi`, `Glasgow`).
     Dynamic,
 }
 
@@ -238,7 +235,9 @@ impl PreparedSubgraphQuery {
             SubgraphIsomorphismAlgorithm::RayKirsch => {
                 PreparedQueryPlan::RayKirsch(build_ray_kirsch_plan(&graph, None))
             }
-            _ => PreparedQueryPlan::Dynamic,
+            SubgraphIsomorphismAlgorithm::BitsetRi | SubgraphIsomorphismAlgorithm::Glasgow => {
+                PreparedQueryPlan::Dynamic
+            }
         };
         let symmetry = QuerySymmetryConstraints::none(node_count);
         let empty_offsets = vec![0u32; node_count + 1];
@@ -381,14 +380,6 @@ impl PreparedSubgraphQuery {
                 scratch,
                 &mut visitor,
             ),
-            legacy => self.visit_matches_legacy(
-                target,
-                target_symmetry,
-                predicate,
-                scratch,
-                legacy,
-                &mut visitor,
-            ),
         }
     }
 
@@ -467,81 +458,7 @@ impl PreparedSubgraphQuery {
             SubgraphIsomorphismAlgorithm::RayKirsch => {
                 ray_kirsch::count_prepared(target, self, target_symmetry, predicate, scratch)
             }
-            legacy => {
-                let mut count = 0u64;
-                let _: ControlFlow<()> = self.visit_matches_legacy(
-                    target,
-                    target_symmetry,
-                    predicate,
-                    scratch,
-                    legacy,
-                    &mut |_| {
-                        count += 1;
-                        ControlFlow::Continue(())
-                    },
-                );
-                count
-            }
         }
-    }
-
-    fn visit_matches_legacy<B, P>(
-        &self,
-        target: &PreparedSubgraphTarget,
-        target_symmetry: Option<&TargetSymmetry>,
-        predicate: &mut P,
-        scratch: &mut SubgraphIsomorphismScratch,
-        algorithm: SubgraphIsomorphismAlgorithm,
-        visitor: &mut impl FnMut(&[NodeId]) -> ControlFlow<B>,
-    ) -> ControlFlow<B>
-    where
-        P: SubgraphIsomorphismPredicate,
-    {
-        if let Some(ts) = target_symmetry {
-            assert_eq!(
-                ts.node_count(),
-                target.node_count(),
-                "target symmetry node count must match the prepared target graph"
-            );
-        }
-        let pred_cell = RefCell::new(predicate);
-        let mut node_match = |q: NodeId, t: NodeId| pred_cell.borrow_mut().match_node(q, t);
-        let mut edge_match = |qe: EdgeId, te: EdgeId| pred_cell.borrow_mut().match_edge(qe, te);
-        let has_q_sym = !self.symmetry.is_trivial();
-        let active_target_sym = target_symmetry.filter(|sym| !sym.is_trivial());
-        let mut emb_indices = Vec::with_capacity(self.graph.node_count());
-
-        target.graph().visit_subgraph_isomorphisms(
-            &self.graph,
-            &mut node_match,
-            &mut edge_match,
-            algorithm,
-            |embedding| {
-                if has_q_sym
-                    && !self
-                        .symmetry
-                        .constraints()
-                        .iter()
-                        .all(|&(lo, hi)| embedding[lo.index()] < embedding[hi.index()])
-                {
-                    return ControlFlow::Continue(());
-                }
-                if let Some(ts) = active_target_sym {
-                    emb_indices.clear();
-                    emb_indices.extend(embedding.iter().map(|n| n.index()));
-                    if !is_canonical_double_orbit_embedding(
-                        &emb_indices,
-                        &self.priority_order,
-                        &self.symmetry,
-                        ts,
-                        &mut scratch.target_chain,
-                    ) {
-                        return ControlFlow::Continue(());
-                    }
-                }
-                visitor(embedding)
-            },
-        )
     }
 
     pub(crate) fn degree_hist(&self) -> &[u32] {
