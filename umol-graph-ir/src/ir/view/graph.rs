@@ -335,6 +335,74 @@ impl<'a> GraphView<'a> {
         occurrences
     }
 
+    /// Returns whether at least one subgraph isomorphism of `query` exists within `self` (the
+    /// host). `atom_match`/`bond_match` receive `(query, host)`.
+    pub fn has_subgraph_isomorphism(
+        &self,
+        query: &GraphView<'_>,
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> bool {
+        self.graph.has_subgraph_isomorphism(
+            query.graph,
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+        )
+    }
+
+    /// Returns the first subgraph isomorphism of `query` within `self` (the host) as a
+    /// query→host `AtomId` vector, or `None` if no match exists. `atom_match`/`bond_match`
+    /// receive `(query, host)`.
+    pub fn first_subgraph_isomorphism(
+        &self,
+        query: &GraphView<'_>,
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> Option<Vec<AtomId>> {
+        match self.graph.visit_subgraph_isomorphisms(
+            query.graph,
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+            |embedding| ControlFlow::Break(embedding.iter().copied().map(AtomId::from).collect()),
+        ) {
+            ControlFlow::Break(embedding) => Some(embedding),
+            ControlFlow::Continue(()) => None,
+        }
+    }
+
+    /// Counts every subgraph isomorphism of `query` within `self` (the host) without
+    /// materializing embeddings. `atom_match`/`bond_match` receive `(query, host)`.
+    pub fn count_subgraph_isomorphisms(
+        &self,
+        query: &GraphView<'_>,
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> u64 {
+        self.graph.count_subgraph_isomorphisms(
+            query.graph,
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+        )
+    }
+
     /// Like [`visit_subgraph_isomorphisms`](Self::visit_subgraph_isomorphisms) with query atom
     /// `anchor.0` pinned to host atom `anchor.1`. Closures receive `(query, host)`.
     pub fn visit_subgraph_isomorphisms_at<B>(
@@ -389,6 +457,80 @@ impl<'a> GraphView<'a> {
             },
         );
         occurrences
+    }
+
+    /// Returns whether at least one subgraph isomorphism mapping `anchor.0` to `anchor.1` exists
+    /// within `self` (the host). `atom_match`/`bond_match` receive `(query, host)`.
+    pub fn has_subgraph_isomorphism_at(
+        &self,
+        query: &GraphView<'_>,
+        anchor: (AtomId, AtomId),
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> bool {
+        self.graph.has_subgraph_isomorphism_at(
+            query.graph,
+            (NodeId::from(anchor.0), NodeId::from(anchor.1)),
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+        )
+    }
+
+    /// Returns the first subgraph isomorphism mapping `anchor.0` to `anchor.1` within `self` (the
+    /// host) as a query→host `AtomId` vector, or `None` if no anchored match exists.
+    /// `atom_match`/`bond_match` receive `(query, host)`.
+    pub fn first_subgraph_isomorphism_at(
+        &self,
+        query: &GraphView<'_>,
+        anchor: (AtomId, AtomId),
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> Option<Vec<AtomId>> {
+        match self.graph.visit_subgraph_isomorphisms_at(
+            query.graph,
+            (NodeId::from(anchor.0), NodeId::from(anchor.1)),
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+            |embedding| ControlFlow::Break(embedding.iter().copied().map(AtomId::from).collect()),
+        ) {
+            ControlFlow::Break(embedding) => Some(embedding),
+            ControlFlow::Continue(()) => None,
+        }
+    }
+
+    /// Counts every subgraph isomorphism mapping `anchor.0` to `anchor.1` within `self` (the
+    /// host) without materializing embeddings. `atom_match`/`bond_match` receive `(query, host)`.
+    pub fn count_subgraph_isomorphisms_at(
+        &self,
+        query: &GraphView<'_>,
+        anchor: (AtomId, AtomId),
+        atom_match: &mut impl FnMut(AtomId, AtomId) -> bool,
+        bond_match: &mut impl FnMut(BondId, BondId) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> u64 {
+        self.graph.count_subgraph_isomorphisms_at(
+            query.graph,
+            (NodeId::from(anchor.0), NodeId::from(anchor.1)),
+            &mut |query_node, host_node| {
+                atom_match(AtomId::from(query_node), AtomId::from(host_node))
+            },
+            &mut |query_edge, host_edge| {
+                bond_match(BondId::from(query_edge), BondId::from(host_edge))
+            },
+            alg,
+        )
     }
 }
 
@@ -714,5 +856,97 @@ mod tests {
 
         let expected_group = labeling.automorphisms().clone();
         assert_eq!(labeling.into_automorphisms(), expected_group);
+    }
+
+    #[rstest]
+    #[case::hexagon_chain_3(hexagon(), chain_3(), (AtomId(1), AtomId(0)), 12, 2)]
+    #[case::cyclohexene_chain_3_bond_orders(cyclohexene(), chain_3(), (AtomId(1), AtomId(3)), 8, 2)]
+    #[case::cyclohexene_chain_3_anchored_double_bond_endpoint(cyclohexene(), chain_3(), (AtomId(1), AtomId(0)), 8, 0)]
+    #[case::chain_3_in_hexagon_no_match(chain_3(), hexagon(), (AtomId(0), AtomId(0)), 0, 0)]
+    fn test_graph_view_subgraph_isomorphism_modes(
+        #[values(
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+            SubgraphIsomorphismAlgorithm::RayKirsch,
+            SubgraphIsomorphismAlgorithm::BitsetRi,
+            SubgraphIsomorphismAlgorithm::Glasgow
+        )]
+        alg: SubgraphIsomorphismAlgorithm,
+        #[case] host: Molecule,
+        #[case] query: Molecule,
+        #[case] anchor: (AtomId, AtomId),
+        #[case] expected_count: u64,
+        #[case] expected_anchored_count: u64,
+    ) {
+        let host_view = host.graph();
+        let query_view = query.graph();
+
+        let all = host_view.enumerate_subgraph_isomorphisms(
+            &query_view,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        let count = host_view.count_subgraph_isomorphisms(
+            &query_view,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        let has = host_view.has_subgraph_isomorphism(
+            &query_view,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        let first = host_view.first_subgraph_isomorphism(
+            &query_view,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        assert_eq!(all.len() as u64, expected_count);
+        assert_eq!(count, expected_count);
+        assert_eq!(has, expected_count > 0);
+        assert_eq!(first.is_some(), expected_count > 0);
+        if let Some(first_emb) = first {
+            assert!(all.contains(&first_emb));
+        }
+
+        let all_at = host_view.enumerate_subgraph_isomorphisms_at(
+            &query_view,
+            anchor,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        let count_at = host_view.count_subgraph_isomorphisms_at(
+            &query_view,
+            anchor,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        let has_at = host_view.has_subgraph_isomorphism_at(
+            &query_view,
+            anchor,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        let first_at = host_view.first_subgraph_isomorphism_at(
+            &query_view,
+            anchor,
+            &mut |_, _| true,
+            &mut |qb, hb| bond_order_key(&query, qb) == bond_order_key(&host, hb),
+            alg,
+        );
+        assert_eq!(all_at.len() as u64, expected_anchored_count);
+        assert_eq!(count_at, expected_anchored_count);
+        assert_eq!(has_at, expected_anchored_count > 0);
+        assert_eq!(first_at.is_some(), expected_anchored_count > 0);
+        if let Some(first_emb) = first_at {
+            assert_eq!(first_emb[anchor.0.index()], anchor.1);
+            assert!(all_at.contains(&first_emb));
+        }
     }
 }

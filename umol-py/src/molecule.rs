@@ -977,15 +977,13 @@ impl Molecule {
         &self,
         host: &Self,
         config: Option<SubstructureSearchConfig>,
-    ) -> PyResult<Vec<MoleculeCorrespondence>> {
+    ) -> Vec<MoleculeCorrespondence> {
         let config = config.unwrap_or_default().to_rust();
-        Ok(self
-            .to_rust()
+        self.to_rust()
             .substructure_matches(host.to_rust(), config)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?
             .into_iter()
             .map(MoleculeCorrespondence::from_rust)
-            .collect())
+            .collect()
     }
 
     /// Generate an unfolded binary hashed fingerprint.
@@ -1952,7 +1950,7 @@ mod tests {
             ),
         ];
 
-        assert_eq!(pattern.substructure_matches(&host, None).unwrap(), expected);
+        assert_eq!(pattern.substructure_matches(&host, None), expected);
         assert_eq!(pattern.to_rust(), &pattern_before);
         assert_eq!(host.to_rust(), &host_before);
     }
@@ -1998,10 +1996,7 @@ mod tests {
             reduce_host_symmetry: false,
         });
 
-        assert_eq!(
-            pattern.substructure_matches(&host, Some(config)).unwrap(),
-            expected
-        );
+        assert_eq!(pattern.substructure_matches(&host, Some(config)), expected);
     }
 
     #[rstest]
@@ -2018,7 +2013,7 @@ mod tests {
         });
 
         assert_eq!(
-            pattern.substructure_matches(&host, Some(config)).unwrap(),
+            pattern.substructure_matches(&host, Some(config)),
             Vec::new()
         );
     }

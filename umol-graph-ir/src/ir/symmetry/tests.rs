@@ -60,31 +60,6 @@ fn test_ordered_partition_from_descriptors(
 }
 
 #[rstest]
-#[case::empty(Vec::new(), OrderedPartition { cells: Vec::new() })]
-#[case::repeated(
-    vec![2, 0, 2, 1, 0],
-    OrderedPartition {
-        cells: vec![
-            vec![NodeId(1), NodeId(4)],
-            vec![NodeId(3)],
-            vec![NodeId(0), NodeId(2)],
-        ],
-    },
-)]
-#[case::ordered_distinct(
-    vec![0, 1, 2],
-    OrderedPartition {
-        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
-    },
-)]
-fn test_ordered_partition_from_color_ranks(
-    #[case] colors: Vec<u32>,
-    #[case] expected: OrderedPartition,
-) {
-    assert_eq!(OrderedPartition::from_color_ranks(colors), expected);
-}
-
-#[rstest]
 #[case::empty(
     OrderedPartition { cells: Vec::new() },
     Graph::new(0, &[]),

@@ -5,19 +5,19 @@ use std::ops::RangeInclusive;
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
-use umol_graph_core::{AutomorphismAlgorithm, Graph};
+use umol_graph_core::AutomorphismAlgorithm;
 
 use super::*;
 use crate::ir::canonicalize::tests::{canonicalize_context, explicitly_dense_equivalent};
+use crate::ir::incidence::{IncidenceLevel, IncidenceNodeId};
 use crate::ir::{
     ArithExpr, AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta,
     AtomFieldChange, AtomForm, AtomId, BondForm, BondId, Constraint, ConstraintDelta,
-    DativeBondForm, DativeBondId, Delta, Deltas, ElementForm, Entity, IncidenceLevel, Molecule,
-    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
-    MulticenterBondId, NoncovalentBondDelta, NoncovalentBondForm, NoncovalentBondId,
-    NoncovalentBondKind, NumForm, ReactionSpanEntries, RelationalConstraint, StereoAtomDelta,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind,
+    DativeBondForm, DativeBondId, Delta, Deltas, ElementForm, Entity, Molecule, MoleculeConstraint,
+    MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
+    NoncovalentBondDelta, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
+    ReactionSpanEntries, RelationalConstraint, StereoAtomDelta, StereoAtomForm, StereoAtomId,
+    StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
 use crate::mol_dsl;
 
@@ -641,7 +641,7 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
         .to_reaction_span()
         .expect("identity reaction materializes");
     let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
-    let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+    let order = incidence_graph.raw_graph().node_ids().collect::<Vec<_>>();
     let remapping = remapping_from_order(&span, &incidence_graph, &order);
 
     assert_eq!(
@@ -652,7 +652,7 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
 
 #[rstest]
 #[case::identity(
-    [0, 1, 2, 3, 4].map(NodeId).into(),
+    [0, 1, 2].map(NodeId).into(),
     molecule_remapping(&[
         vec![0, 1, 2],
         vec![0, 1],
@@ -665,7 +665,7 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
     ])
 )]
 #[case::path_reversal(
-    [2, 1, 0, 4, 3].map(NodeId).into(),
+    [2, 1, 0].map(NodeId).into(),
     molecule_remapping(&[
         vec![2, 1, 0],
         vec![1, 0],
@@ -1011,86 +1011,6 @@ fn test_same_colors(
 }
 
 #[rstest]
-#[case::unchanged_bond(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
-        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
-        ..Default::default()
-    }),
-    Graph::new(2, &[[0, 1]]),
-    vec![0, 0],
-    vec![1],
-    vec![vec![NodeId(0), NodeId(1)]],
-)]
-#[case::added_atom(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![
-            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-            EntitySpan::Added(AtomForm::from_element(Element::C)),
-        ],
-        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(1)))],
-        ..Default::default()
-    }),
-    Graph::new(2, &[[0, 1]]),
-    vec![0, 1],
-    vec![2],
-    vec![vec![NodeId(0)], vec![NodeId(1)]],
-)]
-#[case::modified_bond(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
-        bonds: vec![
-            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
-            (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
-            (
-                AtomId(0),
-                AtomId(2),
-                EntitySpan::Modified {
-                    lhs: BondForm::from_order(1),
-                    rhs: BondForm::from_order(2),
-                },
-            ),
-        ],
-        ..Default::default()
-    }),
-    Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-    vec![0, 0, 0],
-    vec![1, 1, 2],
-    vec![vec![NodeId(0), NodeId(1), NodeId(2)]],
-)]
-#[case::removed_and_added_bond(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
-        bonds: vec![
-            (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
-            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
-        ],
-        ..Default::default()
-    }),
-    Graph::new(3, &[[0, 1], [1, 2]]),
-    vec![0, 0, 0],
-    vec![2, 1],
-    vec![vec![NodeId(0), NodeId(1), NodeId(2)]],
-)]
-fn test_topology_search_input(
-    #[case] span: ReactionSpan,
-    #[case] expected_graph: Graph,
-    #[case] expected_node_colors: Vec<u32>,
-    #[case] expected_edge_colors: Vec<u32>,
-    #[case] expected_partition: Vec<Vec<NodeId>>,
-) {
-    let span = span.normalize().unwrap();
-    let incidence_graph = span.incidence_graph(IncidenceLevel::Topology);
-    let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Topology, true).unwrap();
-    let input = topology_search_input(&span, &incidence_graph, &colors.entities);
-
-    assert_eq!(input.adapter.graph(), &expected_graph);
-    assert_eq!(input.adapter.node_colors(), expected_node_colors.as_slice());
-    assert_eq!(input.adapter.edge_colors(), expected_edge_colors.as_slice());
-    assert_eq!(input.initial_partition.cells, expected_partition);
-}
-
-#[rstest]
 #[case::bond_participants(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
@@ -1104,8 +1024,6 @@ fn test_topology_search_input(
         Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
-        Entity::Bond(BondId(1)),
-        Entity::Bond(BondId(0)),
     ],
 )]
 #[case::added_bond(
@@ -1121,8 +1039,6 @@ fn test_topology_search_input(
         Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
-        Entity::Bond(BondId(1)),
-        Entity::Bond(BondId(0)),
     ],
 )]
 #[case::removed_and_added_bond(
@@ -1138,8 +1054,6 @@ fn test_topology_search_input(
         Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
-        Entity::Bond(BondId(1)),
-        Entity::Bond(BondId(0)),
     ],
 )]
 #[case::added_dative_bond(
@@ -1266,21 +1180,19 @@ fn test_topology_search_input(
         Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
-        Entity::Bond(BondId(1)),
-        Entity::Bond(BondId(0)),
         Entity::StereoBond(StereoBondId(1)),
         Entity::StereoBond(StereoBondId(0)),
     ],
 )]
 fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) {
     let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
-    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+    let mut order = incidence_graph.raw_graph().node_ids().collect::<Vec<_>>();
     order.reverse();
 
     assert_eq!(
         entity_order(&span, &incidence_graph, DescriptionLevel::Full, &order)
             .into_iter()
-            .map(|node| incidence_graph.entity(node))
+            .map(|node| incidence_graph.entity(IncidenceNodeId::from(node)))
             .collect::<Vec<_>>(),
         expected,
     );

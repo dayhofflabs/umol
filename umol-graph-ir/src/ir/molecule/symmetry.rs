@@ -2,14 +2,16 @@
 
 use std::ops::ControlFlow;
 
-use umol_graph_core::{AutomorphismAlgorithm, AutomorphismGroup, EdgeId, NodeId};
+use umol_graph_core::{AutomorphismAlgorithm, AutomorphismGroup, NodeId};
 use umol_perm::{Orientation, Permutation};
 
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, AtomPosition, BondId, StereoAtomId, StereoBondId};
-use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
+use super::super::incidence::{
+    Incidence, IncidenceEdge, IncidenceEdgeId, IncidenceGraph, IncidenceLevel, IncidenceNodeId,
+};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::{
@@ -48,8 +50,24 @@ pub struct GraphSymmetry {
 
 impl GraphSymmetry {
     pub(crate) fn cell(&self, entity: Entity) -> Option<u32> {
-        (entity.kind_id() < self.incidence.entity_count(entity.kind()))
-            .then(|| self.cell_indices[self.incidence.node_of(entity).index()])
+        self.incidence
+            .node_of(entity)
+            .map(|node| self.cell_indices[node.index()])
+    }
+
+    fn has_site(&self, molecule: &Molecule, site: Entity) -> bool {
+        match site {
+            Entity::Atom(atom) => self.cell(Entity::Atom(atom)).is_some(),
+            Entity::Bond(bond) => {
+                self.incidence.bond_edge(bond).is_some()
+                    && molecule.bonds().get(bond).is_some_and(|view| {
+                        view.atom_ids()
+                            .iter()
+                            .all(|&atom| self.cell(Entity::Atom(atom)).is_some())
+                    })
+            }
+            _ => false,
+        }
     }
 }
 
@@ -110,17 +128,20 @@ impl Molecule {
             }
         })
         .unwrap_or_else(|_| InitialColors {
-            entities: (0..incidence.graph().node_count() as u32).collect(),
-            incidences: (incidence.graph().node_count() as u32
-                ..(incidence.graph().node_count() + incidence.graph().edge_count()) as u32)
+            entities: (0..incidence.node_count() as u32).collect(),
+            edges: (incidence.node_count() as u32
+                ..(incidence.node_count() + incidence.edge_count()) as u32)
                 .collect(),
         });
         let adapter = AutomorphismAdapter::new(&incidence, &colors);
         let partition = OrderedPartition::from_descriptors(adapter.node_colors());
-        let atom_colors_distinct = partition
-            .cells
-            .iter()
-            .all(|cell| cell.len() == 1 || !matches!(incidence.entity(cell[0]), Entity::Atom(_)));
+        let atom_colors_distinct = partition.cells.iter().all(|cell| {
+            cell.len() == 1
+                || !matches!(
+                    incidence.entity(IncidenceNodeId::from(cell[0])),
+                    Entity::Atom(_)
+                )
+        });
         let partition = if atom_colors_distinct {
             partition.refine(adapter.graph(), adapter.edge_colors())
         } else {
@@ -255,7 +276,7 @@ impl Molecule {
             return generators.to_vec();
         }
 
-        let node_count = symmetry.incidence.graph().node_count();
+        let node_count = symmetry.incidence.node_count();
         let identity: Vec<NodeId> = (0..node_count as u32).map(NodeId).collect();
         let include_constraints = symmetry.config.include_constraints;
         if !remapping_matches_stereo(
@@ -286,7 +307,7 @@ impl Molecule {
         // incidence graph, grouped by stereo record so partial checks prune early.
         let mut base = Vec::new();
         let mut base_pos = vec![usize::MAX; node_count];
-        let mut add_base = |node: NodeId| -> usize {
+        let mut add_base = |node: IncidenceNodeId| -> usize {
             let idx = node.index();
             if base_pos[idx] == usize::MAX {
                 base_pos[idx] = base.len();
@@ -298,19 +319,42 @@ impl Molecule {
         let mut tagged_records =
             Vec::with_capacity(self.stereo_atoms().count() + self.stereo_bonds().count());
         for stereo in self.stereo_atoms().iter() {
-            let mut max_pos = add_base(symmetry.incidence.node_of(Entity::Atom(stereo.site_id())));
+            let mut max_pos = add_base(
+                symmetry
+                    .incidence
+                    .node_of(Entity::Atom(stereo.site_id()))
+                    .expect("stereo atom site is in incidence graph"),
+            );
             for ligand in stereo.ligand_ids() {
                 max_pos = max_pos.max(add_base(
-                    symmetry.incidence.node_of(Entity::Atom(ligand.atom_id)),
+                    symmetry
+                        .incidence
+                        .node_of(Entity::Atom(ligand.atom_id))
+                        .expect("stereo atom ligand is in incidence graph"),
                 ));
             }
             tagged_records.push((max_pos, StereoRecordId::Atom(stereo.id())));
         }
         for stereo in self.stereo_bonds().iter() {
-            let mut max_pos = add_base(symmetry.incidence.node_of(Entity::Bond(stereo.site_id())));
+            let [first, second] = self.bond(stereo.site_id()).atom_ids();
+            let mut max_pos = add_base(
+                symmetry
+                    .incidence
+                    .node_of(Entity::Atom(first))
+                    .expect("stereo bond endpoint is in incidence graph"),
+            );
+            max_pos = max_pos.max(add_base(
+                symmetry
+                    .incidence
+                    .node_of(Entity::Atom(second))
+                    .expect("stereo bond endpoint is in incidence graph"),
+            ));
             for ligand in stereo.ligand_ids() {
                 max_pos = max_pos.max(add_base(
-                    symmetry.incidence.node_of(Entity::Atom(ligand.atom_id)),
+                    symmetry
+                        .incidence
+                        .node_of(Entity::Atom(ligand.atom_id))
+                        .expect("stereo bond ligand is in incidence graph"),
                 ));
             }
             tagged_records.push((max_pos, StereoRecordId::Bond(stereo.id())));
@@ -442,7 +486,7 @@ impl Molecule {
             return Vec::new();
         }
         if records.iter().any(|(_, _, ligands, site)| {
-            symmetry.cell(*site).is_none()
+            !symmetry.has_site(self, *site)
                 || ligands
                     .iter()
                     .any(|ligand| symmetry.cell(Entity::Atom(ligand.atom_id)).is_none())
@@ -454,7 +498,7 @@ impl Molecule {
         }
         let preserves_frames = |images: &[NodeId]| {
             records.iter().all(|(entity, kind, ligands, site)| {
-                let Some(target_site) = entity_image(&symmetry.incidence, images, *site) else {
+                let Some(target_site) = site_image(self, &symmetry.incidence, images, *site) else {
                     return false;
                 };
                 let Some((target, target_kind, target_ligands, _)) =
@@ -502,7 +546,7 @@ impl Molecule {
         let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
             generators.retain(|images| {
                 records.iter().all(|(_, _, ligands, site)| {
-                    entity_image(&symmetry.incidence, images, *site) == Some(*site)
+                    site_image(self, &symmetry.incidence, images, *site) == Some(*site)
                         && remapping_frame_action(&symmetry.incidence, images, ligands, ligands)
                             .is_some_and(|frame| frame == Permutation::identity(frame.degree()))
                 })
@@ -530,7 +574,12 @@ impl Molecule {
             }
             let mut partition = symmetry.partition.clone();
             if let Some(atom) = fixed {
-                let node = symmetry.incidence.node_of(Entity::Atom(atom));
+                let node = NodeId::from(
+                    symmetry
+                        .incidence
+                        .node_of(Entity::Atom(atom))
+                        .expect("ligand atom is in incidence graph"),
+                );
                 let cell = partition
                     .cells
                     .iter()
@@ -556,10 +605,12 @@ impl Molecule {
                                     || cells[symmetry
                                         .incidence
                                         .node_of(Entity::Atom(ligand.atom_id))
+                                        .expect("ligand atom is in incidence graph")
                                         .index()]
                                         != cells[symmetry
                                             .incidence
                                             .node_of(Entity::Atom(other.atom_id))
+                                            .expect("ligand atom is in incidence graph")
                                             .index()]
                             })
                     })
@@ -611,7 +662,8 @@ impl Molecule {
                                     continue;
                                 }
                                 let (_, kind, ligands, site) = records[index];
-                                if entity_image(&symmetry.incidence, images, site) != Some(site) {
+                                if site_image(self, &symmetry.incidence, images, site) != Some(site)
+                                {
                                     all_fixed = false;
                                     continue;
                                 }
@@ -661,27 +713,54 @@ impl Molecule {
                     if !kept[index] || constitutional[index] || !changes_alone[index] {
                         continue;
                     }
-                    let node = symmetry.incidence.node_of(*site);
-                    let cell = partition
-                        .cells
-                        .iter()
-                        .position(|cell| cell.contains(&node))
-                        .unwrap();
-                    let focus_partition = partition
-                        .individualize(cell, node)
-                        .refine(symmetry.adapter.graph(), symmetry.adapter.edge_colors());
+                    let focus_partition = match *site {
+                        Entity::Atom(atom) => {
+                            let node = NodeId::from(
+                                symmetry
+                                    .incidence
+                                    .node_of(Entity::Atom(atom))
+                                    .expect("stereo atom site is in incidence graph"),
+                            );
+                            let cell = partition
+                                .cells
+                                .iter()
+                                .position(|cell| cell.contains(&node))
+                                .unwrap();
+                            partition.individualize(cell, node)
+                        }
+                        Entity::Bond(bond) => {
+                            let [first, second] = self.bond(bond).atom_ids();
+                            partition.individualize_pair(NodeId::from(first), NodeId::from(second))
+                        }
+                        _ => unreachable!("stereo sites are atoms or bonds"),
+                    }
+                    .refine(symmetry.adapter.graph(), symmetry.adapter.edge_colors());
                     let focus_cells =
                         focus_partition.cell_indices(symmetry.adapter.graph().node_count());
                     let moved = records
                         .iter()
                         .enumerate()
                         .filter_map(|(other, (_, _, _, site))| {
-                            let node = symmetry.incidence.node_of(*site);
-                            (kept[other]
-                                && other != index
-                                && focus_partition.cells[focus_cells[node.index()] as usize].len()
-                                    > 1)
-                            .then_some(other)
+                            if !kept[other] || other == index {
+                                return None;
+                            }
+                            let movable = match *site {
+                                Entity::Atom(atom) => {
+                                    focus_partition.cells[focus_cells[atom.index()] as usize].len()
+                                        > 1
+                                }
+                                Entity::Bond(bond) => {
+                                    let [first, second] = self.bond(bond).atom_ids();
+                                    focus_partition.cells[focus_cells[first.index()] as usize].len()
+                                        > 1
+                                        || focus_partition.cells
+                                            [focus_cells[second.index()] as usize]
+                                            .len()
+                                            > 1
+                                }
+                                _ => false,
+                            };
+                            movable.then_some(other)
                         })
                         .collect::<Vec<_>>();
                     let mut assignment = vec![0; records.len()];
@@ -706,7 +785,8 @@ impl Molecule {
                                         ) && preserves_frames(images)
                                             && records.iter().enumerate().all(
                                                 |(source, (_, kind, ligands, site))| {
-                                                    let Some(target_site) = entity_image(
+                                                    let Some(target_site) = site_image(
+                                                        self,
                                                         &symmetry.incidence,
                                                         images,
                                                         *site,
@@ -851,7 +931,12 @@ fn molecule_remapping_exists(
         atoms
             .iter()
             .fold(symmetry.partition.clone(), |partition, &atom| {
-                let node = symmetry.incidence.node_of(Entity::Atom(atom));
+                let node = NodeId::from(
+                    symmetry
+                        .incidence
+                        .node_of(Entity::Atom(atom))
+                        .expect("atom is in incidence graph"),
+                );
                 let cell = partition
                     .cells
                     .iter()
@@ -899,10 +984,7 @@ fn molecule_remapping_exists(
     }
     if let Some(automorphisms) = &symmetry.automorphisms {
         for (&a, &b) in source.iter().zip(target) {
-            if !automorphisms.same_orbit(
-                symmetry.incidence.node_of(Entity::Atom(a)),
-                symmetry.incidence.node_of(Entity::Atom(b)),
-            ) {
+            if !automorphisms.same_orbit(NodeId::from(a), NodeId::from(b)) {
                 return false;
             }
         }
@@ -915,7 +997,7 @@ fn molecule_remapping_exists(
             .is_some_and(|order| {
                 order == 1
                     || source.iter().any(|&atom| {
-                        let node = symmetry.incidence.node_of(Entity::Atom(atom));
+                        let node = NodeId::from(atom);
                         let orbit_size = (0..automorphisms.node_count() as u32)
                             .filter(|&other| automorphisms.same_orbit(node, NodeId(other)))
                             .count();
@@ -930,10 +1012,11 @@ fn molecule_remapping_exists(
             }
         }
         for generator in automorphisms.generators() {
-            if source.iter().zip(target).any(|(&a, &b)| {
-                generator[symmetry.incidence.node_of(Entity::Atom(a)).index()]
-                    != symmetry.incidence.node_of(Entity::Atom(b))
-            }) {
+            if source
+                .iter()
+                .zip(target)
+                .any(|(&a, &b)| generator[a.index()] != NodeId::from(b))
+            {
                 continue;
             }
             let preserved = matches_stereo(generator, orientation, changed);
@@ -983,7 +1066,7 @@ fn molecule_remapping_exists(
                     return;
                 };
                 generators.retain(|images| {
-                    if entity_image(&symmetry.incidence, images, site) != Some(site)
+                    if site_image(molecule, &symmetry.incidence, images, site) != Some(site)
                         || !matches_stereo(images, Orientation::Proper, None)
                     {
                         return false;
@@ -1020,7 +1103,7 @@ fn stereo_record_matches_proper(
         let mapped = ligands
             .iter()
             .map(|ligand| {
-                let image = NodeId(images[incidence.node_of(Entity::Atom(ligand.atom_id)).index()]);
+                let image = IncidenceNodeId(images[ligand.atom_id.index()]);
                 let Entity::Atom(atom) = incidence.entity(image) else {
                     return None;
                 };
@@ -1033,8 +1116,7 @@ fn stereo_record_matches_proper(
     let (source_config, target_config, frame, constraints_ok) = match record {
         StereoRecordId::Atom(id) => {
             let source = molecule.stereo_atom(id);
-            let site_image =
-                NodeId(images[incidence.node_of(Entity::Atom(source.site_id())).index()]);
+            let site_image = IncidenceNodeId(images[source.site_id().index()]);
             let Entity::Atom(target_site) = incidence.entity(site_image) else {
                 return false;
             };
@@ -1060,9 +1142,14 @@ fn stereo_record_matches_proper(
         }
         StereoRecordId::Bond(id) => {
             let source = molecule.stereo_bond(id);
-            let site_image =
-                NodeId(images[incidence.node_of(Entity::Bond(source.site_id())).index()]);
-            let Entity::Bond(target_site) = incidence.entity(site_image) else {
+            let [first, second] = molecule.bond(source.site_id()).atom_ids();
+            let first_image = NodeId(images[first.index()]);
+            let second_image = NodeId(images[second.index()]);
+            let Some(target_site) = molecule
+                .raw_graph()
+                .find_edge(first_image, second_image)
+                .map(BondId::from)
+            else {
                 return false;
             };
             let Some(target) = molecule.bond(target_site).stereo_bond() else {
@@ -1120,11 +1207,36 @@ fn remapping_frame_action(
 }
 
 fn entity_image(incidence: &IncidenceGraph, images: &[NodeId], entity: Entity) -> Option<Entity> {
-    if entity.kind_id() >= incidence.entity_count(entity.kind()) {
+    let node = incidence.node_of(entity)?;
+    let image = *images.get(node.index())?;
+    (image.index() < incidence.node_count()).then(|| incidence.entity(IncidenceNodeId::from(image)))
+}
+
+fn bond_image(molecule: &Molecule, images: &[NodeId], bond: BondId) -> Option<BondId> {
+    let [first, second] = molecule.bonds().get(bond)?.atom_ids();
+    let first_image = *images.get(first.index())?;
+    let second_image = *images.get(second.index())?;
+    if first_image.index() >= molecule.atoms().count()
+        || second_image.index() >= molecule.atoms().count()
+    {
         return None;
     }
-    let image = *images.get(incidence.node_of(entity).index())?;
-    (image.index() < incidence.graph().node_count()).then(|| incidence.entity(image))
+    molecule
+        .raw_graph()
+        .find_edge(first_image, second_image)
+        .map(BondId::from)
+}
+
+fn site_image(
+    molecule: &Molecule,
+    incidence: &IncidenceGraph,
+    images: &[NodeId],
+    site: Entity,
+) -> Option<Entity> {
+    match site {
+        Entity::Bond(bond) => bond_image(molecule, images, bond).map(Entity::Bond),
+        other => entity_image(incidence, images, other),
+    }
 }
 
 fn remapping_matches_stereo(
@@ -1136,8 +1248,8 @@ fn remapping_matches_stereo(
     changed: Option<(Entity, u32)>,
 ) -> bool {
     let image = |entity: Entity| {
-        if incidence.entity_count(entity.kind()) != 0 {
-            return entity_image(incidence, images, entity);
+        if let Some(mapped) = site_image(molecule, incidence, images, entity) {
+            return Some(mapped);
         }
         match entity {
             Entity::StereoAtom(id) => {
@@ -1155,18 +1267,14 @@ fn remapping_matches_stereo(
             }
             Entity::StereoBond(id) => {
                 let source = molecule.stereo_bonds().get(id)?;
-                let Entity::Bond(site) =
-                    entity_image(incidence, images, Entity::Bond(source.site_id()))?
-                else {
-                    return None;
-                };
+                let site = bond_image(molecule, images, source.site_id())?;
                 molecule
                     .stereo_bonds()
                     .iter()
                     .find(|stereo| stereo.site_id() == site)
                     .map(|stereo| Entity::StereoBond(stereo.id()))
             }
-            _ => entity_image(incidence, images, entity),
+            _ => None,
         }
     };
     let record = |entity| match entity {
@@ -1323,8 +1431,12 @@ pub(crate) fn remapping_preserves_stereo(
     incidence_graph: &IncidenceGraph,
     images: &[NodeId],
 ) -> bool {
-    let entity_image =
-        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let entity_image = |entity| {
+        let node = incidence_graph
+            .node_of(entity)
+            .expect("stereo remapping entity is in incidence graph");
+        incidence_graph.entity(IncidenceNodeId::from(images[node.index()]))
+    };
     let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
         let mapped = ligands
             .iter()
@@ -1368,7 +1480,15 @@ pub(crate) fn remapping_preserves_stereo(
             return false;
         };
         let image = target.stereo_bond(image_id);
-        if entity_image(Entity::Bond(stereo.site_id())) != Entity::Bond(image.site_id()) {
+        let [s0, s1] = source.bond(stereo.site_id()).atom_ids();
+        let (Entity::Atom(m0), Entity::Atom(m1)) = (
+            entity_image(Entity::Atom(s0)),
+            entity_image(Entity::Atom(s1)),
+        ) else {
+            return false;
+        };
+        let [t0, t1] = target.bond(image.site_id()).atom_ids();
+        if !((m0 == t0 && m1 == t1) || (m0 == t1 && m1 == t0)) {
             return false;
         }
         let Some(action) = frame_action(stereo.ligand_ids(), image.ligand_ids()) else {
@@ -1395,26 +1515,21 @@ pub(crate) fn retain_stereo_preserving_generators(
     });
 }
 
-/// The color of the incidence at `edge`: its role and, for an atom of an aromatic system or a
-/// multicenter bond, the electron count of that atom.
-pub(crate) fn incidence_color<'a>(
+/// The color of the overlay incidence at `edge`: its role and, for an atom of an aromatic system
+/// or a multicenter bond, the electron count of that atom.
+pub(crate) fn incidence_color(
     molecule: &Molecule,
-    incidence_graph: &'a IncidenceGraph,
-    edge: EdgeId,
-) -> (&'a Incidence, Option<i64>) {
-    let incidence = incidence_graph.incidence(edge);
+    incidence_graph: &IncidenceGraph,
+    edge: IncidenceEdgeId,
+) -> (Incidence, Option<i64>) {
+    let IncidenceEdge::Incidence(incidence) = incidence_graph.edge(edge) else {
+        unreachable!("incidence_color is called only on overlay incidence edges");
+    };
     let electron_count = match incidence {
         Incidence::AromaticAtom | Incidence::MulticenterAtom => {
-            let [first, second] = incidence_graph.graph().edge_endpoints(edge);
-            let (owner, atom) = match (
-                incidence_graph.entity(first),
-                incidence_graph.entity(second),
-            ) {
-                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
-                _ => {
-                    unreachable!("an electron contribution connects an overlay to an atom")
-                }
-            };
+            let (owner, atom) = incidence_graph
+                .incidence_endpoints(edge)
+                .expect("overlay incidence connects an overlay to an atom");
             let (atom_position, electrons) = match owner {
                 Entity::AromaticSystem(id) => (
                     molecule
@@ -1442,13 +1557,13 @@ pub(crate) fn incidence_color<'a>(
     (incidence, electron_count)
 }
 
-/// The integers of the colors of the supplied molecule at `level`: one per entity, by incidence
-/// node, and one per incidence, by incidence edge.
+/// The integers of the colors of the supplied molecule at `level`: one per incidence node
+/// (atoms + included overlays), and one per incidence edge (localized bonds followed by overlay
+/// incidences).
 ///
-/// The colors of each entity kind are ranked in kind order, and the incidences continue after the
-/// entities. The color of an incidence is its role and, for an atom of an aromatic system or a
-/// multicenter bond, the electron count of that atom. At Topology the incidences are not ranked,
-/// since the topology search input does not read them.
+/// The colors of each entity kind are ranked in kind order, followed by localized bonds and then
+/// overlay incidences in disjoint integer ranges. The color of an overlay incidence is its role
+/// and, for an atom of an aromatic system or a multicenter bond, the electron count of that atom.
 /// `include_constraints` selects the frame-independent entity constraints in the colors and the
 /// frame-relative stereo constraints in compatibility checks. Configuration compatibility is
 /// checked in both modes. No form is normalized.
@@ -1459,8 +1574,14 @@ pub(crate) fn initial_colors(
     level: DescriptionLevel,
     include_constraints: bool,
 ) -> Result<InitialColors, Contradiction> {
-    let mut entities = vec![0; incidence_graph.graph().node_count()];
-    let position = |entity: Entity| incidence_graph.node_of(entity).index();
+    let mut entities = vec![0; incidence_graph.node_count()];
+    let mut edges = vec![0; incidence_graph.edge_count()];
+    let position = |entity: Entity| {
+        incidence_graph
+            .node_of(entity)
+            .expect("entity belongs to incidence graph at this level")
+            .index()
+    };
 
     let atoms = molecule
         .atoms()
@@ -1484,130 +1605,103 @@ pub(crate) fn initial_colors(
         )
     };
 
-    let bonds = molecule
-        .bonds()
-        .iter()
-        .map(|bond| (bond.attributes(), position(Entity::Bond(bond.id()))));
-    next = if include_constraints {
-        rank_colors(
-            bonds
-                .map(|(form, position)| (form.as_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    } else {
-        rank_colors(
-            bonds
-                .map(|(form, position)| (form.as_field_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    };
+    if level >= DescriptionLevel::Constitution {
+        let dative = molecule
+            .dative_bonds()
+            .iter()
+            .map(|bond| (bond.attributes(), position(Entity::DativeBond(bond.id()))));
+        next = if include_constraints {
+            rank_colors(
+                dative
+                    .map(|(form, position)| (form.as_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        } else {
+            rank_colors(
+                dative
+                    .map(|(form, position)| (form.as_field_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        };
 
-    if level == DescriptionLevel::Topology {
-        return Ok(InitialColors {
-            entities,
-            incidences: Vec::new(),
+        let aromatic = molecule.aromatic_systems().iter().map(|system| {
+            let attributes = system.attributes();
+            if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+                    if counts.len() != system.atom_ids().len())
+            {
+                return Err(Contradiction);
+            }
+            Ok((attributes, position(Entity::AromaticSystem(system.id()))))
         });
+        next = if include_constraints {
+            let mut colors = Vec::with_capacity(molecule.aromatic_systems().count());
+            for entry in aromatic {
+                let (form, position) = entry?;
+                colors.push((form.as_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        } else {
+            let mut colors = Vec::with_capacity(molecule.aromatic_systems().count());
+            for entry in aromatic {
+                let (form, position) = entry?;
+                colors.push((form.as_field_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        };
+
+        let multicenter = molecule.multicenter_bonds().iter().map(|bond| {
+            let attributes = bond.attributes();
+            if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
+                    if counts.len() != bond.atom_ids().len())
+            {
+                return Err(Contradiction);
+            }
+            Ok((attributes, position(Entity::MulticenterBond(bond.id()))))
+        });
+        next = if include_constraints {
+            let mut colors = Vec::with_capacity(molecule.multicenter_bonds().count());
+            for entry in multicenter {
+                let (form, position) = entry?;
+                colors.push((form.as_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        } else {
+            let mut colors = Vec::with_capacity(molecule.multicenter_bonds().count());
+            for entry in multicenter {
+                let (form, position) = entry?;
+                colors.push((form.as_field_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        };
+
+        let noncovalent = molecule.noncovalent_bonds().iter().map(|bond| {
+            (
+                bond.attributes(),
+                position(Entity::NoncovalentBond(bond.id())),
+            )
+        });
+        next = if include_constraints {
+            rank_colors(
+                noncovalent
+                    .map(|(form, position)| (form.as_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        } else {
+            rank_colors(
+                noncovalent
+                    .map(|(form, position)| (form.as_field_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        };
     }
-
-    let dative = molecule
-        .dative_bonds()
-        .iter()
-        .map(|bond| (bond.attributes(), position(Entity::DativeBond(bond.id()))));
-    next = if include_constraints {
-        rank_colors(
-            dative
-                .map(|(form, position)| (form.as_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    } else {
-        rank_colors(
-            dative
-                .map(|(form, position)| (form.as_field_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    };
-
-    let aromatic = molecule.aromatic_systems().iter().map(|system| {
-        let attributes = system.attributes();
-        if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
-                if counts.len() != system.atom_ids().len())
-        {
-            return Err(Contradiction);
-        }
-        Ok((attributes, position(Entity::AromaticSystem(system.id()))))
-    });
-    next = if include_constraints {
-        let mut colors = Vec::with_capacity(molecule.aromatic_systems().count());
-        for entry in aromatic {
-            let (form, position) = entry?;
-            colors.push((form.as_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    } else {
-        let mut colors = Vec::with_capacity(molecule.aromatic_systems().count());
-        for entry in aromatic {
-            let (form, position) = entry?;
-            colors.push((form.as_field_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    };
-
-    let multicenter = molecule.multicenter_bonds().iter().map(|bond| {
-        let attributes = bond.attributes();
-        if matches!(&attributes.electrons, ElectronCountsForm::Lit(counts)
-                if counts.len() != bond.atom_ids().len())
-        {
-            return Err(Contradiction);
-        }
-        Ok((attributes, position(Entity::MulticenterBond(bond.id()))))
-    });
-    next = if include_constraints {
-        let mut colors = Vec::with_capacity(molecule.multicenter_bonds().count());
-        for entry in multicenter {
-            let (form, position) = entry?;
-            colors.push((form.as_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    } else {
-        let mut colors = Vec::with_capacity(molecule.multicenter_bonds().count());
-        for entry in multicenter {
-            let (form, position) = entry?;
-            colors.push((form.as_field_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    };
-
-    let noncovalent = molecule.noncovalent_bonds().iter().map(|bond| {
-        (
-            bond.attributes(),
-            position(Entity::NoncovalentBond(bond.id())),
-        )
-    });
-    next = if include_constraints {
-        rank_colors(
-            noncovalent
-                .map(|(form, position)| (form.as_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    } else {
-        rank_colors(
-            noncovalent
-                .map(|(form, position)| (form.as_field_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    };
 
     if level >= DescriptionLevel::Structure {
         let stereo_atoms = molecule.stereo_atoms().iter().map(|stereo| {
@@ -1688,22 +1782,47 @@ pub(crate) fn initial_colors(
         };
     }
 
-    let incidence_colors = incidence_graph
-        .incidences()
-        .map(|(edge, _)| {
-            (
-                incidence_color(molecule, incidence_graph, edge),
-                edge.index(),
-            )
-        })
-        .collect();
-    let mut incidences = vec![0; incidence_graph.graph().edge_count()];
-    rank_colors(incidence_colors, next, &mut incidences);
+    let bonds = molecule.bonds().iter().map(|bond| {
+        (
+            bond.attributes(),
+            incidence_graph
+                .bond_edge(bond.id())
+                .expect("bond belongs to incidence graph")
+                .index(),
+        )
+    });
+    next = if include_constraints {
+        rank_colors(
+            bonds
+                .map(|(form, position)| (form.as_color(), position))
+                .collect(),
+            next,
+            &mut edges,
+        )
+    } else {
+        rank_colors(
+            bonds
+                .map(|(form, position)| (form.as_field_color(), position))
+                .collect(),
+            next,
+            &mut edges,
+        )
+    };
 
-    Ok(InitialColors {
-        entities,
-        incidences,
-    })
+    if incidence_graph.incidence_count() > 0 {
+        let incidence_colors = incidence_graph
+            .incidences()
+            .map(|(edge, _)| {
+                (
+                    incidence_color(molecule, incidence_graph, edge),
+                    edge.index(),
+                )
+            })
+            .collect();
+        rank_colors(incidence_colors, next, &mut edges);
+    }
+
+    Ok(InitialColors { entities, edges })
 }
 
 /// Configuration for molecule graph symmetry and derived stereo readings.

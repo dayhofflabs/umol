@@ -19,7 +19,6 @@ use super::molecule::Molecule;
 use super::reaction::Reaction;
 use super::reaction_span::ReactionSpan;
 use super::remap::MoleculeRemapping;
-use super::symmetry::{AutomorphismAdapter, OrderedPartition};
 use super::traits::Reframe;
 
 /// Semantic and operational inputs to aggregate canonicalization.
@@ -210,17 +209,6 @@ impl<K: Ord, Build: Fn(&[NodeId]) -> K> Ord for DeferredKey<'_, K, Build> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.get().cmp(other.get())
     }
-}
-
-/// Topology search input with atoms and non-modal bond subdivisions as vertices.
-///
-/// Bonds in the largest normalized bond-form class are represented directly as edges. Every other
-/// bond remains a colored subdivision vertex. The complete typed leaf key and remapping still
-/// order and map every bond.
-#[derive(Clone, Debug)]
-pub(crate) struct TopologySearchInput {
-    pub(crate) adapter: AutomorphismAdapter,
-    pub(crate) initial_partition: OrderedPartition,
 }
 
 /// One position per color integer in each of two lists, in the order of the integers: the first

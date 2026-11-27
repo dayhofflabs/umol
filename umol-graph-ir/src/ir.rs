@@ -97,7 +97,6 @@ pub use id::{
     AromaticSystemId, AtomId, AtomPosition, BondId, DativeBondId, MulticenterBondId,
     NoncovalentBondId, StereoAtomId, StereoBondId, StereoLigandPosition,
 };
-pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel, StereoVirtualLigands};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::{
@@ -135,7 +134,7 @@ pub use stereo::{
 };
 pub use substructure::{
     PreparedSubstructureHost, PreparedSubstructurePattern, SubstructureMatchAlgorithm,
-    SubstructureMatchConfig, SubstructureMatchError,
+    SubstructureMatchConfig,
 };
 pub use traits::{
     AsLit, EntityPatch, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Reframe, ReframeKind,

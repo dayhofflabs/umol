@@ -1,23 +1,114 @@
-//! Incidence (Levi) graph: relations lifted to pseudonodes for symmetry analysis.
+//! Incidence graph: localized bonds stay direct edges while overlays become pseudonodes.
+//!
+//! This is an internal graph-IR lowering onto `umol_graph_core::Graph` for symmetry analysis,
+//! canonicalization, and `SubstructureMatchAlgorithm::Incidence`. It is not a bipartite Levi
+//! graph: atoms occupy `0..atom_count`, included overlays occupy `atom_count..node_count`,
+//! localized bonds occupy edges `0..bond_count`, and overlay–atom incidences occupy edges
+//! `bond_count..edge_count`.
 
 use bitflags::bitflags;
-use strum::EnumCount;
 use umol_graph_core::{EdgeId, Graph, NodeId};
 
 use super::entity::{Entity, EntityKind};
+use super::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
+};
 use super::ligand::StereoLigandKind;
 use super::molecule::Molecule;
 use super::reaction_span::ReactionSpan;
 
+/// Dense index of a node in an [`IncidenceGraph`] (atoms in `0..atom_count`, followed by
+/// included overlay entities).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub(crate) struct IncidenceNodeId(pub(crate) u32);
+
+impl IncidenceNodeId {
+    #[inline]
+    pub(crate) fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<usize> for IncidenceNodeId {
+    #[inline]
+    fn from(value: usize) -> Self {
+        Self(value as u32)
+    }
+}
+
+impl From<IncidenceNodeId> for usize {
+    #[inline]
+    fn from(id: IncidenceNodeId) -> Self {
+        id.0 as usize
+    }
+}
+
+impl From<NodeId> for IncidenceNodeId {
+    #[inline]
+    fn from(id: NodeId) -> Self {
+        Self(id.0)
+    }
+}
+
+impl From<IncidenceNodeId> for NodeId {
+    #[inline]
+    fn from(id: IncidenceNodeId) -> Self {
+        Self(id.0)
+    }
+}
+
+/// Dense index of an edge in an [`IncidenceGraph`] (localized bonds in `0..bond_count`, followed
+/// by overlay–atom incidences in `bond_count..edge_count`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub(crate) struct IncidenceEdgeId(pub(crate) u32);
+
+impl IncidenceEdgeId {
+    #[inline]
+    pub(crate) fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<usize> for IncidenceEdgeId {
+    #[inline]
+    fn from(value: usize) -> Self {
+        Self(value as u32)
+    }
+}
+
+impl From<IncidenceEdgeId> for usize {
+    #[inline]
+    fn from(id: IncidenceEdgeId) -> Self {
+        id.0 as usize
+    }
+}
+
+impl From<EdgeId> for IncidenceEdgeId {
+    #[inline]
+    fn from(id: EdgeId) -> Self {
+        Self(id.0)
+    }
+}
+
+impl From<IncidenceEdgeId> for EdgeId {
+    #[inline]
+    fn from(id: IncidenceEdgeId) -> Self {
+        Self(id.0)
+    }
+}
+
 /// Structural level represented by an [`IncidenceGraph`].
 ///
 /// The variants form a nested hierarchy. [`Topology`](Self::Topology) contains
-/// atoms and localized bonds. [`Constitution`](Self::Constitution) additionally
-/// contains dative bonds, aromatic systems, multicenter bonds, and noncovalent
+/// atoms and localized bonds (no overlay pseudonodes). [`Constitution`](Self::Constitution)
+/// additionally contains dative bonds, aromatic systems, multicenter bonds, and noncovalent
 /// bonds. [`Full`](Self::Full) additionally contains stereo atoms and stereo
 /// bonds. Constraints do not contribute to any structural level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IncidenceLevel {
+pub(crate) enum IncidenceLevel {
     Topology,
     Constitution,
     Full,
@@ -29,7 +120,7 @@ bitflags! {
     /// Each bit records whether the corresponding virtual [`StereoLigandKind`] occurs at that
     /// anchor.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct StereoVirtualLigands: u8 {
+    pub(crate) struct StereoVirtualLigands: u8 {
         const IMPLICIT_HYDROGEN = 1 << 0;
         const LONE_PAIR = 1 << 1;
         const VIRTUAL = 1 << 2;
@@ -47,111 +138,258 @@ impl StereoVirtualLigands {
     }
 }
 
-/// The chemical role of one edge in an [`IncidenceGraph`].
+/// The chemical role of an overlay–atom incidence edge in an [`IncidenceGraph`].
 ///
-/// Every incidence edge is simple: each pair of entity nodes is connected by at most one edge.
-/// Stereo entities encode virtual ligands anchored at their site atom or bond endpoints on the
-/// corresponding [`StereoAnchor`](Self::StereoAnchor) edge, while actual-atom ligands use
-/// [`StereoLigand`](Self::StereoLigand). Electron contributions and reaction-side attributes
-/// remain in the owning entity forms; they are not incidence labels.
+/// Localized bonds are direct atom–atom edges represented by [`IncidenceEdge::Bond`], not
+/// variants of this enum. Stereo entities encode virtual ligands anchored at their site atom or
+/// bond endpoints on [`StereoAnchor`](Self::StereoAnchor) edges and actual-atom ligands on
+/// [`StereoLigand`](Self::StereoLigand) edges. Electron contributions and reaction-side
+/// attributes remain in the owning entity forms; they are not incidence labels.
 ///
 /// # Semantic properties
 ///
 /// The total order follows the declaration order of the variants. Canonicalization
 /// augments these roles with the owning forms' electron contributions when
-/// constructing colors.
+/// constructing edge colors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Incidence {
-    BondEndpoint,
+pub(crate) enum Incidence {
     DativeDonor,
     DativeAcceptor,
     AromaticAtom,
     MulticenterAtom,
     NoncovalentEndpoint,
-    StereoSite,
     StereoAnchor(StereoVirtualLigands),
     StereoLigand,
 }
 
-/// A molecule's incidence graph: one node per selected molecule entity, with
-/// typed edges for the entity's participant occurrences. `entity(node)` recovers
-/// the entity behind a node; atoms occupy `0..atom_count` (node index = atom
-/// index), so localized bond `BondId(k)` is the node at `atom_count + k`.
+/// Classification of one edge in an [`IncidenceGraph`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum IncidenceEdge {
+    /// A direct atom–atom edge corresponding to a localized bond.
+    Bond(BondId),
+    /// An overlay–atom edge carrying its participant role.
+    Incidence(Incidence),
+}
+
+/// Lowered simple graph of a molecule or reaction span for symmetry, canonicalization, and
+/// incidence substructure matching.
+///
+/// Atoms occupy `0..atom_count` and included overlays follow in contiguous [`EntityKind`] order
+/// (`DativeBond`, `AromaticSystem`, `MulticenterBond`, `NoncovalentBond`, `StereoAtom`,
+/// `StereoBond`). Localized bonds are direct edges in `0..bond_count`; overlay–atom incidences
+/// occupy edges `bond_count..edge_count`.
 #[derive(Clone, Debug)]
-pub struct IncidenceGraph {
+pub(crate) struct IncidenceGraph {
     graph: Graph,
-    // Per-kind block sizes, indexed by `EntityKind as usize` (node-layout order).
-    // An entity's id is its index within its block, so node↔entity is offset
-    // arithmetic — no per-node table.
-    entity_counts: [u32; EntityKind::COUNT],
-    // Indexed by the corresponding `Graph` edge id.
+    // End offsets for `[Atom, DativeBond, AromaticSystem, MulticenterBond, NoncovalentBond,
+    // StereoAtom, StereoBond]`.
+    offsets: [u32; 7],
+    bond_count: u32,
+    // Overlay–atom incidences for edges `bond_count..graph.edge_count()`.
     incidences: Vec<Incidence>,
 }
 
 impl IncidenceGraph {
-    pub fn graph(&self) -> &Graph {
+    /// Underlying `umol_graph_core::Graph` (boundary for graph-core algorithms).
+    #[inline]
+    pub(crate) fn raw_graph(&self) -> &Graph {
         &self.graph
     }
 
-    /// Number of nodes of the given kind.
-    pub fn entity_count(&self, kind: EntityKind) -> usize {
-        self.entity_counts[kind as usize] as usize
+    /// Number of atom nodes (`0..atom_count`).
+    #[inline]
+    pub(crate) fn atom_count(&self) -> usize {
+        self.offsets[0] as usize
     }
 
-    /// The molecule entity a node represents.
-    pub fn entity(&self, node: NodeId) -> Entity {
-        let n = node.index();
-        let mut offset = 0usize;
-        for (block, &count) in self.entity_counts.iter().enumerate() {
-            let end = offset + count as usize;
-            if n < end {
-                let kind = EntityKind::try_from(block as u8).expect("block is a valid kind index");
-                return kind.with_id((n - offset) as u32);
-            }
-            offset = end;
+    /// Total number of nodes (atoms + included overlays).
+    #[inline]
+    pub(crate) fn node_count(&self) -> usize {
+        self.offsets[6] as usize
+    }
+
+    /// Number of localized bond edges (`0..bond_count`).
+    #[inline]
+    pub(crate) fn bond_count(&self) -> usize {
+        self.bond_count as usize
+    }
+
+    /// Number of overlay–atom incidence edges (`bond_count..edge_count`).
+    #[inline]
+    pub(crate) fn incidence_count(&self) -> usize {
+        self.incidences.len()
+    }
+
+    /// Total number of edges (`bond_count + incidence_count`).
+    #[inline]
+    pub(crate) fn edge_count(&self) -> usize {
+        self.bond_count as usize + self.incidences.len()
+    }
+
+    /// Contiguous `[start, end)` node index range for `kind`.
+    ///
+    /// Localized bonds are edges rather than nodes and therefore have an empty range `(0, 0)`.
+    #[inline]
+    pub(crate) fn node_range(&self, kind: EntityKind) -> (usize, usize) {
+        match kind {
+            EntityKind::Atom => (0, self.offsets[0] as usize),
+            EntityKind::Bond => (0, 0),
+            EntityKind::DativeBond => (self.offsets[0] as usize, self.offsets[1] as usize),
+            EntityKind::AromaticSystem => (self.offsets[1] as usize, self.offsets[2] as usize),
+            EntityKind::MulticenterBond => (self.offsets[2] as usize, self.offsets[3] as usize),
+            EntityKind::NoncovalentBond => (self.offsets[3] as usize, self.offsets[4] as usize),
+            EntityKind::StereoAtom => (self.offsets[4] as usize, self.offsets[5] as usize),
+            EntityKind::StereoBond => (self.offsets[5] as usize, self.offsets[6] as usize),
+        }
+    }
+
+    /// Number of nodes of the given entity kind (`0` for [`EntityKind::Bond`]).
+    #[inline]
+    pub(crate) fn node_count_of(&self, kind: EntityKind) -> usize {
+        let (start, end) = self.node_range(kind);
+        end - start
+    }
+
+    /// Every node id in ascending order.
+    #[inline]
+    pub(crate) fn node_ids(&self) -> impl ExactSizeIterator<Item = IncidenceNodeId> {
+        (0..self.offsets[6]).map(IncidenceNodeId)
+    }
+
+    /// The molecule entity a node represents (an atom or an included overlay, never a bond).
+    ///
+    /// # Panics
+    ///
+    /// Panics when `node` is out of range.
+    #[inline]
+    pub(crate) fn entity(&self, node: IncidenceNodeId) -> Entity {
+        let n = node.0;
+        if n < self.offsets[0] {
+            return Entity::Atom(AtomId(n));
+        }
+        if n < self.offsets[1] {
+            return Entity::DativeBond(DativeBondId(n - self.offsets[0]));
+        }
+        if n < self.offsets[2] {
+            return Entity::AromaticSystem(AromaticSystemId(n - self.offsets[1]));
+        }
+        if n < self.offsets[3] {
+            return Entity::MulticenterBond(MulticenterBondId(n - self.offsets[2]));
+        }
+        if n < self.offsets[4] {
+            return Entity::NoncovalentBond(NoncovalentBondId(n - self.offsets[3]));
+        }
+        if n < self.offsets[5] {
+            return Entity::StereoAtom(StereoAtomId(n - self.offsets[4]));
+        }
+        if n < self.offsets[6] {
+            return Entity::StereoBond(StereoBondId(n - self.offsets[5]));
         }
         panic!("incidence node {n} out of range");
     }
 
-    /// The node representing `entity` — inverse of [`entity`](Self::entity).
-    pub fn node_of(&self, entity: Entity) -> NodeId {
-        let block = entity.kind() as usize;
-        let offset: u32 = self.entity_counts[..block].iter().sum();
-        NodeId(offset + entity.kind_id() as u32)
+    /// The node representing `entity`, or `None` for [`Entity::Bond`], kinds excluded by this
+    /// graph's [`IncidenceLevel`], or out-of-range entity ids.
+    #[inline]
+    pub(crate) fn node_of(&self, entity: Entity) -> Option<IncidenceNodeId> {
+        let (start, end) = self.node_range(entity.kind());
+        let id = entity.kind_id();
+        (id < end - start).then_some(IncidenceNodeId((start + id) as u32))
     }
 
-    /// The typed participant occurrence represented by `edge`.
+    /// Classification of `edge` as either a localized bond or an overlay–atom incidence.
     ///
     /// # Panics
     ///
-    /// Panics when `edge` is not in this incidence graph.
-    pub fn incidence(&self, edge: EdgeId) -> &Incidence {
-        &self.incidences[edge.index()]
+    /// Panics when `edge` is out of range.
+    #[inline]
+    pub(crate) fn edge(&self, edge: IncidenceEdgeId) -> IncidenceEdge {
+        if edge.0 < self.bond_count {
+            IncidenceEdge::Bond(BondId(edge.0))
+        } else {
+            IncidenceEdge::Incidence(self.incidences[(edge.0 - self.bond_count) as usize])
+        }
     }
 
-    /// All incidence edges and their typed participant occurrences.
-    pub fn incidences(&self) -> impl ExactSizeIterator<Item = (EdgeId, &Incidence)> {
-        self.graph.edge_ids().zip(self.incidences.iter())
+    /// The edge id corresponding to localized bond `bond`, or `None` if out of range.
+    #[inline]
+    pub(crate) fn bond_edge(&self, bond: BondId) -> Option<IncidenceEdgeId> {
+        (bond.0 < self.bond_count).then_some(IncidenceEdgeId(bond.0))
+    }
+
+    /// Dense `0..incidence_count()` index of an overlay incidence edge, or `None` for localized
+    /// bond edges or out-of-range edge ids.
+    #[inline]
+    pub(crate) fn overlay_incidence_index(&self, edge: IncidenceEdgeId) -> Option<usize> {
+        if edge.0 < self.bond_count {
+            return None;
+        }
+        let idx = (edge.0 - self.bond_count) as usize;
+        (idx < self.incidences.len()).then_some(idx)
+    }
+
+    /// Endpoints of `edge` in this incidence graph's node space.
+    #[inline]
+    pub(crate) fn edge_endpoints(&self, edge: IncidenceEdgeId) -> [IncidenceNodeId; 2] {
+        self.graph
+            .edge_endpoints(EdgeId::from(edge))
+            .map(IncidenceNodeId::from)
+    }
+
+    /// The `(overlay_entity, atom)` pair connected by an overlay incidence edge, or `None` for a
+    /// localized bond edge or out-of-range edge id.
+    #[inline]
+    pub(crate) fn incidence_endpoints(&self, edge: IncidenceEdgeId) -> Option<(Entity, AtomId)> {
+        self.overlay_incidence_index(edge)?;
+        let [first, second] = self.edge_endpoints(edge);
+        let (atom_node, overlay_node) = if first.0 < self.offsets[0] {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        Some((self.entity(overlay_node), AtomId(atom_node.0)))
+    }
+
+    /// All overlay–atom incidence edges (excluding localized bonds).
+    pub(crate) fn incidences(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (IncidenceEdgeId, Incidence)> + '_ {
+        self.incidences
+            .iter()
+            .enumerate()
+            .map(|(offset, &incidence)| {
+                (IncidenceEdgeId(self.bond_count + offset as u32), incidence)
+            })
     }
 }
 
+fn build_offsets(counts: [u32; 7]) -> [u32; 7] {
+    let mut offsets = [0u32; 7];
+    let mut total = 0u32;
+    for (slot, count) in offsets.iter_mut().zip(counts) {
+        total += count;
+        *slot = total;
+    }
+    offsets
+}
+
 impl Molecule {
-    /// Build the incidence (Levi) graph at the selected structural level. Localized
-    /// bonds and included overlays become entity nodes wired to every participant
-    /// occurrence. Stereo atoms connect to their site atom via [`Incidence::StereoAnchor`]
-    /// (carrying anchored virtual ligands) and to actual-atom ligands via
-    /// [`Incidence::StereoLigand`]. Stereo bonds connect to their site bond via
-    /// [`Incidence::StereoSite`], to both bond endpoint atoms via [`Incidence::StereoAnchor`],
-    /// and to actual-atom ligands via [`Incidence::StereoLigand`].
-    /// Electron contributions remain in the owning forms and do not affect this graph.
-    pub fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
-        let atom_count = self.raw_graph().node_count();
+    /// Build the incidence graph at the selected structural level.
+    ///
+    /// Localized bonds remain direct atom–atom edges (`0..bond_count`). Included overlays become
+    /// pseudonodes wired to their participant atoms: stereo atoms connect to their site atom via
+    /// [`Incidence::StereoAnchor`] and to actual-atom ligands via [`Incidence::StereoLigand`];
+    /// stereo bonds connect to both site-bond endpoint atoms via [`Incidence::StereoAnchor`] and
+    /// to actual-atom ligands via [`Incidence::StereoLigand`]. Electron contributions remain in
+    /// the owning forms and do not affect this graph.
+    pub(crate) fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
+        let atom_count = self.raw_graph().node_count() as u32;
+        let bond_count = self.bonds().count() as u32;
         let constitution = matches!(level, IncidenceLevel::Constitution | IncidenceLevel::Full);
         let stereo = matches!(level, IncidenceLevel::Full);
 
-        let entity_counts = [
-            atom_count as u32,
-            self.bonds().ids().count() as u32,
+        let counts = [
+            atom_count,
             if constitution {
                 self.dative_bonds().count() as u32
             } else {
@@ -183,13 +421,20 @@ impl Molecule {
                 0
             },
         ];
+        let offsets = build_offsets(counts);
 
-        // Entity nodes follow the atom block in the same fixed order as `entity_counts`,
-        // each wired to its participant occurrences. Bonds come first, fixing
-        // BondId(k) at atom_count + k — relied on by the stereo-bond site link.
-        let mut incidence_count = 2 * self.bonds().count();
+        if offsets[6] == atom_count {
+            return IncidenceGraph {
+                graph: self.raw_graph().clone(),
+                offsets,
+                bond_count,
+                incidences: Vec::new(),
+            };
+        }
+
+        let mut overlay_edge_count = 0usize;
         if constitution {
-            incidence_count += self
+            overlay_edge_count += self
                 .dative_bonds()
                 .iter()
                 .map(|bond| bond.donor_ids().len() + 1)
@@ -207,7 +452,7 @@ impl Molecule {
                 + 2 * self.noncovalent_bonds().count();
         }
         if stereo {
-            incidence_count += self
+            overlay_edge_count += self
                 .stereo_atoms()
                 .iter()
                 .map(|atom| {
@@ -221,56 +466,51 @@ impl Molecule {
                     .stereo_bonds()
                     .iter()
                     .map(|bond| {
-                        3 + bond
+                        2 + bond
                             .ligands()
                             .filter(|ligand| ligand.kind() == StereoLigandKind::Atom)
                             .count()
                     })
                     .sum::<usize>();
         }
-        let mut edges: Vec<[u32; 2]> = Vec::with_capacity(incidence_count);
-        let mut incidences = Vec::with_capacity(incidence_count);
-        let mut node = atom_count as u32;
 
-        let mut push = |entity: u32, participant: u32, incidence: Incidence| {
+        let mut edges: Vec<[u32; 2]> = Vec::with_capacity(bond_count as usize + overlay_edge_count);
+        let mut incidences = Vec::with_capacity(overlay_edge_count);
+
+        for edge in self.raw_graph().edge_ids() {
+            let [first, second] = self.raw_graph().edge_endpoints(edge);
+            edges.push([first.0, second.0]);
+        }
+
+        let mut node = atom_count;
+        let mut push_overlay = |entity: u32, participant: u32, incidence: Incidence| {
             edges.push([entity, participant]);
             incidences.push(incidence);
         };
 
-        for id in self.bonds().ids() {
-            let [a, b] = self.bond(id).atom_ids();
-            push(node, a.index() as u32, Incidence::BondEndpoint);
-            push(node, b.index() as u32, Incidence::BondEndpoint);
-            node += 1;
-        }
-
         if constitution {
             for v in self.dative_bonds().iter() {
                 for donor in v.donor_ids() {
-                    push(node, donor.index() as u32, Incidence::DativeDonor);
+                    push_overlay(node, donor.0, Incidence::DativeDonor);
                 }
-                push(
-                    node,
-                    v.acceptor_id().index() as u32,
-                    Incidence::DativeAcceptor,
-                );
+                push_overlay(node, v.acceptor_id().0, Incidence::DativeAcceptor);
                 node += 1;
             }
             for v in self.aromatic_systems().iter() {
                 for atom in v.atom_ids() {
-                    push(node, atom.index() as u32, Incidence::AromaticAtom);
+                    push_overlay(node, atom.0, Incidence::AromaticAtom);
                 }
                 node += 1;
             }
             for v in self.multicenter_bonds().iter() {
                 for atom in v.atom_ids() {
-                    push(node, atom.index() as u32, Incidence::MulticenterAtom);
+                    push_overlay(node, atom.0, Incidence::MulticenterAtom);
                 }
                 node += 1;
             }
             for v in self.noncovalent_bonds().iter() {
                 for a in v.atom_ids() {
-                    push(node, a.index() as u32, Incidence::NoncovalentEndpoint);
+                    push_overlay(node, a.0, Incidence::NoncovalentEndpoint);
                 }
                 node += 1;
             }
@@ -286,18 +526,10 @@ impl Molecule {
                         virtual_ligands.add_kind(ligand.kind());
                     }
                 }
-                push(
-                    node,
-                    site.index() as u32,
-                    Incidence::StereoAnchor(virtual_ligands),
-                );
+                push_overlay(node, site.0, Incidence::StereoAnchor(virtual_ligands));
                 for ligand in v.ligands() {
                     if ligand.kind() == StereoLigandKind::Atom {
-                        push(
-                            node,
-                            ligand.atom_id().index() as u32,
-                            Incidence::StereoLigand,
-                        );
+                        push_overlay(node, ligand.atom_id().0, Incidence::StereoLigand);
                     }
                 }
                 node += 1;
@@ -317,39 +549,24 @@ impl Molecule {
                         }
                     }
                 }
-                push(
-                    node,
-                    atom_count as u32 + site.index() as u32,
-                    Incidence::StereoSite,
-                );
-                push(
-                    node,
-                    first.index() as u32,
-                    Incidence::StereoAnchor(first_virtual),
-                );
-                push(
-                    node,
-                    second.index() as u32,
-                    Incidence::StereoAnchor(second_virtual),
-                );
+                push_overlay(node, first.0, Incidence::StereoAnchor(first_virtual));
+                push_overlay(node, second.0, Incidence::StereoAnchor(second_virtual));
                 for ligand in v.ligands() {
                     if ligand.kind() == StereoLigandKind::Atom {
-                        push(
-                            node,
-                            ligand.atom_id().index() as u32,
-                            Incidence::StereoLigand,
-                        );
+                        push_overlay(node, ligand.atom_id().0, Incidence::StereoLigand);
                     }
                 }
                 node += 1;
             }
         }
 
+        debug_assert_eq!(node, offsets[6]);
         let graph = Graph::new(node as usize, &edges);
-        debug_assert_eq!(graph.edge_count(), incidences.len());
+        debug_assert_eq!(graph.edge_count(), bond_count as usize + incidences.len());
         IncidenceGraph {
             graph,
-            entity_counts,
+            offsets,
+            bond_count,
             incidences,
         }
     }
@@ -357,15 +574,17 @@ impl Molecule {
 
 impl ReactionSpan {
     /// Build the incidence graph of the union frame at the selected structural level.
-    /// Edges identify bond endpoints, dative donors and acceptors, overlay atoms,
-    /// stereo sites, stereo anchors (carrying virtual ligands), and actual-atom stereo ligands.
-    pub fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
-        let atom_count = self.graph().node_count();
+    ///
+    /// Localized union bonds remain direct atom–atom edges (`0..bond_count`). Included overlay
+    /// spans become pseudonodes wired to their participant atoms.
+    pub(crate) fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
+        let atom_count = self.graph().node_count() as u32;
+        let bond_count = self.bonds().len() as u32;
         let constitution = matches!(level, IncidenceLevel::Constitution | IncidenceLevel::Full);
         let stereo = matches!(level, IncidenceLevel::Full);
-        let entity_counts = [
-            atom_count as u32,
-            self.bonds().len() as u32,
+
+        let counts = [
+            atom_count,
             if constitution {
                 self.dative_bonds().count() as u32
             } else {
@@ -397,28 +616,36 @@ impl ReactionSpan {
                 0
             },
         ];
+        let offsets = build_offsets(counts);
+
+        if offsets[6] == atom_count {
+            return IncidenceGraph {
+                graph: self.graph().clone(),
+                offsets,
+                bond_count,
+                incidences: Vec::new(),
+            };
+        }
 
         let mut edges = Vec::new();
         let mut incidences = Vec::new();
-        let mut node = atom_count as u32;
-        let mut push = |entity: u32, participant: u32, incidence: Incidence| {
+        for edge in self.graph().edge_ids() {
+            let [first, second] = self.graph().edge_endpoints(edge);
+            edges.push([first.0, second.0]);
+        }
+
+        let mut node = atom_count;
+        let mut push_overlay = |entity: u32, participant: u32, incidence: Incidence| {
             edges.push([entity, participant]);
             incidences.push(incidence);
         };
 
-        for edge in self.graph().edge_ids() {
-            let [first, second] = self.graph().edge_endpoints(edge);
-            push(node, first.0, Incidence::BondEndpoint);
-            push(node, second.0, Incidence::BondEndpoint);
-            node += 1;
-        }
-
         if constitution {
             for id in self.dative_bonds().ids() {
                 for donor in self.dative_bonds().donors(id) {
-                    push(node, donor.0, Incidence::DativeDonor);
+                    push_overlay(node, donor.0, Incidence::DativeDonor);
                 }
-                push(
+                push_overlay(
                     node,
                     self.dative_bonds().acceptor(id).0,
                     Incidence::DativeAcceptor,
@@ -427,19 +654,19 @@ impl ReactionSpan {
             }
             for id in self.aromatic_systems().ids() {
                 for atom in self.aromatic_systems().atoms(id) {
-                    push(node, atom.0, Incidence::AromaticAtom);
+                    push_overlay(node, atom.0, Incidence::AromaticAtom);
                 }
                 node += 1;
             }
             for id in self.multicenter_bonds().ids() {
                 for atom in self.multicenter_bonds().atoms(id) {
-                    push(node, atom.0, Incidence::MulticenterAtom);
+                    push_overlay(node, atom.0, Incidence::MulticenterAtom);
                 }
                 node += 1;
             }
             for id in self.noncovalent_bonds().ids() {
                 for atom in self.noncovalent_bonds().atoms(id) {
-                    push(node, atom.0, Incidence::NoncovalentEndpoint);
+                    push_overlay(node, atom.0, Incidence::NoncovalentEndpoint);
                 }
                 node += 1;
             }
@@ -455,10 +682,10 @@ impl ReactionSpan {
                         virtual_ligands.add_kind(ligand.kind);
                     }
                 }
-                push(node, site.0, Incidence::StereoAnchor(virtual_ligands));
+                push_overlay(node, site.0, Incidence::StereoAnchor(virtual_ligands));
                 for ligand in self.stereo_atoms().ligands(id) {
                     if ligand.kind == StereoLigandKind::Atom {
-                        push(node, ligand.atom_id.0, Incidence::StereoLigand);
+                        push_overlay(node, ligand.atom_id.0, Incidence::StereoLigand);
                     }
                 }
                 node += 1;
@@ -478,22 +705,24 @@ impl ReactionSpan {
                         }
                     }
                 }
-                push(node, atom_count as u32 + site.0, Incidence::StereoSite);
-                push(node, first.0, Incidence::StereoAnchor(first_virtual));
-                push(node, second.0, Incidence::StereoAnchor(second_virtual));
+                push_overlay(node, first.0, Incidence::StereoAnchor(first_virtual));
+                push_overlay(node, second.0, Incidence::StereoAnchor(second_virtual));
                 for ligand in self.stereo_bonds().ligands(id) {
                     if ligand.kind == StereoLigandKind::Atom {
-                        push(node, ligand.atom_id.0, Incidence::StereoLigand);
+                        push_overlay(node, ligand.atom_id.0, Incidence::StereoLigand);
                     }
                 }
                 node += 1;
             }
         }
 
+        debug_assert_eq!(node, offsets[6]);
         let graph = Graph::new(node as usize, &edges);
+        debug_assert_eq!(graph.edge_count(), bond_count as usize + incidences.len());
         IncidenceGraph {
             graph,
-            entity_counts,
+            offsets,
+            bond_count,
             incidences,
         }
     }
@@ -510,10 +739,7 @@ mod tests {
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
-    use crate::ir::id::{
-        AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-        StereoAtomId, StereoBondId,
-    };
+    use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::MoleculeEntries;
     use crate::ir::multicenter::MulticenterBondForm;
@@ -577,7 +803,6 @@ mod tests {
         vec![
             Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Entity::Atom(AtomId(2)),
             Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)),
-            Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), Entity::Bond(BondId(2)),
         ],
     )]
     #[case::constitution(
@@ -585,7 +810,6 @@ mod tests {
         vec![
             Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Entity::Atom(AtomId(2)),
             Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)),
-            Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), Entity::Bond(BondId(2)),
             Entity::DativeBond(DativeBondId(0)), Entity::AromaticSystem(AromaticSystemId(0)),
             Entity::MulticenterBond(MulticenterBondId(0)), Entity::NoncovalentBond(NoncovalentBondId(0)),
         ],
@@ -595,7 +819,6 @@ mod tests {
         vec![
             Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Entity::Atom(AtomId(2)),
             Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)),
-            Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), Entity::Bond(BondId(2)),
             Entity::DativeBond(DativeBondId(0)), Entity::AromaticSystem(AromaticSystemId(0)),
             Entity::MulticenterBond(MulticenterBondId(0)), Entity::NoncovalentBond(NoncovalentBondId(0)),
             Entity::StereoAtom(StereoAtomId(0)), Entity::StereoBond(StereoBondId(0)),
@@ -607,42 +830,65 @@ mod tests {
         #[case] expected: Vec<Entity>,
     ) {
         let inc = molecule.incidence_graph(level);
-        assert_eq!(inc.graph().node_count(), expected.len());
-        let got: Vec<Entity> = (0..expected.len())
-            .map(|i| inc.entity(NodeId(i as u32)))
-            .collect();
+        assert_eq!(inc.node_count(), expected.len());
+        assert_eq!(inc.raw_graph().node_count(), expected.len());
+        assert_eq!(inc.bond_count(), 3);
+        let got: Vec<Entity> = inc.node_ids().map(|node| inc.entity(node)).collect();
         assert_eq!(got, expected);
         for (i, &e) in expected.iter().enumerate() {
-            assert_eq!(inc.node_of(e), NodeId(i as u32));
+            assert_eq!(inc.node_of(e), Some(IncidenceNodeId(i as u32)));
+        }
+        assert_eq!(inc.node_of(Entity::Bond(BondId(0))), None);
+        assert_eq!(inc.bond_edge(BondId(0)), Some(IncidenceEdgeId(0)));
+        assert_eq!(inc.bond_edge(BondId(2)), Some(IncidenceEdgeId(2)));
+        assert_eq!(inc.bond_edge(BondId(3)), None);
+        if level == IncidenceLevel::Topology {
+            assert_eq!(inc.incidence_count(), 0);
+            assert_eq!(inc.raw_graph(), molecule.raw_graph());
+            assert_eq!(inc.node_of(Entity::DativeBond(DativeBondId(0))), None);
+        }
+        if level != IncidenceLevel::Full {
+            assert_eq!(inc.node_of(Entity::StereoAtom(StereoAtomId(0))), None);
+            assert_eq!(inc.node_of(Entity::StereoBond(StereoBondId(0))), None);
         }
     }
 
     #[rstest]
-    #[case::bond(EdgeId(0), Incidence::BondEndpoint)]
-    #[case::dative_donor(EdgeId(6), Incidence::DativeDonor)]
-    #[case::dative_acceptor(EdgeId(7), Incidence::DativeAcceptor)]
-    #[case::aromatic(EdgeId(8), Incidence::AromaticAtom)]
-    #[case::multicenter(EdgeId(11), Incidence::MulticenterAtom)]
-    #[case::noncovalent(EdgeId(14), Incidence::NoncovalentEndpoint)]
+    #[case::bond(IncidenceEdgeId(0), IncidenceEdge::Bond(BondId(0)))]
+    #[case::dative_donor(IncidenceEdgeId(3), IncidenceEdge::Incidence(Incidence::DativeDonor))]
+    #[case::dative_acceptor(
+        IncidenceEdgeId(4),
+        IncidenceEdge::Incidence(Incidence::DativeAcceptor)
+    )]
+    #[case::aromatic(IncidenceEdgeId(5), IncidenceEdge::Incidence(Incidence::AromaticAtom))]
+    #[case::multicenter(
+        IncidenceEdgeId(8),
+        IncidenceEdge::Incidence(Incidence::MulticenterAtom)
+    )]
+    #[case::noncovalent(
+        IncidenceEdgeId(11),
+        IncidenceEdge::Incidence(Incidence::NoncovalentEndpoint)
+    )]
     #[case::stereo_atom_anchor(
-        EdgeId(16),
-        Incidence::StereoAnchor(
-            StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR
-        )
+        IncidenceEdgeId(13),
+        IncidenceEdge::Incidence(Incidence::StereoAnchor(
+            StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
+        ))
     )]
-    #[case::stereo_ligand(EdgeId(17), Incidence::StereoLigand)]
-    #[case::stereo_bond_site(EdgeId(19), Incidence::StereoSite)]
+    #[case::stereo_ligand(IncidenceEdgeId(14), IncidenceEdge::Incidence(Incidence::StereoLigand))]
     #[case::stereo_bond_anchor(
-        EdgeId(20),
-        Incidence::StereoAnchor(StereoVirtualLigands::IMPLICIT_HYDROGEN)
+        IncidenceEdgeId(16),
+        IncidenceEdge::Incidence(Incidence::StereoAnchor(
+            StereoVirtualLigands::IMPLICIT_HYDROGEN
+        ))
     )]
-    fn test_incidence_graph_incidence(
+    fn test_incidence_graph_edge(
         molecule: Molecule,
-        #[case] edge: EdgeId,
-        #[case] expected: Incidence,
+        #[case] edge: IncidenceEdgeId,
+        #[case] expected: IncidenceEdge,
     ) {
         let incidence = molecule.incidence_graph(IncidenceLevel::Full);
-        assert_eq!(incidence.incidence(edge), &expected);
+        assert_eq!(incidence.edge(edge), expected);
     }
 
     #[rstest]
@@ -662,88 +908,151 @@ mod tests {
         }),
         Incidence::MulticenterAtom,
     )]
+    #[case::malformed_aromatic_electron_length(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::new(ElectronCountsForm::Lit(vec![1, 1])),
+            )],
+            ..Default::default()
+        }),
+        Incidence::AromaticAtom,
+    )]
     fn test_incidence_graph_incidence_electrons(
         #[case] molecule: Molecule,
         #[case] expected: Incidence,
     ) {
         let incidence = molecule.incidence_graph(IncidenceLevel::Constitution);
-        assert_eq!(incidence.incidence(EdgeId(0)), &expected);
-    }
-
-    #[rstest]
-    fn test_incidence_graph_incidences(molecule: Molecule) {
-        let incidence = molecule.incidence_graph(IncidenceLevel::Full);
-        let iterator = incidence.incidences();
-        assert_eq!(iterator.len(), 24);
         assert_eq!(
-            iterator
-                .map(|(edge, &value)| (edge, value))
-                .collect::<Vec<_>>(),
-            vec![
-                (EdgeId(0), Incidence::BondEndpoint),
-                (EdgeId(1), Incidence::BondEndpoint),
-                (EdgeId(2), Incidence::BondEndpoint),
-                (EdgeId(3), Incidence::BondEndpoint),
-                (EdgeId(4), Incidence::BondEndpoint),
-                (EdgeId(5), Incidence::BondEndpoint),
-                (EdgeId(6), Incidence::DativeDonor),
-                (EdgeId(7), Incidence::DativeAcceptor),
-                (EdgeId(8), Incidence::AromaticAtom),
-                (EdgeId(9), Incidence::AromaticAtom),
-                (EdgeId(10), Incidence::AromaticAtom),
-                (EdgeId(11), Incidence::MulticenterAtom),
-                (EdgeId(12), Incidence::MulticenterAtom),
-                (EdgeId(13), Incidence::MulticenterAtom),
-                (EdgeId(14), Incidence::NoncovalentEndpoint),
-                (EdgeId(15), Incidence::NoncovalentEndpoint),
-                (
-                    EdgeId(16),
-                    Incidence::StereoAnchor(
-                        StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
-                    ),
-                ),
-                (EdgeId(17), Incidence::StereoLigand),
-                (EdgeId(18), Incidence::StereoLigand),
-                (EdgeId(19), Incidence::StereoSite),
-                (
-                    EdgeId(20),
-                    Incidence::StereoAnchor(StereoVirtualLigands::IMPLICIT_HYDROGEN),
-                ),
-                (
-                    EdgeId(21),
-                    Incidence::StereoAnchor(StereoVirtualLigands::LONE_PAIR),
-                ),
-                (EdgeId(22), Incidence::StereoLigand),
-                (EdgeId(23), Incidence::StereoLigand),
-            ],
+            incidence.edge(IncidenceEdgeId(0)),
+            IncidenceEdge::Incidence(expected)
         );
     }
 
     #[rstest]
-    // Localized bonds are pseudonodes wired to both endpoints (not atom-atom edges).
-    #[case::bond(6, vec![0, 1])]
-    // Overlays wire to all participant atoms.
-    #[case::dative(9, vec![0, 3])]
-    #[case::aromatic(10, vec![0, 1, 2])]
-    #[case::multicenter(11, vec![3, 4, 5])]
-    #[case::noncovalent(12, vec![0, 5])]
+    fn test_incidence_graph_edges(molecule: Molecule) {
+        let incidence = molecule.incidence_graph(IncidenceLevel::Full);
+        assert_eq!(incidence.edge_count(), 20);
+        assert_eq!(incidence.bond_count(), 3);
+        assert_eq!(incidence.incidences().len(), 17);
+        let edges: Vec<_> = (0..incidence.edge_count() as u32)
+            .map(IncidenceEdgeId)
+            .map(|edge| (edge, incidence.edge(edge)))
+            .collect();
+        assert_eq!(
+            edges,
+            vec![
+                (IncidenceEdgeId(0), IncidenceEdge::Bond(BondId(0))),
+                (IncidenceEdgeId(1), IncidenceEdge::Bond(BondId(1))),
+                (IncidenceEdgeId(2), IncidenceEdge::Bond(BondId(2))),
+                (
+                    IncidenceEdgeId(3),
+                    IncidenceEdge::Incidence(Incidence::DativeDonor)
+                ),
+                (
+                    IncidenceEdgeId(4),
+                    IncidenceEdge::Incidence(Incidence::DativeAcceptor)
+                ),
+                (
+                    IncidenceEdgeId(5),
+                    IncidenceEdge::Incidence(Incidence::AromaticAtom)
+                ),
+                (
+                    IncidenceEdgeId(6),
+                    IncidenceEdge::Incidence(Incidence::AromaticAtom)
+                ),
+                (
+                    IncidenceEdgeId(7),
+                    IncidenceEdge::Incidence(Incidence::AromaticAtom)
+                ),
+                (
+                    IncidenceEdgeId(8),
+                    IncidenceEdge::Incidence(Incidence::MulticenterAtom)
+                ),
+                (
+                    IncidenceEdgeId(9),
+                    IncidenceEdge::Incidence(Incidence::MulticenterAtom)
+                ),
+                (
+                    IncidenceEdgeId(10),
+                    IncidenceEdge::Incidence(Incidence::MulticenterAtom)
+                ),
+                (
+                    IncidenceEdgeId(11),
+                    IncidenceEdge::Incidence(Incidence::NoncovalentEndpoint)
+                ),
+                (
+                    IncidenceEdgeId(12),
+                    IncidenceEdge::Incidence(Incidence::NoncovalentEndpoint)
+                ),
+                (
+                    IncidenceEdgeId(13),
+                    IncidenceEdge::Incidence(Incidence::StereoAnchor(
+                        StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
+                    )),
+                ),
+                (
+                    IncidenceEdgeId(14),
+                    IncidenceEdge::Incidence(Incidence::StereoLigand)
+                ),
+                (
+                    IncidenceEdgeId(15),
+                    IncidenceEdge::Incidence(Incidence::StereoLigand)
+                ),
+                (
+                    IncidenceEdgeId(16),
+                    IncidenceEdge::Incidence(Incidence::StereoAnchor(
+                        StereoVirtualLigands::IMPLICIT_HYDROGEN,
+                    )),
+                ),
+                (
+                    IncidenceEdgeId(17),
+                    IncidenceEdge::Incidence(Incidence::StereoAnchor(
+                        StereoVirtualLigands::LONE_PAIR,
+                    )),
+                ),
+                (
+                    IncidenceEdgeId(18),
+                    IncidenceEdge::Incidence(Incidence::StereoLigand)
+                ),
+                (
+                    IncidenceEdgeId(19),
+                    IncidenceEdge::Incidence(Incidence::StereoLigand)
+                ),
+            ],
+        );
+        assert_eq!(incidence.incidence_endpoints(IncidenceEdgeId(0)), None);
+        assert_eq!(
+            incidence.incidence_endpoints(IncidenceEdgeId(3)),
+            Some((Entity::DativeBond(DativeBondId(0)), AtomId(0)))
+        );
+        assert_eq!(
+            incidence.incidence_endpoints(IncidenceEdgeId(4)),
+            Some((Entity::DativeBond(DativeBondId(0)), AtomId(3)))
+        );
+    }
+
+    #[rstest]
+    // Atoms connect directly through localized bonds plus incident overlays.
+    #[case::dative(6, vec![0, 3])]
+    #[case::aromatic(7, vec![0, 1, 2])]
+    #[case::multicenter(8, vec![3, 4, 5])]
+    #[case::noncovalent(9, vec![0, 5])]
     // Stereo nodes attach once to each anchor atom (folding virtual ligands into the
-    // anchor edge) and once to each actual-atom ligand; stereo bonds also attach to
-    // their site bond node.
-    #[case::stereo_atom(13, vec![0, 1, 2])]
-    #[case::stereo_bond(14, vec![0, 1, 2, 3, 7])]
+    // anchor edge) and once to each actual-atom ligand.
+    #[case::stereo_atom(10, vec![0, 1, 2])]
+    #[case::stereo_bond(11, vec![0, 1, 2, 3])]
     fn test_molecule_incidence_graph_neighbors(
         molecule: Molecule,
         #[case] node: u32,
         #[case] expected: Vec<u32>,
     ) {
         let inc = molecule.incidence_graph(IncidenceLevel::Full);
-        let graph = inc.graph();
-        let mut got: Vec<u32> = graph
-            .edge_ids()
-            .map(|e| graph.edge_endpoints(e))
+        let mut got: Vec<u32> = (0..inc.edge_count() as u32)
+            .map(|index| inc.edge_endpoints(IncidenceEdgeId(index)))
             .filter_map(|[a, b]| {
-                let (a, b) = (a.index() as u32, b.index() as u32);
+                let (a, b) = (a.0, b.0);
                 if a == node {
                     Some(b)
                 } else if b == node {
@@ -782,18 +1091,16 @@ mod tests {
             ..Default::default()
         }),
         vec![
-            ([NodeId(0), NodeId(3)], Incidence::BondEndpoint),
-            ([NodeId(1), NodeId(3)], Incidence::BondEndpoint),
-            ([NodeId(0), NodeId(4)], Incidence::BondEndpoint),
-            ([NodeId(2), NodeId(4)], Incidence::BondEndpoint),
+            ([IncidenceNodeId(0), IncidenceNodeId(1)], IncidenceEdge::Bond(BondId(0))),
+            ([IncidenceNodeId(0), IncidenceNodeId(2)], IncidenceEdge::Bond(BondId(1))),
             (
-                [NodeId(0), NodeId(5)],
-                Incidence::StereoAnchor(
+                [IncidenceNodeId(0), IncidenceNodeId(3)],
+                IncidenceEdge::Incidence(Incidence::StereoAnchor(
                     StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
-                ),
+                )),
             ),
-            ([NodeId(1), NodeId(5)], Incidence::StereoLigand),
-            ([NodeId(2), NodeId(5)], Incidence::StereoLigand),
+            ([IncidenceNodeId(1), IncidenceNodeId(3)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
+            ([IncidenceNodeId(2), IncidenceNodeId(3)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
         ],
     )]
     #[case::stereo_bond_endpoint_anchors(
@@ -824,37 +1131,32 @@ mod tests {
             ..Default::default()
         }),
         vec![
-            ([NodeId(0), NodeId(5)], Incidence::BondEndpoint),
-            ([NodeId(1), NodeId(5)], Incidence::BondEndpoint),
-            ([NodeId(0), NodeId(6)], Incidence::BondEndpoint),
-            ([NodeId(2), NodeId(6)], Incidence::BondEndpoint),
-            ([NodeId(1), NodeId(7)], Incidence::BondEndpoint),
-            ([NodeId(3), NodeId(7)], Incidence::BondEndpoint),
-            ([NodeId(1), NodeId(8)], Incidence::BondEndpoint),
-            ([NodeId(4), NodeId(8)], Incidence::BondEndpoint),
-            ([NodeId(5), NodeId(9)], Incidence::StereoSite),
+            ([IncidenceNodeId(0), IncidenceNodeId(1)], IncidenceEdge::Bond(BondId(0))),
+            ([IncidenceNodeId(0), IncidenceNodeId(2)], IncidenceEdge::Bond(BondId(1))),
+            ([IncidenceNodeId(1), IncidenceNodeId(3)], IncidenceEdge::Bond(BondId(2))),
+            ([IncidenceNodeId(1), IncidenceNodeId(4)], IncidenceEdge::Bond(BondId(3))),
             (
-                [NodeId(0), NodeId(9)],
-                Incidence::StereoAnchor(StereoVirtualLigands::VIRTUAL),
+                [IncidenceNodeId(0), IncidenceNodeId(5)],
+                IncidenceEdge::Incidence(Incidence::StereoAnchor(StereoVirtualLigands::VIRTUAL)),
             ),
             (
-                [NodeId(1), NodeId(9)],
-                Incidence::StereoAnchor(StereoVirtualLigands::empty()),
+                [IncidenceNodeId(1), IncidenceNodeId(5)],
+                IncidenceEdge::Incidence(Incidence::StereoAnchor(StereoVirtualLigands::empty())),
             ),
-            ([NodeId(2), NodeId(9)], Incidence::StereoLigand),
-            ([NodeId(3), NodeId(9)], Incidence::StereoLigand),
-            ([NodeId(4), NodeId(9)], Incidence::StereoLigand),
+            ([IncidenceNodeId(2), IncidenceNodeId(5)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
+            ([IncidenceNodeId(3), IncidenceNodeId(5)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
+            ([IncidenceNodeId(4), IncidenceNodeId(5)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
         ],
     )]
     fn test_molecule_incidence_graph_stereo(
         #[case] molecule: Molecule,
-        #[case] expected: Vec<([NodeId; 2], Incidence)>,
+        #[case] expected: Vec<([IncidenceNodeId; 2], IncidenceEdge)>,
     ) {
         let incidence = molecule.incidence_graph(IncidenceLevel::Full);
         assert_eq!(
-            incidence
-                .incidences()
-                .map(|(edge, &value)| (incidence.graph().edge_endpoints(edge), value))
+            (0..incidence.edge_count() as u32)
+                .map(IncidenceEdgeId)
+                .map(|edge| (incidence.edge_endpoints(edge), incidence.edge(edge)))
                 .collect::<Vec<_>>(),
             expected,
         );
@@ -903,42 +1205,42 @@ mod tests {
             ..Default::default()
         }),
         vec![
-            ([NodeId(0), NodeId(4)], Incidence::BondEndpoint),
-            ([NodeId(1), NodeId(4)], Incidence::BondEndpoint),
-            ([NodeId(0), NodeId(5)], Incidence::BondEndpoint),
-            ([NodeId(2), NodeId(5)], Incidence::BondEndpoint),
-            ([NodeId(1), NodeId(6)], Incidence::BondEndpoint),
-            ([NodeId(3), NodeId(6)], Incidence::BondEndpoint),
+            ([IncidenceNodeId(0), IncidenceNodeId(1)], IncidenceEdge::Bond(BondId(0))),
+            ([IncidenceNodeId(0), IncidenceNodeId(2)], IncidenceEdge::Bond(BondId(1))),
+            ([IncidenceNodeId(1), IncidenceNodeId(3)], IncidenceEdge::Bond(BondId(2))),
             (
-                [NodeId(0), NodeId(7)],
-                Incidence::StereoAnchor(
+                [IncidenceNodeId(0), IncidenceNodeId(4)],
+                IncidenceEdge::Incidence(Incidence::StereoAnchor(
                     StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::VIRTUAL,
-                ),
+                )),
             ),
-            ([NodeId(1), NodeId(7)], Incidence::StereoLigand),
-            ([NodeId(2), NodeId(7)], Incidence::StereoLigand),
-            ([NodeId(4), NodeId(8)], Incidence::StereoSite),
+            ([IncidenceNodeId(1), IncidenceNodeId(4)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
+            ([IncidenceNodeId(2), IncidenceNodeId(4)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
             (
-                [NodeId(0), NodeId(8)],
-                Incidence::StereoAnchor(StereoVirtualLigands::IMPLICIT_HYDROGEN),
+                [IncidenceNodeId(0), IncidenceNodeId(5)],
+                IncidenceEdge::Incidence(Incidence::StereoAnchor(
+                    StereoVirtualLigands::IMPLICIT_HYDROGEN,
+                )),
             ),
             (
-                [NodeId(1), NodeId(8)],
-                Incidence::StereoAnchor(StereoVirtualLigands::LONE_PAIR),
+                [IncidenceNodeId(1), IncidenceNodeId(5)],
+                IncidenceEdge::Incidence(Incidence::StereoAnchor(
+                    StereoVirtualLigands::LONE_PAIR,
+                )),
             ),
-            ([NodeId(2), NodeId(8)], Incidence::StereoLigand),
-            ([NodeId(3), NodeId(8)], Incidence::StereoLigand),
+            ([IncidenceNodeId(2), IncidenceNodeId(5)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
+            ([IncidenceNodeId(3), IncidenceNodeId(5)], IncidenceEdge::Incidence(Incidence::StereoLigand)),
         ],
     )]
     fn test_reaction_span_incidence_graph(
         #[case] span: ReactionSpan,
-        #[case] expected: Vec<([NodeId; 2], Incidence)>,
+        #[case] expected: Vec<([IncidenceNodeId; 2], IncidenceEdge)>,
     ) {
         let incidence = span.incidence_graph(IncidenceLevel::Full);
         assert_eq!(
-            incidence
-                .incidences()
-                .map(|(edge, &value)| (incidence.graph().edge_endpoints(edge), value))
+            (0..incidence.edge_count() as u32)
+                .map(IncidenceEdgeId)
+                .map(|edge| (incidence.edge_endpoints(edge), incidence.edge(edge)))
                 .collect::<Vec<_>>(),
             expected,
         );

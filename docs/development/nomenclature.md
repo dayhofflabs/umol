@@ -510,7 +510,7 @@ structural composition and connectivity without adding stereo configuration.
 
 **Not:** all overlays, because stereo atoms and stereo bonds belong only to the structure level. Not
 constraints, which do not contribute to structural identity.
-**In code:** private `DescriptionLevel::Constitution`; public `IncidenceLevel::Constitution`.
+**In code:** private `DescriptionLevel::Constitution`, `IncidenceLevel::Constitution`.
 
 ### Constraint
 
@@ -917,7 +917,7 @@ to `DescriptionLevel::Structure`, not `DescriptionLevel::Full`.
 
 **Not:** a chemistry model or conformance pass. The full description preserves the complete
 represented assertion; it does not validate it.
-**In code:** private `DescriptionLevel::Full`; public `IncidenceLevel::Full` in its
+**In code:** private `DescriptionLevel::Full`; private `IncidenceLevel::Full` in its
 carrier-specific sense.
 
 ### Graph symmetry
@@ -988,7 +988,7 @@ The notion appears at three levels and they are the same idea:
 
 **Not:** *projection*, which is the operation that reads a value across an incidence. Incidence is
 the relationship; projection is what you do with it.
-**In code:** `incident*` methods, `IncidenceGraph`.
+**In code:** `incident*` methods; crate-private `IncidenceGraph`.
 
 ### Incidence constraint
 
@@ -1012,32 +1012,38 @@ the whole entity-constraint category.
 
 ### Incidence graph
 
-The **incidence graph**, also called the Levi graph, makes relations explicit as nodes: atoms occupy
-the node space, every selected relation becomes a **pseudonode**, and each pseudonode is wired to its
-participants. Everything defined over graphs then applies to the whole entity model unchanged —
-canonical labeling, automorphisms, subgraph isomorphism — with no bespoke hypergraph algorithm.
+The **incidence graph** is a crate-private overlay-augmented graph over a molecular representation:
+atoms occupy the leading nodes, localized bonds stay as direct edges between their endpoint atoms,
+and only selected overlay relations become **pseudonodes** wired to their participating atoms by
+role-labeled incidence edges. Because localized bonds are kept as direct edges rather than
+subdivided into nodes, it is not a bipartite Levi graph. Everything defined over edge-colored simple
+graphs then applies to the entity model unchanged — canonical labeling, automorphisms, subgraph
+isomorphism — with no bespoke hypergraph algorithm.
 
-Stereo elements attach to their site only, because the ligand topology is already present through the
-bonds; the only new information a stereo node carries is its site and, at colouring time, its label.
-Bond direction is not encoded structurally either: the colouring separates the endpoints of a
-directed bond, so a dative donor and acceptor are never automorphism-equivalent.
+Stereo entities attach via `StereoAnchor` edges to their site atom(s) (carrying virtual-ligand
+flags) and `StereoLigand` edges to their distinct explicit atom ligands; for a stereo bond, the two
+endpoint anchors uniquely identify the site bond on a simple graph. Bond direction is not encoded
+structurally either: edge coloring separates the endpoints of a directed bond, so a dative donor
+and acceptor are never automorphism-equivalent.
 
-`IncidenceLevel` names three carrier levels, which land on the chemist's own hierarchy: `Topology`
-is atoms and localized bonds (AB), `Constitution` adds the non-stereo domain (DAMN), and `Full` adds
-the stereo domain (SS). The final name means the complete incidence carrier; constraints have no
-incidence nodes. The parallel description level for this carrier is `Structure`.
+`IncidenceLevel` names three crate-private carrier levels, which land on the chemist's own
+hierarchy: `Topology` is atoms and localized bonds (AB, with no pseudonodes), `Constitution` adds
+the non-stereo domain (DAMN), and `Full` adds the stereo domain (SS). The final name means the
+complete incidence carrier; constraints have no incidence nodes. The parallel description level for
+this carrier is `Structure`.
 
-**Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
-bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
-`SubstructureMatchAlgorithm::GraphAndOverlays` — match the topology, then verify overlays against the
-correspondence — is the default, and `Incidence` is chosen when the connectivity a pattern turns on is
-carried by an overlay rather than by bonds. Both return the same matches; the difference is pruning,
-not semantics.
+**Cost, and why it is not the default.** Even without subdividing localized bonds, the incidence
+graph allocates pseudonodes and incidence edges for overlays and inflates host atom degrees with
+overlay attachments. So `SubstructureMatchAlgorithm::GraphAndOverlays` — match the atom-and-bond
+topology directly, then verify overlays against the correspondence — is the default, and `Incidence`
+is chosen when the connectivity a pattern turns on is carried by an overlay rather than by bonds.
+Both return the same matches; the difference is pruning, not semantics.
 
-**Not:** the molecular topology, which is the atom-and-bond graph itself. The incidence graph is a
-construction over a structure, not a representation of one.
-**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceLevel`,
-`SubstructureMatchAlgorithm::Incidence`.
+**Not:** a bipartite Levi graph; the molecular topology, which is the atom-and-bond graph itself.
+The incidence graph is an internal algorithmic construction over a structure, not a public
+representation of one.
+**In code:** crate-private `IncidenceGraph`, `IncidenceNodeId`, `IncidenceEdgeId`, `IncidenceEdge`,
+`Incidence`, `IncidenceLevel`, `incidence_graph`; public `SubstructureMatchAlgorithm::Incidence`.
 
 ### Inconsistency
 
@@ -1163,7 +1169,7 @@ kinds introduced together, whereas a level includes that domain and every preced
 
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
-**In code:** private `DescriptionLevel`; public `IncidenceLevel`.
+**In code:** private `DescriptionLevel`, `IncidenceLevel`.
 
 ### Ligand and site
 
@@ -1867,7 +1873,7 @@ including the inherent values carried by those entities. It does not include ove
 
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
-**In code:** private `DescriptionLevel::Topology`; public `IncidenceLevel::Topology`.
+**In code:** private `DescriptionLevel::Topology`, `IncidenceLevel::Topology`.
 
 ### Topicity
 

@@ -16,7 +16,7 @@ use super::incidence::IncidenceGraph;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct InitialColors {
     pub(crate) entities: Vec<u32>,
-    pub(crate) incidences: Vec<u32>,
+    pub(crate) edges: Vec<u32>,
 }
 
 /// Edge-colored simple graph adapter used by canonical search.
@@ -30,14 +30,14 @@ pub(crate) struct AutomorphismAdapter {
 impl AutomorphismAdapter {
     /// Construct the exact edge-colored simple graph adapter used by canonicalization.
     pub(crate) fn new(incidence_graph: &IncidenceGraph, initial_colors: &InitialColors) -> Self {
-        let source = incidence_graph.graph();
+        let source = incidence_graph.raw_graph();
         debug_assert_eq!(initial_colors.entities.len(), source.node_count());
-        debug_assert_eq!(initial_colors.incidences.len(), source.edge_count());
+        debug_assert_eq!(initial_colors.edges.len(), source.edge_count());
 
         Self {
             graph: source.clone(),
             node_colors: initial_colors.entities.clone(),
-            edge_colors: initial_colors.incidences.clone(),
+            edge_colors: initial_colors.edges.clone(),
         }
     }
 
@@ -139,19 +139,6 @@ impl OrderedPartition {
         Self {
             cells: cells.into_values().collect(),
         }
-    }
-
-    pub(crate) fn from_color_ranks(colors: impl IntoIterator<Item = u32>) -> Self {
-        let mut cells = Vec::<Vec<NodeId>>::new();
-        for (index, color) in colors.into_iter().enumerate() {
-            let color = color as usize;
-            if cells.len() <= color {
-                cells.resize_with(color + 1, Vec::new);
-            }
-            cells[color].push(NodeId(index as u32));
-        }
-        cells.retain(|cell| !cell.is_empty());
-        Self { cells }
     }
 
     pub(crate) fn refine(self, graph: &Graph, edge_colors: &[u32]) -> Self {
@@ -347,6 +334,74 @@ impl OrderedPartition {
         Self { cells }
     }
 
+    /// Split the unordered pair `{first, second}` out of its cell(s) so any partition-preserving
+    /// automorphism fixes the unordered pair as a set (preserving `first <-> second` swap when
+    /// both occupy the same cell, or fixing both individually when they occupy distinct cells).
+    pub(crate) fn individualize_pair(&self, first: NodeId, second: NodeId) -> Self {
+        let first_cell = self
+            .cells
+            .iter()
+            .position(|cell| cell.contains(&first))
+            .expect("first node belongs to partition");
+        let second_cell = self
+            .cells
+            .iter()
+            .position(|cell| cell.contains(&second))
+            .expect("second node belongs to partition");
+        if first_cell == second_cell {
+            let pair = if first <= second {
+                vec![first, second]
+            } else {
+                vec![second, first]
+            };
+            let mut cells = Vec::with_capacity(self.cells.len() + 1);
+            for (index, cell) in self.cells.iter().enumerate() {
+                if index != first_cell {
+                    cells.push(cell.clone());
+                    continue;
+                }
+                cells.push(pair.clone());
+                let remainder = cell
+                    .iter()
+                    .copied()
+                    .filter(|&candidate| candidate != first && candidate != second)
+                    .collect::<Vec<_>>();
+                if !remainder.is_empty() {
+                    cells.push(remainder);
+                }
+            }
+            Self { cells }
+        } else {
+            let mut cells = Vec::with_capacity(self.cells.len() + 2);
+            for (index, cell) in self.cells.iter().enumerate() {
+                if index == first_cell {
+                    cells.push(vec![first]);
+                    let remainder = cell
+                        .iter()
+                        .copied()
+                        .filter(|&candidate| candidate != first)
+                        .collect::<Vec<_>>();
+                    if !remainder.is_empty() {
+                        cells.push(remainder);
+                    }
+                } else if index == second_cell {
+                    cells.push(vec![second]);
+                    let remainder = cell
+                        .iter()
+                        .copied()
+                        .filter(|&candidate| candidate != second)
+                        .collect::<Vec<_>>();
+                    if !remainder.is_empty() {
+                        cells.push(remainder);
+                    }
+                } else {
+                    cells.push(cell.clone());
+                }
+            }
+            Self { cells }
+        }
+    }
+
     pub(crate) fn first_non_singleton_cell(&self) -> Option<usize> {
         self.cells.iter().position(|cell| cell.len() > 1)
     }
@@ -505,26 +560,6 @@ where
     canonical_search_impl(
         adapter,
         OrderedPartition::from_descriptors(partition_descriptors),
-        algorithm,
-        leaf_candidate,
-        false,
-        &|_| {},
-    )
-}
-
-pub(crate) fn canonical_search_from_partition<K, LeafCandidate>(
-    adapter: &AutomorphismAdapter,
-    partition: OrderedPartition,
-    algorithm: AutomorphismAlgorithm,
-    leaf_candidate: &LeafCandidate,
-) -> CanonicalSearchResult<K>
-where
-    K: Ord,
-    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-{
-    canonical_search_impl(
-        adapter,
-        partition,
         algorithm,
         leaf_candidate,
         false,
@@ -774,6 +809,9 @@ where
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
     let node_count = source.graph().node_count();
+    if !same_cells(source, &source_partition, target, &target_partition) {
+        return ControlFlow::Continue(());
+    }
     let source_root = source_partition.refine(source.graph(), source.edge_colors());
     let target_root = target_partition.refine(target.graph(), target.edge_colors());
     if !same_cells(source, &source_root, target, &target_root) {

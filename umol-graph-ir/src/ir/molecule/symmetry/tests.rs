@@ -1419,7 +1419,8 @@ fn test_remapping_exists_individualized(
         atoms.into_iter().fold(
             OrderedPartition::from_descriptors(adapter.node_colors()),
             |partition, atom| {
-                let node = incidence_graph.node_of(Entity::Atom(AtomId(atom)));
+                let node =
+                    NodeId::from(incidence_graph.node_of(Entity::Atom(AtomId(atom))).unwrap());
                 let cell_index = partition
                     .cells
                     .iter()
@@ -1456,13 +1457,13 @@ fn test_remapping_exists_individualized(
     :bonds [[0 1 "1"] [0 2 "1"] [1 3 "1"] [0 4 "1"] [0 5 "1"] [1 6 "1"] [1 7 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 4 5] :attrs "Th0"}
                    {:site 1 :ligands [0 3 6 7] :attrs "Th0"}]
-}"#), vec![1, 0, 3, 2, 6, 7, 4, 5, 8, 10, 9, 13, 14, 11, 12],
-      vec![0, 1, 2, 3, 5, 4, 6, 7, 8, 9, 10, 12, 11, 13, 14])]
+}"#), vec![1, 0, 3, 2, 6, 7, 4, 5],
+      vec![0, 1, 2, 3, 5, 4, 6, 7])]
 #[case::fixed_record_square_planar(mol_dsl_concrete!(r#"{
     :atoms ["Pt#c-2" "F" "F" "F" "F"]
     :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
     :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Sp0"}]
-}"#), vec![0, 3, 2, 1, 4, 7, 6, 5, 8], vec![0, 1, 3, 2, 4, 5, 7, 6, 8])]
+}"#), vec![0, 3, 2, 1, 4], vec![0, 1, 3, 2, 4])]
 fn test_remapping_matches_stereo_generators(
     #[case] molecule: Molecule,
     #[case] generator: Vec<u32>,
@@ -1516,7 +1517,7 @@ fn test_remapping_matches_stereo_generators(
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
                            {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]}"#
     ),
-    vec![1, 0, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15],
+    vec![1, 0, 5, 6, 7, 2, 3, 4, 9, 8],
     true
 )]
 #[case::chiral_carbons_exchanged(
@@ -1526,7 +1527,7 @@ fn test_remapping_matches_stereo_generators(
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
                            {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
     ),
-    vec![1, 0, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15],
+    vec![1, 0, 5, 6, 7, 2, 3, 4, 9, 8],
     false
 )]
 #[case::implicit_hydrogen_equal_ligands_exchanged(
@@ -1535,7 +1536,7 @@ fn test_remapping_matches_stereo_generators(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
     ),
-    vec![0, 1, 3, 2, 4, 6, 5, 7],
+    vec![0, 1, 3, 2, 4],
     true
 )]
 #[case::implicit_hydrogen_identity(
@@ -1544,7 +1545,7 @@ fn test_remapping_matches_stereo_generators(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     false
 )]
 #[case::stereo_bond_identity(
@@ -1553,7 +1554,7 @@ fn test_remapping_matches_stereo_generators(
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     true
 )]
 #[case::undetermined_coset_identity(
@@ -1562,7 +1563,7 @@ fn test_remapping_matches_stereo_generators(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     true
 )]
 #[case::out_of_range_coset_identity(
@@ -1571,7 +1572,7 @@ fn test_remapping_matches_stereo_generators(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th9"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![0, 1, 2, 3, 4, 5],
     false
 )]
 fn test_remapping_mirrors_stereo(
@@ -1629,11 +1630,7 @@ fn test_remapping_mirrors_stereo_frame(
                 NodeId(1),
                 NodeId(3),
                 NodeId(4),
-                NodeId(6),
                 NodeId(5),
-                NodeId(7),
-                NodeId(8),
-                NodeId(9)
             ],
             include_constraints
         ),
@@ -1658,7 +1655,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
     ),
-    vec![0, 1, 3, 2, 4, 6, 5, 7],
+    vec![0, 1, 3, 2, 4],
     Entity::StereoAtom(StereoAtomId(0)),
     1,
     true
@@ -1669,7 +1666,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th0"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     Entity::StereoAtom(StereoAtomId(0)),
     1,
     false
@@ -1681,7 +1678,7 @@ fn test_remapping_mirrors_stereo_frame(
             :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
                            {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 7, 6, 8, 9, 10, 11, 12, 14, 13, 15, 16],
+    vec![0, 1, 2, 3, 4, 5, 7, 6, 8, 9],
     Entity::StereoAtom(StereoAtomId(1)),
     1,
     true
@@ -1693,7 +1690,7 @@ fn test_remapping_mirrors_stereo_frame(
             :stereo-atoms [{:site 0 :ligands [1 3 4 5] :attrs "Th0"}
                            {:site 1 :ligands [0 2 6 7] :attrs "Th0"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 7, 6, 8, 9, 10, 11, 12, 14, 13, 15, 16],
+    vec![0, 1, 2, 3, 4, 5, 7, 6, 8, 9],
     Entity::StereoAtom(StereoAtomId(0)),
     1,
     false
@@ -1704,7 +1701,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
             :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct0"}]}"#
     ),
-    vec![0, 1, 3, 2, 4, 5, 6, 8, 7, 9, 10, 11],
+    vec![0, 1, 3, 2, 4, 5, 6],
     Entity::StereoBond(StereoBondId(0)),
     1,
     true
@@ -1715,7 +1712,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#
     ),
-    vec![0, 1, 3, 2, 4, 6, 5, 7],
+    vec![0, 1, 3, 2, 4],
     Entity::StereoAtom(StereoAtomId(0)),
     1,
     true
@@ -1726,7 +1723,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th*"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     Entity::StereoAtom(StereoAtomId(0)),
     1,
     false
@@ -1737,7 +1734,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th9"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![0, 1, 2, 3, 4, 5],
     Entity::StereoAtom(StereoAtomId(0)),
     0,
     false
@@ -1748,7 +1745,7 @@ fn test_remapping_mirrors_stereo_frame(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "*"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![0, 1, 2, 3, 4, 5],
     Entity::StereoAtom(StereoAtomId(0)),
     0,
     false
@@ -1789,7 +1786,7 @@ fn test_remapping_changes_coset(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
     ),
-    vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 9],
+    vec![0, 2, 3, 1, 4, 5],
     true
 )]
 #[case::transposition(
@@ -1803,7 +1800,7 @@ fn test_remapping_changes_coset(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
     ),
-    vec![0, 2, 1, 3, 4, 6, 5, 7, 8, 9],
+    vec![0, 2, 1, 3, 4, 5],
     false
 )]
 #[case::site_moved(
@@ -1817,7 +1814,7 @@ fn test_remapping_changes_coset(
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
     ),
-    vec![1, 0, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![1, 0, 2, 3, 4, 5],
     false
 )]
 #[case::renumbered(
@@ -1831,7 +1828,7 @@ fn test_remapping_changes_coset(
             :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
             :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th1"}]}"#
     ),
-    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    vec![4, 3, 2, 1, 0, 5],
     true
 )]
 #[case::renumbered_inverted(
@@ -1845,7 +1842,7 @@ fn test_remapping_changes_coset(
             :bonds [[4 0 "1"] [4 1 "1"] [4 2 "1"] [4 3 "1"]]
             :stereo-atoms [{:site 4 :ligands [3 2 1 0] :attrs "Th0"}]}"#
     ),
-    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    vec![4, 3, 2, 1, 0, 5],
     false
 )]
 #[case::stereo_bond(
@@ -1859,7 +1856,7 @@ fn test_remapping_changes_coset(
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     true
 )]
 #[case::stereo_bond_inverted(
@@ -1873,7 +1870,7 @@ fn test_remapping_changes_coset(
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     false
 )]
 fn test_remapping_preserves_stereo(
@@ -1901,7 +1898,7 @@ fn test_remapping_preserves_stereo(
         bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
         ..Default::default()
     }),
-    vec![NodeId(1), NodeId(0), NodeId(2)],
+    vec![NodeId(1), NodeId(0)],
     true,
 )]
 #[case::distinct_ligands(
@@ -1925,7 +1922,7 @@ fn test_remapping_preserves_stereo(
         )],
         ..Default::default()
     }),
-    (0..10).map(NodeId::from).collect(),
+    (0..6).map(NodeId::from).collect(),
     true,
 )]
 #[case::prostereogenic_explicit_hydrogens(
@@ -1950,8 +1947,7 @@ fn test_remapping_preserves_stereo(
         ..Default::default()
     }),
     vec![
-        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
-        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4), NodeId(5),
     ],
     false,
 )]
@@ -2000,9 +1996,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     true,
 )]
@@ -2034,7 +2028,7 @@ fn test_remapping_preserves_stereo(
     }),
     vec![
         NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
-        NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
+        NodeId(6),
     ],
     true,
 )]
@@ -2087,9 +2081,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     false,
 )]
@@ -2146,9 +2138,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     true,
 )]
@@ -2171,12 +2161,6 @@ fn test_retain_stereo_preserving_generators(
 }
 
 #[rstest]
-#[case::bond_endpoint(
-    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
-    Entity::Bond(BondId(0)),
-    AtomId(0),
-    (Incidence::BondEndpoint, None)
-)]
 #[case::dative_donor(
     mol_dsl!(r#"{:atoms ["N" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
     Entity::DativeBond(DativeBondId(0)),
@@ -2237,16 +2221,13 @@ fn test_incidence_color(
     #[case] expected: (Incidence, Option<i64>),
 ) {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let edge = incidence_graph
-        .graph()
-        .find_edge(
-            incidence_graph.node_of(owner),
-            incidence_graph.node_of(Entity::Atom(atom)),
-        )
+    let (edge, _) = incidence_graph
+        .incidences()
+        .find(|&(edge, _)| incidence_graph.incidence_endpoints(edge) == Some((owner, atom)))
         .unwrap();
     let (incidence, electron_count) = incidence_color(&molecule, &incidence_graph, edge);
 
-    assert_eq!((*incidence, electron_count), expected);
+    assert_eq!((incidence, electron_count), expected);
 }
 
 #[rstest]
@@ -2275,8 +2256,12 @@ fn test_initial_colors_constraints(
         include_constraints,
     )
     .unwrap();
+    let color_of = |entity: Entity| match entity {
+        Entity::Bond(bond) => colors.edges[graph.bond_edge(bond).unwrap().index()],
+        _ => colors.entities[graph.node_of(entity).unwrap().index()],
+    };
     assert_eq!(
-        colors.entities[graph.node_of(lhs).index()] == colors.entities[graph.node_of(rhs).index()],
+        color_of(lhs) == color_of(rhs),
         expected[usize::from(include_constraints)]
     );
     assert_eq!(molecule, original);
@@ -2315,8 +2300,8 @@ fn test_initial_colors_raw(
     let graph = molecule.incidence_graph(IncidenceLevel::Full);
     let colors = initial_colors(&molecule, &graph, level, include_constraints).unwrap();
     assert_eq!(
-        colors.entities[graph.node_of(Entity::Atom(AtomId(0))).index()]
-            == colors.entities[graph.node_of(Entity::Atom(AtomId(1))).index()],
+        colors.entities[graph.node_of(Entity::Atom(AtomId(0))).unwrap().index()]
+            == colors.entities[graph.node_of(Entity::Atom(AtomId(1))).unwrap().index()],
         expected[usize::from(include_constraints)]
     );
     assert_eq!(molecule, original);
@@ -2345,8 +2330,14 @@ fn test_initial_colors_stereo_atom(
         include_constraints,
     )
     .map(|colors| {
-        colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(0))).index()]
-            == colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(1))).index()]
+        colors.entities[graph
+            .node_of(Entity::StereoAtom(StereoAtomId(0)))
+            .unwrap()
+            .index()]
+            == colors.entities[graph
+                .node_of(Entity::StereoAtom(StereoAtomId(1)))
+                .unwrap()
+                .index()]
     });
     assert_eq!(actual, expected[usize::from(include_constraints)]);
     assert_eq!(molecule, original);
@@ -2375,8 +2366,14 @@ fn test_initial_colors_stereo_bond(
         include_constraints,
     )
     .map(|colors| {
-        colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(0))).index()]
-            == colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(1))).index()]
+        colors.entities[graph
+            .node_of(Entity::StereoBond(StereoBondId(0)))
+            .unwrap()
+            .index()]
+            == colors.entities[graph
+                .node_of(Entity::StereoBond(StereoBondId(1)))
+                .unwrap()
+                .index()]
     });
     assert_eq!(actual, expected[usize::from(include_constraints)]);
     assert_eq!(molecule, original);
@@ -2456,12 +2453,12 @@ fn test_initial_colors(
         true,
     )
     .expect("fixed molecule has colors");
+    let color_of = |entity: Entity| match entity {
+        Entity::Bond(bond) => colors.edges[incidence_graph.bond_edge(bond).unwrap().index()],
+        _ => colors.entities[incidence_graph.node_of(entity).unwrap().index()],
+    };
 
-    assert_eq!(
-        colors.entities[incidence_graph.node_of(lhs).index()]
-            == colors.entities[incidence_graph.node_of(rhs).index()],
-        expected
-    );
+    assert_eq!(color_of(lhs) == color_of(rhs), expected);
 }
 
 #[rstest]
@@ -2513,11 +2510,11 @@ fn test_initial_colors_order(
         include_constraints,
     )
     .unwrap();
-    assert_eq!(
-        colors.entities[incidence_graph.node_of(lhs).index()]
-            .cmp(&colors.entities[incidence_graph.node_of(rhs).index()]),
-        expected,
-    );
+    let color_of = |entity: Entity| match entity {
+        Entity::Bond(bond) => colors.edges[incidence_graph.bond_edge(bond).unwrap().index()],
+        _ => colors.entities[incidence_graph.node_of(entity).unwrap().index()],
+    };
+    assert_eq!(color_of(lhs).cmp(&color_of(rhs)), expected);
 }
 
 #[rstest]
@@ -2540,11 +2537,12 @@ fn test_initial_colors_incidence(
     let incidences = incidence_graph
         .incidences()
         .map(|(edge, incidence)| {
-            let contribution = edge
-                .index()
-                .checked_sub(14)
+            let contribution = incidence_graph
+                .overlay_incidence_index(edge)
+                .unwrap()
+                .checked_sub(6)
                 .and_then(|position| contributions.get(position));
-            ((incidence, contribution), colors.incidences[edge.index()])
+            ((incidence, contribution), colors.edges[edge.index()])
         })
         .collect::<Vec<_>>();
 
@@ -2556,6 +2554,11 @@ fn test_initial_colors_incidence(
     for entity_color in &colors.entities {
         for (_, incidence_color) in &incidences {
             assert_ne!(entity_color, incidence_color);
+        }
+    }
+    for bond_color in &colors.edges[..incidence_graph.bond_count()] {
+        for (_, incidence_color) in &incidences {
+            assert_ne!(bond_color, incidence_color);
         }
     }
 }
@@ -2903,8 +2906,8 @@ fn test_molecule_proper_generators(
         .into_graph_symmetry();
     let trail_inc_gens = molecule.proper_incidence_generators(&trail_sym);
     let nauty_inc_gens = molecule.proper_incidence_generators(&nauty_sym);
-    let trail_inc = subgroup_elements(incidence.graph().node_count(), &trail_inc_gens);
-    let nauty_inc = subgroup_elements(incidence.graph().node_count(), &nauty_inc_gens);
+    let trail_inc = subgroup_elements(incidence.node_count(), &trail_inc_gens);
+    let nauty_inc = subgroup_elements(incidence.node_count(), &nauty_inc_gens);
     assert_eq!(trail_inc, nauty_inc);
     assert_eq!(trail_inc.len(), expected_order);
 
@@ -2929,8 +2932,10 @@ fn test_molecule_proper_generators(
     assert_eq!(q_atom_trail.constraints(), q_atom_nauty.constraints());
 
     let q_inc_trail =
-        QuerySymmetryConstraints::try_from_generators(incidence.graph(), &trail_inc_gens).unwrap();
+        QuerySymmetryConstraints::try_from_generators(incidence.raw_graph(), &trail_inc_gens)
+            .unwrap();
     let q_inc_nauty =
-        QuerySymmetryConstraints::try_from_generators(incidence.graph(), &nauty_inc_gens).unwrap();
+        QuerySymmetryConstraints::try_from_generators(incidence.raw_graph(), &nauty_inc_gens)
+            .unwrap();
     assert_eq!(q_inc_trail.constraints(), q_inc_nauty.constraints());
 }

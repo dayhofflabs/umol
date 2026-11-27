@@ -7,7 +7,9 @@ use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, AtomPosition, BondId};
-use super::super::incidence::{Incidence, IncidenceGraph};
+use super::super::incidence::{
+    Incidence, IncidenceEdge, IncidenceEdgeId, IncidenceGraph, IncidenceNodeId,
+};
 use super::super::ligand::StereoLigand;
 use super::super::span::EntitySpan;
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
@@ -28,8 +30,12 @@ pub(crate) fn remapping_preserves_stereo(
     incidence_graph: &IncidenceGraph,
     images: &[NodeId],
 ) -> bool {
-    let entity_image =
-        |entity| incidence_graph.entity(images[incidence_graph.node_of(entity).index()]);
+    let entity_image = |entity| {
+        let node = incidence_graph
+            .node_of(entity)
+            .expect("stereo remapping entity is in incidence graph");
+        incidence_graph.entity(IncidenceNodeId::from(images[node.index()]))
+    };
     let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
         let mapped = ligands
             .iter()
@@ -80,9 +86,21 @@ pub(crate) fn remapping_preserves_stereo(
         let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(id)) else {
             return false;
         };
-        if entity_image(Entity::Bond(source.stereo_bonds().site(id)))
-            != Entity::Bond(target.stereo_bonds().site(image_id))
-        {
+        let [s0, s1] = source
+            .graph()
+            .edge_endpoints(EdgeId::from(source.stereo_bonds().site(id)))
+            .map(AtomId::from);
+        let (Entity::Atom(m0), Entity::Atom(m1)) = (
+            entity_image(Entity::Atom(s0)),
+            entity_image(Entity::Atom(s1)),
+        ) else {
+            return false;
+        };
+        let [t0, t1] = target
+            .graph()
+            .edge_endpoints(EdgeId::from(target.stereo_bonds().site(image_id)))
+            .map(AtomId::from);
+        if !((m0 == t0 && m1 == t1) || (m0 == t1 && m1 == t0)) {
             return false;
         }
         let Some(action) = frame_action(
@@ -115,26 +133,21 @@ pub(crate) fn retain_stereo_preserving_generators(
         .retain(|generator| remapping_preserves_stereo(span, span, incidence_graph, generator));
 }
 
-/// The color of the incidence at `edge`: its role and, for an atom of an aromatic system or a
-/// multicenter bond, the span of the electron counts of that atom on each side.
-pub(crate) fn incidence_color<'a>(
+/// The color of the overlay incidence at `edge`: its role and, for an atom of an aromatic system
+/// or a multicenter bond, the span of the electron counts of that atom on each side.
+pub(crate) fn incidence_color(
     span: &ReactionSpan,
-    incidence_graph: &'a IncidenceGraph,
-    edge: EdgeId,
-) -> (&'a Incidence, Option<EntitySpan<Option<i64>>>) {
-    let incidence = incidence_graph.incidence(edge);
+    incidence_graph: &IncidenceGraph,
+    edge: IncidenceEdgeId,
+) -> (Incidence, Option<EntitySpan<Option<i64>>>) {
+    let IncidenceEdge::Incidence(incidence) = incidence_graph.edge(edge) else {
+        unreachable!("incidence_color is called only on overlay incidence edges");
+    };
     let electron_count = match incidence {
         Incidence::AromaticAtom | Incidence::MulticenterAtom => {
-            let [first, second] = incidence_graph.graph().edge_endpoints(edge);
-            let (owner, atom) = match (
-                incidence_graph.entity(first),
-                incidence_graph.entity(second),
-            ) {
-                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
-                _ => {
-                    unreachable!("an electron contribution connects an overlay to an atom")
-                }
-            };
+            let (owner, atom) = incidence_graph
+                .incidence_endpoints(edge)
+                .expect("overlay incidence connects an overlay to an atom");
             let sides = match owner {
                 Entity::AromaticSystem(id) => {
                     let atom_position = AtomPosition::from(
@@ -175,14 +188,14 @@ pub(crate) fn incidence_color<'a>(
     (incidence, electron_count)
 }
 
-/// The integers of the colors of the supplied span at `level`: one per entity, by incidence node,
-/// and one per incidence, by incidence edge.
+/// The integers of the colors of the supplied span at `level`: one per incidence node (atoms +
+/// included overlays), and one per incidence edge (localized bonds followed by overlay
+/// incidences).
 ///
-/// The color of an entity is the color of its entity span. The colors of each entity kind are
-/// ranked in kind order, and the incidences continue after the entities. The color of an incidence
-/// is its role and, for an atom of an aromatic system or a multicenter bond, the span of the
-/// electron counts of that atom on each side. At Topology the incidences are not ranked, since the
-/// topology search input does not read them.
+/// The colors of each entity kind are ranked in kind order, followed by localized bonds and then
+/// overlay incidences in disjoint integer ranges. The color of an overlay incidence is its role
+/// and, for an atom of an aromatic system or a multicenter bond, the span of the electron counts
+/// of that atom on each side.
 /// `include_constraints` selects the frame-independent entity constraints in the colors and the
 /// frame-relative stereo constraints in compatibility checks. Configuration compatibility is
 /// checked on each present side in both modes. No form is normalized.
@@ -193,8 +206,14 @@ pub(crate) fn initial_colors(
     level: DescriptionLevel,
     include_constraints: bool,
 ) -> Result<InitialColors, Contradiction> {
-    let mut entities = vec![0; incidence_graph.graph().node_count()];
-    let position = |entity: Entity| incidence_graph.node_of(entity).index();
+    let mut entities = vec![0; incidence_graph.node_count()];
+    let mut edges = vec![0; incidence_graph.edge_count()];
+    let position = |entity: Entity| {
+        incidence_graph
+            .node_of(entity)
+            .expect("entity belongs to incidence graph at this level")
+            .index()
+    };
 
     let atoms = span
         .atoms()
@@ -219,133 +238,107 @@ pub(crate) fn initial_colors(
         )
     };
 
-    let bonds = span
-        .bonds()
-        .iter()
-        .enumerate()
-        .map(|(index, bond)| (bond, position(Entity::Bond(BondId(index as u32)))));
-    next = if include_constraints {
-        rank_colors(
-            bonds
-                .map(|(form, position)| (form.as_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    } else {
-        rank_colors(
-            bonds
-                .map(|(form, position)| (form.as_field_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    };
-
-    if level == DescriptionLevel::Topology {
-        return Ok(InitialColors {
-            entities,
-            incidences: Vec::new(),
+    if level >= DescriptionLevel::Constitution {
+        let dative = span.dative_bonds().ids().map(|id| {
+            (
+                span.dative_bonds().attributes(id),
+                position(Entity::DativeBond(id)),
+            )
         });
-    }
+        next = if include_constraints {
+            rank_colors(
+                dative
+                    .map(|(form, position)| (form.as_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        } else {
+            rank_colors(
+                dative
+                    .map(|(form, position)| (form.as_field_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        };
 
-    let dative = span.dative_bonds().ids().map(|id| {
-        (
-            span.dative_bonds().attributes(id),
-            position(Entity::DativeBond(id)),
-        )
-    });
-    next = if include_constraints {
-        rank_colors(
-            dative
-                .map(|(form, position)| (form.as_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    } else {
-        rank_colors(
-            dative
-                .map(|(form, position)| (form.as_field_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    };
-
-    let aromatic = span.aromatic_systems().ids().map(|id| {
+        let aromatic = span.aromatic_systems().ids().map(|id| {
             let attributes = span.aromatic_systems().attributes(id);
             let atom_count = span.aromatic_systems().atoms(id).len();
-            if [attributes.lhs(), attributes.rhs()].into_iter().flatten().any(|form|
-                matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count)) {
+            if [attributes.lhs(), attributes.rhs()].into_iter().flatten().any(|form| {
+                matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count)
+            }) {
                 return Err(Contradiction);
             }
             Ok((attributes, position(Entity::AromaticSystem(id))))
         });
-    next = if include_constraints {
-        let mut colors = Vec::with_capacity(span.aromatic_systems().count());
-        for entry in aromatic {
-            let (form, position) = entry?;
-            colors.push((form.as_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    } else {
-        let mut colors = Vec::with_capacity(span.aromatic_systems().count());
-        for entry in aromatic {
-            let (form, position) = entry?;
-            colors.push((form.as_field_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    };
+        next = if include_constraints {
+            let mut colors = Vec::with_capacity(span.aromatic_systems().count());
+            for entry in aromatic {
+                let (form, position) = entry?;
+                colors.push((form.as_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        } else {
+            let mut colors = Vec::with_capacity(span.aromatic_systems().count());
+            for entry in aromatic {
+                let (form, position) = entry?;
+                colors.push((form.as_field_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        };
 
-    let multicenter = span.multicenter_bonds().ids().map(|id| {
+        let multicenter = span.multicenter_bonds().ids().map(|id| {
             let attributes = span.multicenter_bonds().attributes(id);
             let atom_count = span.multicenter_bonds().atoms(id).len();
-            if [attributes.lhs(), attributes.rhs()].into_iter().flatten().any(|form|
-                matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count)) {
+            if [attributes.lhs(), attributes.rhs()].into_iter().flatten().any(|form| {
+                matches!(&form.electrons, ElectronCountsForm::Lit(counts) if counts.len() != atom_count)
+            }) {
                 return Err(Contradiction);
             }
             Ok((attributes, position(Entity::MulticenterBond(id))))
         });
-    next = if include_constraints {
-        let mut colors = Vec::with_capacity(span.multicenter_bonds().count());
-        for entry in multicenter {
-            let (form, position) = entry?;
-            colors.push((form.as_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    } else {
-        let mut colors = Vec::with_capacity(span.multicenter_bonds().count());
-        for entry in multicenter {
-            let (form, position) = entry?;
-            colors.push((form.as_field_color(), position));
-        }
-        rank_colors(colors, next, &mut entities)
-    };
+        next = if include_constraints {
+            let mut colors = Vec::with_capacity(span.multicenter_bonds().count());
+            for entry in multicenter {
+                let (form, position) = entry?;
+                colors.push((form.as_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        } else {
+            let mut colors = Vec::with_capacity(span.multicenter_bonds().count());
+            for entry in multicenter {
+                let (form, position) = entry?;
+                colors.push((form.as_field_color(), position));
+            }
+            rank_colors(colors, next, &mut entities)
+        };
 
-    let noncovalent = span.noncovalent_bonds().ids().map(|id| {
-        (
-            span.noncovalent_bonds().attributes(id),
-            position(Entity::NoncovalentBond(id)),
-        )
-    });
-    next = if include_constraints {
-        rank_colors(
-            noncovalent
-                .map(|(form, position)| (form.as_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    } else {
-        rank_colors(
-            noncovalent
-                .map(|(form, position)| (form.as_field_color(), position))
-                .collect(),
-            next,
-            &mut entities,
-        )
-    };
+        let noncovalent = span.noncovalent_bonds().ids().map(|id| {
+            (
+                span.noncovalent_bonds().attributes(id),
+                position(Entity::NoncovalentBond(id)),
+            )
+        });
+        next = if include_constraints {
+            rank_colors(
+                noncovalent
+                    .map(|(form, position)| (form.as_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        } else {
+            rank_colors(
+                noncovalent
+                    .map(|(form, position)| (form.as_field_color(), position))
+                    .collect(),
+                next,
+                &mut entities,
+            )
+        };
+    }
 
     if level >= DescriptionLevel::Structure {
         let stereo_atoms = span.stereo_atoms().ids().map(|id| {
@@ -432,17 +425,42 @@ pub(crate) fn initial_colors(
         };
     }
 
-    let incidence_colors = incidence_graph
-        .incidences()
-        .map(|(edge, _)| (incidence_color(span, incidence_graph, edge), edge.index()))
-        .collect();
-    let mut incidences = vec![0; incidence_graph.graph().edge_count()];
-    rank_colors(incidence_colors, next, &mut incidences);
+    let bonds = span.bonds().iter().enumerate().map(|(index, bond)| {
+        (
+            bond,
+            incidence_graph
+                .bond_edge(BondId(index as u32))
+                .expect("bond belongs to incidence graph")
+                .index(),
+        )
+    });
+    next = if include_constraints {
+        rank_colors(
+            bonds
+                .map(|(form, position)| (form.as_color(), position))
+                .collect(),
+            next,
+            &mut edges,
+        )
+    } else {
+        rank_colors(
+            bonds
+                .map(|(form, position)| (form.as_field_color(), position))
+                .collect(),
+            next,
+            &mut edges,
+        )
+    };
 
-    Ok(InitialColors {
-        entities,
-        incidences,
-    })
+    if incidence_graph.incidence_count() > 0 {
+        let incidence_colors = incidence_graph
+            .incidences()
+            .map(|(edge, _)| (incidence_color(span, incidence_graph, edge), edge.index()))
+            .collect();
+        rank_colors(incidence_colors, next, &mut edges);
+    }
+
+    Ok(InitialColors { entities, edges })
 }
 
 #[cfg(test)]

@@ -112,7 +112,7 @@ impl<T> ReactionApplicationIter<T> {
         let deltas = reaction.prepare_deltas()?;
         let correspondences = reaction
             .lhs
-            .substructure_matches(&host, match_config)?
+            .substructure_matches(&host, match_config)
             .into_iter();
         Ok(Self {
             reaction,
@@ -232,6 +232,11 @@ pub trait React {
     /// Returns [`ApplyPreconditionError`] before issuing an iterator when the reaction fails a
     /// reaction-wide application precondition. Once issued, the iterator yields [`ApplyError`] for
     /// a non-rejection failure while realizing a selected match.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `reaction.lhs()` carries molecule constraints, which substructure matching does
+    /// not evaluate.
     fn react(
         &self,
         reaction: &Reaction,
@@ -2412,6 +2417,11 @@ impl Reaction {
     /// Returns [`ApplyPreconditionError`] before match enumeration when this reaction fails a
     /// reaction-wide structural precondition. Failures arising while realizing a selected match
     /// remain [`ApplyError`] iterator items.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.lhs()` carries molecule constraints, which substructure matching does not
+    /// evaluate.
     pub fn apply(
         &self,
         host: &Molecule,
@@ -6102,7 +6112,7 @@ mod tests {
             Correspondence::new(vec![], 1, 1).unwrap(),
         );
         assert_eq!(
-            reaction.lhs().substructure_matches(&host, config).unwrap(),
+            reaction.lhs().substructure_matches(&host, config),
             vec![occurrence.clone()]
         );
         assert_eq!(
@@ -6766,7 +6776,7 @@ mod tests {
             match_algorithm: algorithm,
             ..MATCH_CONFIG
         };
-        let occurrences = reaction.lhs().substructure_matches(&host, config).unwrap();
+        let occurrences = reaction.lhs().substructure_matches(&host, config);
         let occurrence = MoleculeCorrespondence::new(
             Correspondence::identity(7),
             Correspondence::identity(7),
@@ -6922,7 +6932,7 @@ mod tests {
             match_algorithm: algorithm,
             ..MATCH_CONFIG
         };
-        let occurrences = reaction.lhs().substructure_matches(&host, config).unwrap();
+        let occurrences = reaction.lhs().substructure_matches(&host, config);
         assert!(occurrences.contains(&occurrence));
         assert_eq!(
             reaction
@@ -6959,7 +6969,7 @@ mod tests {
             match_algorithm: algorithm,
             ..MATCH_CONFIG
         };
-        let occurrences = reaction.lhs().substructure_matches(&host, config).unwrap();
+        let occurrences = reaction.lhs().substructure_matches(&host, config);
         assert_eq!(occurrences.len(), 12);
         for occurrence in occurrences {
             assert_eq!(reaction.apply_at(&host, &occurrence), Ok(None));
@@ -7066,7 +7076,7 @@ mod tests {
             match_algorithm: algorithm,
             ..MATCH_CONFIG
         };
-        let occurrences = reaction.lhs().substructure_matches(&host, config).unwrap();
+        let occurrences = reaction.lhs().substructure_matches(&host, config);
         assert_eq!(occurrences.len(), 1);
         let occurrence = &occurrences[0];
         if applicable {

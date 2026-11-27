@@ -671,11 +671,7 @@ proptest! {
         (reaction, host, _) in matchable_reaction_application_strategy(),
     ) {
         let mut expected = Vec::new();
-        for correspondence in reaction
-            .lhs()
-            .substructure_matches(&host, MATCH_CONFIG)
-            .expect("generated patterns carry no molecule-scope constraints")
-        {
+        for correspondence in reaction.lhs().substructure_matches(&host, MATCH_CONFIG) {
             match reaction.tracked_apply_at(&host, &correspondence) {
                 Ok(Some(result)) => expected.push(Ok(result)),
                 Ok(None) => {}

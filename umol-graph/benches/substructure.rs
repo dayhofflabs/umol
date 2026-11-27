@@ -172,21 +172,18 @@ fn substructure_benchmark(c: &mut Criterion) {
                 group.bench_function(id, |b| {
                     b.iter(|| {
                         for target in &corpus {
-                            black_box(
-                                pat.substructure_matches(
-                                    target,
-                                    SubstructureMatchConfig {
-                                        match_algorithm: strategy,
-                                        subgraph_isomorphism_algorithm: algorithm,
-                                        relevant_cycle_algorithm:
-                                            RelevantCycleEnumerationAlgorithm::Vismara,
-                                        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
-                                        reduce_pattern_symmetry: false,
-                                        reduce_host_symmetry: false,
-                                    },
-                                )
-                                .unwrap(),
-                            );
+                            black_box(pat.substructure_matches(
+                                target,
+                                SubstructureMatchConfig {
+                                    match_algorithm: strategy,
+                                    subgraph_isomorphism_algorithm: algorithm,
+                                    relevant_cycle_algorithm:
+                                        RelevantCycleEnumerationAlgorithm::Vismara,
+                                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                                    reduce_pattern_symmetry: false,
+                                    reduce_host_symmetry: false,
+                                },
+                            ));
                         }
                     });
                 });
@@ -248,13 +245,7 @@ fn overlay_substructure_benchmark(c: &mut Criterion) {
                 reduce_host_symmetry: false,
             };
             group.bench_function(format!("{name}/{}", strategy_name(strategy)), |b| {
-                b.iter(|| {
-                    black_box(
-                        molecule
-                            .substructure_matches(black_box(&molecule), config)
-                            .unwrap(),
-                    )
-                });
+                b.iter(|| black_box(molecule.substructure_matches(black_box(&molecule), config)));
             });
         }
     }

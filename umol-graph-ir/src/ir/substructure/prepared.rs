@@ -2,9 +2,9 @@
 //!
 //! [`PreparedSubstructureHost`] snapshots a host [`Molecule`] alongside its core target bitsets,
 //! element/bond/overlay summary masks, and transparent lazy caches for incidence graphs, relevant
-//! rings, and proper host symmetry. [`PreparedSubstructurePattern`] validates molecule-scope
-//! constraints once, precompiles the query plan, deduplicates atom/bond predicate classes, and
-//! builds proper pattern symmetry constraints when configured.
+//! rings, and proper host symmetry. [`PreparedSubstructurePattern`] snapshots a pattern
+//! [`Molecule`], precompiles the query plan, deduplicates atom/bond predicate classes, and builds
+//! proper pattern symmetry constraints when configured.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -25,14 +25,15 @@ use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{Entity, EntityKind};
 use super::super::id::{AtomId, BondId};
-use super::super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
+use super::super::incidence::{
+    Incidence, IncidenceEdge, IncidenceEdgeId, IncidenceGraph, IncidenceLevel, IncidenceNodeId,
+};
 use super::super::molecule::{GraphSymmetryConfig, Molecule};
 use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSet, RingSetKind};
 use super::super::traits::Lattice;
 use super::{
     atom_fields_match, bond_fields_match, SubstructureMatchAlgorithm, SubstructureMatchConfig,
-    SubstructureMatchError,
 };
 
 const OVERLAY_DATIVE: u8 = 1 << 0;
@@ -187,11 +188,9 @@ fn precompute_incidence_electrons(
             if !matches!(role, Incidence::AromaticAtom | Incidence::MulticenterAtom) {
                 return IncidenceElectron::NotApplicable;
             }
-            let [first, second] = incidence.graph().edge_endpoints(edge);
-            let (owner, atom) = match (incidence.entity(first), incidence.entity(second)) {
-                (Entity::Atom(atom), owner) | (owner, Entity::Atom(atom)) => (owner, atom),
-                _ => unreachable!("an overlay incidence connects to an atom"),
-            };
+            let (owner, atom) = incidence
+                .incidence_endpoints(edge)
+                .expect("overlay incidence connects an overlay to an atom");
             match owner {
                 Entity::AromaticSystem(id) => {
                     let system = molecule.aromatic_system(id);
@@ -277,43 +276,25 @@ enum HostBondOrderBitsets {
 struct PreparedIncidenceHost {
     incidence: IncidenceGraph,
     target: PreparedSubgraphTarget,
-    edge_electrons: Vec<IncidenceElectron>,
-    /// Contiguous `[start, end)` node ranges for the six constitution entity kinds:
-    /// `Atom`, `Bond`, `DativeBond`, `AromaticSystem`, `MulticenterBond`, `NoncovalentBond`.
-    kind_ranges: [(usize, usize); 6],
+    /// Electron contributions indexed by `incidence.overlay_incidence_index(edge)`.
+    incidence_electrons: Vec<IncidenceElectron>,
 }
 
 impl PreparedIncidenceHost {
     fn new(molecule: &Molecule) -> Self {
         let incidence = molecule.incidence_graph(IncidenceLevel::Constitution);
-        let target = PreparedSubgraphTarget::new(incidence.graph());
-        let edge_electrons = precompute_incidence_electrons(molecule, &incidence);
-        let kinds = [
-            EntityKind::Atom,
-            EntityKind::Bond,
-            EntityKind::DativeBond,
-            EntityKind::AromaticSystem,
-            EntityKind::MulticenterBond,
-            EntityKind::NoncovalentBond,
-        ];
-        let mut kind_ranges = [(0usize, 0usize); 6];
-        let mut offset = 0usize;
-        for (slot, kind) in kind_ranges.iter_mut().zip(kinds) {
-            let end = offset + incidence.entity_count(kind);
-            *slot = (offset, end);
-            offset = end;
-        }
+        let target = PreparedSubgraphTarget::new(incidence.raw_graph());
+        let incidence_electrons = precompute_incidence_electrons(molecule, &incidence);
         Self {
             incidence,
             target,
-            edge_electrons,
-            kind_ranges,
+            incidence_electrons,
         }
     }
 
     #[inline]
     fn kind_range(&self, kind: EntityKind) -> (usize, usize) {
-        self.kind_ranges[kind as usize]
+        self.incidence.node_range(kind)
     }
 }
 
@@ -351,7 +332,7 @@ impl HostSymmetryCache {
                 })
                 .into_graph_symmetry();
             let generators = molecule.proper_incidence_generators(&symmetry);
-            TargetSymmetry::try_from_generators(incidence.incidence.graph(), &generators)
+            TargetSymmetry::try_from_generators(incidence.incidence.raw_graph(), &generators)
                 .expect("proper incidence symmetry generators are valid graph automorphisms")
         })
     }
@@ -773,6 +754,9 @@ impl PreparedSubstructureHost {
 
     #[inline]
     fn bond_order_neighbors_u64(&self, orders_mask: u8, target_node: NodeId) -> Option<u64> {
+        if target_node.index() >= self.molecule.atoms().count() {
+            return None;
+        }
         let HostBondOrderBitsets::U64 { order_count, adj } = &self.bond_order_adj else {
             return None;
         };
@@ -794,23 +778,44 @@ impl PreparedSubstructureHost {
 
     #[inline]
     fn bond_order_neighbors_u128(&self, orders_mask: u8, target_node: NodeId) -> Option<u128> {
-        let HostBondOrderBitsets::U128 { order_count, adj } = &self.bond_order_adj else {
+        if target_node.index() >= self.molecule.atoms().count() {
             return None;
-        };
-        let mut active = orders_mask & self.present_bond_orders;
-        if active == 0 {
-            return Some(0);
         }
-        let base = target_node.index() * *order_count;
-        let mut mask = 0u128;
-        while active != 0 {
-            let order = active.trailing_zeros() as u8;
-            active &= active - 1;
-            let rank = bit_rank_u8(self.present_bond_orders, order)
-                .expect("present bond order bit is set");
-            mask |= adj[base + rank];
+        match &self.bond_order_adj {
+            HostBondOrderBitsets::None => None,
+            HostBondOrderBitsets::U64 { order_count, adj } => {
+                let mut active = orders_mask & self.present_bond_orders;
+                if active == 0 {
+                    return Some(0);
+                }
+                let base = target_node.index() * *order_count;
+                let mut mask = 0u128;
+                while active != 0 {
+                    let order = active.trailing_zeros() as u8;
+                    active &= active - 1;
+                    let rank = bit_rank_u8(self.present_bond_orders, order)
+                        .expect("present bond order bit is set");
+                    mask |= u128::from(adj[base + rank]);
+                }
+                Some(mask)
+            }
+            HostBondOrderBitsets::U128 { order_count, adj } => {
+                let mut active = orders_mask & self.present_bond_orders;
+                if active == 0 {
+                    return Some(0);
+                }
+                let base = target_node.index() * *order_count;
+                let mut mask = 0u128;
+                while active != 0 {
+                    let order = active.trailing_zeros() as u8;
+                    active &= active - 1;
+                    let rank = bit_rank_u8(self.present_bond_orders, order)
+                        .expect("present bond order bit is set");
+                    mask |= adj[base + rank];
+                }
+                Some(mask)
+            }
         }
-        Some(mask)
     }
 
     #[cfg(test)]
@@ -868,7 +873,7 @@ enum PreparedPatternEngine {
     Incidence {
         incidence: IncidenceGraph,
         query: PreparedSubgraphQuery,
-        edge_electrons: Vec<IncidenceElectron>,
+        incidence_electrons: Vec<IncidenceElectron>,
         node_classes: Vec<u32>,
         node_class_count: usize,
     },
@@ -884,10 +889,9 @@ enum PreparedPatternEngine {
 ///
 /// # Semantic properties
 ///
-/// - Matching `PreparedSubstructurePattern::try_new(pattern, config)?` against `host` (or
+/// - Matching `PreparedSubstructurePattern::new(pattern, config)` against `host` (or
 ///   `PreparedSubstructureHost::new(host)`) produces the exact same match set, existence, and
 ///   count as matching `pattern` directly with `config`.
-/// - All matching methods are infallible once construction succeeds.
 /// - Cloning preserves the prepared snapshot and configuration; mutating the source [`Molecule`]
 ///   after construction does not affect the prepared pattern.
 #[derive(Clone, Debug)]
@@ -912,19 +916,15 @@ pub struct PreparedSubstructurePattern {
 impl PreparedSubstructurePattern {
     /// Prepare `pattern` for substructure matching under `config`.
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// Returns [`SubstructureMatchError::MoleculeScopeConstraints`] if `pattern` carries
-    /// molecule-scope constraints, which substructure matching does not evaluate.
-    pub fn try_new(
-        pattern: &Molecule,
-        config: SubstructureMatchConfig,
-    ) -> Result<Self, SubstructureMatchError> {
-        if !pattern.constraints().is_empty() {
-            return Err(SubstructureMatchError::MoleculeScopeConstraints {
-                count: pattern.constraints().len(),
-            });
-        }
+    /// Panics if `pattern` carries molecule constraints, which substructure matching
+    /// does not evaluate.
+    pub fn new(pattern: &Molecule, config: SubstructureMatchConfig) -> Self {
+        assert!(
+            pattern.constraints().is_empty(),
+            "substructure matching does not evaluate molecule constraints"
+        );
         let pattern = pattern.clone();
         let needs_rings = pattern_needs_rings(&pattern);
         let (present_overlays, overlay_counts) = overlay_summary(&pattern);
@@ -1026,9 +1026,9 @@ impl PreparedSubstructurePattern {
             }
             SubstructureMatchAlgorithm::Incidence => {
                 let incidence = pattern.incidence_graph(IncidenceLevel::Constitution);
-                let edge_electrons = precompute_incidence_electrons(&pattern, &incidence);
+                let incidence_electrons = precompute_incidence_electrons(&pattern, &incidence);
                 let mut query = PreparedSubgraphQuery::new(
-                    incidence.graph(),
+                    incidence.raw_graph(),
                     config.subgraph_isomorphism_algorithm,
                 );
                 if config.reduce_pattern_symmetry {
@@ -1042,7 +1042,7 @@ impl PreparedSubstructurePattern {
                     let generators = pattern.proper_incidence_generators(&graph_symmetry);
                     if !generators.is_empty() {
                         let symmetry = QuerySymmetryConstraints::try_from_generators(
-                            incidence.graph(),
+                            incidence.raw_graph(),
                             &generators,
                         )
                         .expect(
@@ -1051,24 +1051,19 @@ impl PreparedSubstructurePattern {
                         query = query.with_symmetry(symmetry);
                     }
                 }
-                let (node_classes, node_class_count) = build_incidence_node_classes(
-                    &incidence,
-                    &atom_class_of,
-                    atom_classes.len(),
-                    &bond_class_of,
-                    bond_classes.len(),
-                );
+                let (node_classes, node_class_count) =
+                    build_incidence_node_classes(&incidence, &atom_class_of, atom_classes.len());
                 PreparedPatternEngine::Incidence {
                     incidence,
                     query,
-                    edge_electrons,
+                    incidence_electrons,
                     node_classes,
                     node_class_count,
                 }
             }
         };
 
-        Ok(Self {
+        Self {
             pattern,
             config,
             needs_rings,
@@ -1084,7 +1079,7 @@ impl PreparedSubstructurePattern {
             constrained_bond_class_count,
             all_bonds_undetermined,
             engine,
-        })
+        }
     }
 
     /// Snapshotted pattern [`Molecule`].
@@ -1358,7 +1353,7 @@ impl PreparedSubstructurePattern {
             PreparedPatternEngine::Incidence {
                 incidence,
                 query,
-                edge_electrons,
+                incidence_electrons,
                 node_classes,
                 node_class_count,
             } => {
@@ -1371,7 +1366,7 @@ impl PreparedSubstructurePattern {
                 let mut predicate = IncidenceSubstructurePredicate::new(
                     self,
                     incidence,
-                    edge_electrons,
+                    incidence_electrons,
                     node_classes,
                     *node_class_count,
                     host,
@@ -1404,7 +1399,7 @@ impl PreparedSubstructurePattern {
             PreparedPatternEngine::Incidence {
                 incidence,
                 query,
-                edge_electrons,
+                incidence_electrons,
                 node_classes,
                 node_class_count,
             } => {
@@ -1417,7 +1412,7 @@ impl PreparedSubstructurePattern {
                 let mut predicate = IncidenceSubstructurePredicate::new(
                     self,
                     incidence,
-                    edge_electrons,
+                    incidence_electrons,
                     node_classes,
                     *node_class_count,
                     host,
@@ -1450,7 +1445,7 @@ impl PreparedSubstructurePattern {
             PreparedPatternEngine::Incidence {
                 incidence,
                 query,
-                edge_electrons,
+                incidence_electrons,
                 node_classes,
                 node_class_count,
             } => {
@@ -1463,7 +1458,7 @@ impl PreparedSubstructurePattern {
                 let mut predicate = IncidenceSubstructurePredicate::new(
                     self,
                     incidence,
-                    edge_electrons,
+                    incidence_electrons,
                     node_classes,
                     *node_class_count,
                     host,
@@ -1607,15 +1602,11 @@ fn build_incidence_node_classes(
     incidence: &IncidenceGraph,
     atom_class_of: &[u32],
     atom_class_count: usize,
-    bond_class_of: &[u32],
-    bond_class_count: usize,
 ) -> (Vec<u32>, usize) {
-    let node_count = incidence.graph().node_count();
+    let node_count = incidence.node_count();
     let mut node_classes = Vec::with_capacity(node_count);
     node_classes.extend_from_slice(atom_class_of);
-    let bond_base = atom_class_count as u32;
-    node_classes.extend(bond_class_of.iter().map(|&cls| bond_base + cls));
-    let mut next_class = atom_class_count + bond_class_count;
+    let mut next_class = atom_class_count;
 
     let overlay_kinds = [
         EntityKind::DativeBond,
@@ -1624,7 +1615,7 @@ fn build_incidence_node_classes(
         EntityKind::NoncovalentBond,
     ];
     for kind in overlay_kinds {
-        let count = incidence.entity_count(kind);
+        let count = incidence.node_count_of(kind);
         if count > 0 {
             let class_id = next_class as u32;
             next_class += 1;
@@ -2063,7 +2054,7 @@ impl SubgraphIsomorphismPredicate for GraphSubstructurePredicate<'_> {
 struct IncidenceSubstructurePredicate<'a> {
     matcher: EntityMatcher<'a>,
     pattern_incidence: &'a IncidenceGraph,
-    pattern_edge_electrons: &'a [IncidenceElectron],
+    pattern_incidence_electrons: &'a [IncidenceElectron],
     node_classes: &'a [u32],
     node_class_count: usize,
     host_incidence: &'a PreparedIncidenceHost,
@@ -2074,7 +2065,7 @@ impl<'a> IncidenceSubstructurePredicate<'a> {
     fn new(
         pattern: &'a PreparedSubstructurePattern,
         pattern_incidence: &'a IncidenceGraph,
-        pattern_edge_electrons: &'a [IncidenceElectron],
+        pattern_incidence_electrons: &'a [IncidenceElectron],
         node_classes: &'a [u32],
         node_class_count: usize,
         host: &'a PreparedSubstructureHost,
@@ -2084,7 +2075,7 @@ impl<'a> IncidenceSubstructurePredicate<'a> {
         Self {
             matcher: EntityMatcher::new(pattern, host, host_rings),
             pattern_incidence,
-            pattern_edge_electrons,
+            pattern_incidence_electrons,
             node_classes,
             node_class_count,
             host_incidence,
@@ -2096,16 +2087,15 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
     #[inline]
     fn match_node(&mut self, query_node: NodeId, target_node: NodeId) -> bool {
         match (
-            self.pattern_incidence.entity(query_node),
-            self.host_incidence.incidence.entity(target_node),
+            self.pattern_incidence
+                .entity(IncidenceNodeId::from(query_node)),
+            self.host_incidence
+                .incidence
+                .entity(IncidenceNodeId::from(target_node)),
         ) {
             (Entity::Atom(pa), Entity::Atom(ha)) => {
                 let class_id = self.matcher.pattern.atom_class_of[pa.index()] as usize;
                 self.matcher.match_atom_class(class_id, ha)
-            }
-            (Entity::Bond(pb), Entity::Bond(hb)) => {
-                let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
-                self.matcher.match_bond_class(class_id, hb)
             }
             (pe, he) => pe.kind() == he.kind(),
         }
@@ -2113,15 +2103,61 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
 
     #[inline]
     fn match_edge(&mut self, query_edge: EdgeId, target_edge: EdgeId) -> bool {
-        if self.pattern_incidence.incidence(query_edge)
-            != self.host_incidence.incidence.incidence(target_edge)
-        {
-            return false;
+        let q_edge = IncidenceEdgeId::from(query_edge);
+        let t_edge = IncidenceEdgeId::from(target_edge);
+        match (
+            self.pattern_incidence.edge(q_edge),
+            self.host_incidence.incidence.edge(t_edge),
+        ) {
+            (IncidenceEdge::Bond(pb), IncidenceEdge::Bond(hb)) => {
+                let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
+                self.matcher.match_bond_class(class_id, hb)
+            }
+            (IncidenceEdge::Incidence(pi), IncidenceEdge::Incidence(hi)) => {
+                if pi != hi {
+                    return false;
+                }
+                let q_idx = self
+                    .pattern_incidence
+                    .overlay_incidence_index(q_edge)
+                    .expect("overlay edge has incidence index");
+                let t_idx = self
+                    .host_incidence
+                    .incidence
+                    .overlay_incidence_index(t_edge)
+                    .expect("overlay edge has incidence index");
+                incidence_electrons_match(
+                    self.pattern_incidence_electrons[q_idx],
+                    self.host_incidence.incidence_electrons[t_idx],
+                )
+            }
+            _ => false,
         }
-        incidence_electrons_match(
-            self.pattern_edge_electrons[query_edge.index()],
-            self.host_incidence.edge_electrons[target_edge.index()],
-        )
+    }
+
+    #[inline]
+    fn all_edges_undetermined(&self) -> bool {
+        self.pattern_incidence.incidence_count() == 0
+            && self.matcher.pattern.all_bonds_undetermined
+            && self.matcher.host.all_bonds_fields_satisfiable
+    }
+
+    #[inline]
+    fn edge_is_undetermined(&self, query_edge: EdgeId) -> bool {
+        match self
+            .pattern_incidence
+            .edge(IncidenceEdgeId::from(query_edge))
+        {
+            IncidenceEdge::Bond(pb) => {
+                let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
+                self.matcher.host.all_bonds_fields_satisfiable
+                    && matches!(
+                        self.matcher.pattern.bond_classes[class_id].fast_kind,
+                        BondFastKind::Undetermined
+                    )
+            }
+            IncidenceEdge::Incidence(_) => false,
+        }
     }
 
     #[inline]
@@ -2135,38 +2171,15 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
     }
 
     fn node_candidates_u64(&mut self, query_node: NodeId, eligible: u64) -> u64 {
-        match self.pattern_incidence.entity(query_node) {
+        match self
+            .pattern_incidence
+            .entity(IncidenceNodeId::from(query_node))
+        {
             Entity::Atom(pa) => {
                 let (start, end) = self.host_incidence.kind_range(EntityKind::Atom);
                 let atom_eligible = eligible & range_mask_u64(start, end);
                 let class_id = self.matcher.pattern.atom_class_of[pa.index()] as usize;
                 self.matcher.atom_candidates_u64(class_id, atom_eligible)
-            }
-            Entity::Bond(pb) => {
-                let (start, end) = self.host_incidence.kind_range(EntityKind::Bond);
-                let bond_eligible = eligible & range_mask_u64(start, end);
-                let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
-                if self.matcher.host.all_bonds_fields_satisfiable
-                    && matches!(
-                        self.matcher.pattern.bond_classes[class_id].fast_kind,
-                        BondFastKind::Undetermined
-                    )
-                {
-                    return bond_eligible;
-                }
-                let mut mask = 0u64;
-                let mut remaining = bond_eligible;
-                while remaining != 0 {
-                    let node = remaining.trailing_zeros() as usize;
-                    remaining &= remaining - 1;
-                    if self
-                        .matcher
-                        .match_bond_class(class_id, BondId((node - start) as u32))
-                    {
-                        mask |= 1u64 << node;
-                    }
-                }
-                mask
             }
             entity => {
                 let (start, end) = self.host_incidence.kind_range(entity.kind());
@@ -2176,38 +2189,15 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
     }
 
     fn node_candidates_u128(&mut self, query_node: NodeId, eligible: u128) -> u128 {
-        match self.pattern_incidence.entity(query_node) {
+        match self
+            .pattern_incidence
+            .entity(IncidenceNodeId::from(query_node))
+        {
             Entity::Atom(pa) => {
                 let (start, end) = self.host_incidence.kind_range(EntityKind::Atom);
                 let atom_eligible = eligible & range_mask_u128(start, end);
                 let class_id = self.matcher.pattern.atom_class_of[pa.index()] as usize;
                 self.matcher.atom_candidates_u128(class_id, atom_eligible)
-            }
-            Entity::Bond(pb) => {
-                let (start, end) = self.host_incidence.kind_range(EntityKind::Bond);
-                let bond_eligible = eligible & range_mask_u128(start, end);
-                let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
-                if self.matcher.host.all_bonds_fields_satisfiable
-                    && matches!(
-                        self.matcher.pattern.bond_classes[class_id].fast_kind,
-                        BondFastKind::Undetermined
-                    )
-                {
-                    return bond_eligible;
-                }
-                let mut mask = 0u128;
-                let mut remaining = bond_eligible;
-                while remaining != 0 {
-                    let node = remaining.trailing_zeros() as usize;
-                    remaining &= remaining - 1;
-                    if self
-                        .matcher
-                        .match_bond_class(class_id, BondId((node - start) as u32))
-                    {
-                        mask |= 1u128 << node;
-                    }
-                }
-                mask
             }
             entity => {
                 let (start, end) = self.host_incidence.kind_range(entity.kind());
@@ -2223,7 +2213,10 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
         out: &mut [u64],
     ) {
         let len = eligible.len().min(out.len());
-        match self.pattern_incidence.entity(query_node) {
+        match self
+            .pattern_incidence
+            .entity(IncidenceNodeId::from(query_node))
+        {
             Entity::Atom(pa) => {
                 let (start, end) = self.host_incidence.kind_range(EntityKind::Atom);
                 let class_id = self.matcher.pattern.atom_class_of[pa.index()] as usize;
@@ -2234,37 +2227,6 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
                             .atom_candidates_word(class_id, word_idx, atom_eligible);
                 }
             }
-            Entity::Bond(pb) => {
-                let (start, end) = self.host_incidence.kind_range(EntityKind::Bond);
-                let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
-                let all_pass = self.matcher.host.all_bonds_fields_satisfiable
-                    && matches!(
-                        self.matcher.pattern.bond_classes[class_id].fast_kind,
-                        BondFastKind::Undetermined
-                    );
-                for word_idx in 0..len {
-                    let bond_eligible = eligible[word_idx] & range_mask_word(start, end, word_idx);
-                    if all_pass || bond_eligible == 0 {
-                        out[word_idx] = bond_eligible;
-                        continue;
-                    }
-                    let mut mask = 0u64;
-                    let mut remaining = bond_eligible;
-                    let base = word_idx * 64;
-                    while remaining != 0 {
-                        let bit = remaining.trailing_zeros() as usize;
-                        remaining &= remaining - 1;
-                        let node = base + bit;
-                        if self
-                            .matcher
-                            .match_bond_class(class_id, BondId((node - start) as u32))
-                        {
-                            mask |= 1u64 << bit;
-                        }
-                    }
-                    out[word_idx] = mask;
-                }
-            }
             entity => {
                 let (start, end) = self.host_incidence.kind_range(entity.kind());
                 for word_idx in 0..len {
@@ -2273,6 +2235,42 @@ impl SubgraphIsomorphismPredicate for IncidenceSubstructurePredicate<'_> {
             }
         }
         out[len..].fill(0);
+    }
+
+    #[inline]
+    fn edge_neighbors_u64(&mut self, query_edge: EdgeId, target_node: NodeId) -> Option<u64> {
+        let IncidenceEdge::Bond(pb) = self
+            .pattern_incidence
+            .edge(IncidenceEdgeId::from(query_edge))
+        else {
+            return None;
+        };
+        let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
+        match self.matcher.pattern.bond_classes[class_id].fast_kind {
+            BondFastKind::OrderMask(orders_mask) => self
+                .matcher
+                .host
+                .bond_order_neighbors_u64(orders_mask, target_node),
+            BondFastKind::Undetermined | BondFastKind::General => None,
+        }
+    }
+
+    #[inline]
+    fn edge_neighbors_u128(&mut self, query_edge: EdgeId, target_node: NodeId) -> Option<u128> {
+        let IncidenceEdge::Bond(pb) = self
+            .pattern_incidence
+            .edge(IncidenceEdgeId::from(query_edge))
+        else {
+            return None;
+        };
+        let class_id = self.matcher.pattern.bond_class_of[pb.index()] as usize;
+        match self.matcher.pattern.bond_classes[class_id].fast_kind {
+            BondFastKind::OrderMask(orders_mask) => self
+                .matcher
+                .host
+                .bond_order_neighbors_u128(orders_mask, target_node),
+            BondFastKind::Undetermined | BondFastKind::General => None,
+        }
     }
 }
 
@@ -2292,9 +2290,7 @@ mod tests {
 
     use super::{PreparedSubstructureHost, PreparedSubstructurePattern};
     use crate::ir::substructure::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-    use crate::ir::substructure::{
-        SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,
-    };
+    use crate::ir::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
     use crate::ir::{
         AromaticSystemForm, AtomForm, AtomId, BondForm, ElectronCountsForm, ElementForm, Molecule,
         MoleculeCorrespondence, MoleculeEntries, NumForm,
@@ -2385,7 +2381,7 @@ mod tests {
         assert!(!prepared.has_cached_symmetry(AutomorphismAlgorithm::Nauty));
 
         // Plain GraphAndOverlays matching populates none of the lazy caches.
-        let pat = PreparedSubstructurePattern::try_new(
+        let pat = PreparedSubstructurePattern::new(
             &mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
             SubstructureMatchConfig {
                 match_algorithm: GraphAndOverlays,
@@ -2395,15 +2391,14 @@ mod tests {
                 reduce_pattern_symmetry: false,
                 reduce_host_symmetry: false,
             },
-        )
-        .unwrap();
+        );
         assert_eq!(pat.count_matches_in_host(&prepared), 1);
         assert!(!prepared.has_cached_incidence());
         assert!(!prepared.has_cached_rings(RelevantCycleEnumerationAlgorithm::Vismara));
         assert!(!prepared.has_cached_symmetry(AutomorphismAlgorithm::TrailIr));
 
         // Ring constraint populates only the ring cache (and shares it with clones).
-        let ring_pat = PreparedSubstructurePattern::try_new(
+        let ring_pat = PreparedSubstructurePattern::new(
             &mol_dsl!(r#"{:atoms ["C#R0"] :bonds []}"#),
             SubstructureMatchConfig {
                 match_algorithm: GraphAndOverlays,
@@ -2413,8 +2408,7 @@ mod tests {
                 reduce_pattern_symmetry: false,
                 reduce_host_symmetry: false,
             },
-        )
-        .unwrap();
+        );
         assert_eq!(ring_pat.count_matches_in_host(&prepared), 2);
         assert!(prepared.has_cached_rings(RelevantCycleEnumerationAlgorithm::Vismara));
         assert!(cloned.has_cached_rings(RelevantCycleEnumerationAlgorithm::Vismara));
@@ -2422,7 +2416,7 @@ mod tests {
         assert!(!prepared.has_cached_symmetry(AutomorphismAlgorithm::TrailIr));
 
         // Host symmetry populates only the requested automorphism algorithm's cache.
-        let sym_pat = PreparedSubstructurePattern::try_new(
+        let sym_pat = PreparedSubstructurePattern::new(
             &mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
             SubstructureMatchConfig {
                 match_algorithm: GraphAndOverlays,
@@ -2432,14 +2426,13 @@ mod tests {
                 reduce_pattern_symmetry: false,
                 reduce_host_symmetry: true,
             },
-        )
-        .unwrap();
+        );
         assert_eq!(sym_pat.count_matches_in_host(&prepared), 2);
         assert!(prepared.has_cached_symmetry(AutomorphismAlgorithm::TrailIr));
         assert!(!prepared.has_cached_symmetry(AutomorphismAlgorithm::Nauty));
 
         // Incidence matching populates the incidence cache.
-        let inc_pat = PreparedSubstructurePattern::try_new(
+        let inc_pat = PreparedSubstructurePattern::new(
             &mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
             SubstructureMatchConfig {
                 match_algorithm: Incidence,
@@ -2449,14 +2442,13 @@ mod tests {
                 reduce_pattern_symmetry: false,
                 reduce_host_symmetry: false,
             },
-        )
-        .unwrap();
+        );
         assert_eq!(inc_pat.count_matches_in_host(&prepared), 1);
         assert!(prepared.has_cached_incidence());
     }
 
     #[rstest]
-    fn test_prepared_substructure_pattern_try_new() {
+    fn test_prepared_substructure_pattern_new() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<PreparedSubstructurePattern>();
 
@@ -2469,7 +2461,7 @@ mod tests {
             reduce_pattern_symmetry: false,
             reduce_host_symmetry: false,
         };
-        let prepared = PreparedSubstructurePattern::try_new(&pattern, config).unwrap();
+        let prepared = PreparedSubstructurePattern::new(&pattern, config);
         let cloned = prepared.clone();
         pattern.atom_mut(AtomId(1)).attributes_mut().element = ElementForm::Lit(Element::N);
 
@@ -2486,31 +2478,25 @@ mod tests {
 
     #[rstest]
     #[case::one_constraint(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"#),
-        SubstructureMatchError::MoleculeScopeConstraints { count: 1 }
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"#)
     )]
     #[case::two_constraints(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}} {:charge-sum {:sum 0}}]}"#),
-        SubstructureMatchError::MoleculeScopeConstraints { count: 2 }
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}} {:charge-sum {:sum 0}}]}"#)
     )]
-    fn test_prepared_substructure_pattern_try_new_error(
+    #[should_panic(expected = "substructure matching does not evaluate molecule constraints")]
+    fn test_prepared_substructure_pattern_new_error(
         #[case] pattern: Molecule,
-        #[case] expected: SubstructureMatchError,
+        #[values(GraphAndOverlays, Incidence)] strategy: SubstructureMatchAlgorithm,
     ) {
-        for strategy in STRATEGIES {
-            let config = SubstructureMatchConfig {
-                match_algorithm: strategy,
-                subgraph_isomorphism_algorithm: BitsetRi,
-                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
-                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
-                reduce_pattern_symmetry: false,
-                reduce_host_symmetry: false,
-            };
-            assert_eq!(
-                PreparedSubstructurePattern::try_new(&pattern, config).unwrap_err(),
-                expected
-            );
-        }
+        let config = SubstructureMatchConfig {
+            match_algorithm: strategy,
+            subgraph_isomorphism_algorithm: BitsetRi,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
+        };
+        let _ = PreparedSubstructurePattern::new(&pattern, config);
     }
 
     #[rstest]
@@ -2639,9 +2625,9 @@ mod tests {
                     reduce_pattern_symmetry: false,
                     reduce_host_symmetry: false,
                 };
-                let prepared = PreparedSubstructurePattern::try_new(&pattern, config).unwrap();
+                let prepared = PreparedSubstructurePattern::new(&pattern, config);
 
-                let direct = pattern.substructure_matches(&host, config).unwrap();
+                let direct = pattern.substructure_matches(&host, config);
                 let via_mol = prepared.matches(&host);
                 let via_host = prepared.matches_in_host(&prepared_host);
 
@@ -2770,21 +2756,17 @@ mod tests {
         let trivial_q = vec![(0..pattern.atoms().count()).collect::<Vec<_>>()];
         let trivial_h = vec![(0..host.atoms().count()).collect::<Vec<_>>()];
 
-        let all_embeddings = embedding_vectors(
-            &pattern
-                .substructure_matches(
-                    &host,
-                    SubstructureMatchConfig {
-                        match_algorithm: GraphAndOverlays,
-                        subgraph_isomorphism_algorithm: BitsetRi,
-                        relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
-                        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
-                        reduce_pattern_symmetry: false,
-                        reduce_host_symmetry: false,
-                    },
-                )
-                .unwrap(),
-        );
+        let all_embeddings = embedding_vectors(&pattern.substructure_matches(
+            &host,
+            SubstructureMatchConfig {
+                match_algorithm: GraphAndOverlays,
+                subgraph_isomorphism_algorithm: BitsetRi,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
+            },
+        ));
 
         let modes = [
             (false, false, expected_counts.0, &trivial_q, &trivial_h),
@@ -2809,8 +2791,7 @@ mod tests {
                             reduce_pattern_symmetry: red_q,
                             reduce_host_symmetry: red_h,
                         };
-                        let prepared =
-                            PreparedSubstructurePattern::try_new(&pattern, config).unwrap();
+                        let prepared = PreparedSubstructurePattern::new(&pattern, config);
                         let reps = embedding_vectors(&prepared.matches_in_host(&prepared_host));
                         let count = prepared.count_matches_in_host(&prepared_host);
 
@@ -2886,7 +2867,7 @@ mod tests {
                     reduce_pattern_symmetry: false,
                     reduce_host_symmetry: false,
                 };
-                let prepared = PreparedSubstructurePattern::try_new(&pattern, config).unwrap();
+                let prepared = PreparedSubstructurePattern::new(&pattern, config);
                 assert_eq!(prepared.count_matches_in_host(&prepared_host), 1);
                 let matches = prepared.matches_in_host(&prepared_host);
                 assert_eq!(matches.len(), 1);
@@ -2909,16 +2890,14 @@ mod tests {
             reduce_pattern_symmetry: false,
             reduce_host_symmetry: false,
         };
-        let outer = PreparedSubstructurePattern::try_new(
+        let outer = PreparedSubstructurePattern::new(
             &mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
             config,
-        )
-        .unwrap();
-        let inner = PreparedSubstructurePattern::try_new(
+        );
+        let inner = PreparedSubstructurePattern::new(
             &mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
             config,
-        )
-        .unwrap();
+        );
 
         let mut nested_counts = Vec::new();
         let _: ControlFlow<()> = outer.visit_embeddings_in_host(&host, |_| {
@@ -2926,5 +2905,72 @@ mod tests {
             ControlFlow::Continue(())
         });
         assert_eq!(nested_counts, vec![1, 1]);
+    }
+
+    #[rstest]
+    fn test_prepared_substructure_pattern_incidence_u64_atoms_u128_nodes() {
+        let mut atoms = vec![AtomForm::from_element(Element::C); 63];
+        atoms[0] = AtomForm::from_element(Element::N);
+        let bonds: Vec<(AtomId, AtomId, BondForm)> = (0..62)
+            .map(|i| {
+                (
+                    AtomId(i as u32),
+                    AtomId((i + 1) as u32),
+                    BondForm::from_order(if i == 0 { 2 } else { 1 }),
+                )
+            })
+            .collect();
+        let aromatic = vec![
+            (
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            ),
+            (
+                vec![AtomId(10), AtomId(11)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            ),
+            (
+                vec![AtomId(20), AtomId(21)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            ),
+        ];
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms,
+            bonds,
+            aromatic,
+            ..Default::default()
+        });
+        let pattern = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemForm::from_electrons(vec![2, 1]),
+            )],
+            ..Default::default()
+        });
+        let prepared_host = PreparedSubstructureHost::new(&host);
+
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let config = SubstructureMatchConfig {
+                    match_algorithm: strategy,
+                    subgraph_isomorphism_algorithm: subiso,
+                    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                    reduce_pattern_symmetry: false,
+                    reduce_host_symmetry: false,
+                };
+                let prepared = PreparedSubstructurePattern::new(&pattern, config);
+                assert_eq!(prepared.count_matches_in_host(&prepared_host), 1);
+                let matches = prepared.matches_in_host(&prepared_host);
+                assert_eq!(matches.len(), 1);
+                assert_eq!(matches[0].atoms().right_of(AtomId(0)), Some(AtomId(0)));
+                assert_eq!(matches[0].atoms().right_of(AtomId(1)), Some(AtomId(1)));
+            }
+        }
     }
 }
