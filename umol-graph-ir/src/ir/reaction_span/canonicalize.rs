@@ -1,6 +1,6 @@
 //! Reaction-span and reaction canonicalization.
 
-use umol_graph_core::{EdgeId, Graph, NodeId};
+use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::aromatic::{aromatic_system_representative_action, AromaticSystemForm};
 use super::super::canonicalize::{
@@ -204,52 +204,25 @@ fn topology_search_input(
     incidence_graph: &IncidenceGraph,
     entity_colors: &[u32],
 ) -> TopologySearchInput {
-    let bond_color = |index: usize| {
-        let node = incidence_graph.node_of(Entity::Bond(BondId(index as u32)));
-        entity_colors[node.index()]
-    };
-    let mut bond_color_counts = vec![0_usize; entity_colors.len()];
-    for index in 0..span.bonds().len() {
-        bond_color_counts[bond_color(index) as usize] += 1;
-    }
-    let direct_bond_color = bond_color_counts
-        .into_iter()
-        .enumerate()
-        .filter(|(_, count)| *count > 0)
-        .max_by(|(lhs_color, lhs_count), (rhs_color, rhs_count)| {
-            lhs_count
-                .cmp(rhs_count)
-                .then_with(|| rhs_color.cmp(lhs_color))
-        })
-        .map(|(color, _)| color as u32);
-
     let atom_count = span.atoms().len();
-    let mut colors = entity_colors[..atom_count].to_vec();
-    let mut edges = Vec::<[u32; 2]>::with_capacity(span.bonds().len() * 2);
+    let graph = span.graph().clone();
+    debug_assert_eq!(graph.node_count(), atom_count);
+    debug_assert_eq!(graph.edge_count(), span.bonds().len());
 
-    for (index, edge) in span.graph().edge_ids().enumerate() {
-        let color = bond_color(index);
-        let [first, second] = span.graph().edge_endpoints(edge).map(|atom| atom.0);
-        if direct_bond_color == Some(color) {
-            edges.push([first, second]);
-        } else {
-            let subdivision = colors.len() as u32;
-            colors.push(color);
-            edges.push([first, subdivision]);
-            edges.push([subdivision, second]);
-        }
-    }
-
-    let graph = Graph::new(colors.len(), &edges);
-    let edge_colors = vec![direct_bond_color.unwrap_or(0); graph.edge_count()];
-    let initial_partition = OrderedPartition::from_color_ranks(colors.iter().copied());
+    let node_colors = entity_colors[..atom_count].to_vec();
+    let edge_colors = (0..span.bonds().len())
+        .map(|index| {
+            let node = incidence_graph.node_of(Entity::Bond(BondId(index as u32)));
+            entity_colors[node.index()]
+        })
+        .collect();
+    let initial_partition = OrderedPartition::from_color_ranks(node_colors.iter().copied());
 
     TopologySearchInput {
         adapter: AutomorphismAdapter {
             graph,
-            colors,
+            node_colors,
             edge_colors,
-            source_node_count: atom_count,
         },
         initial_partition,
     }
@@ -664,7 +637,7 @@ fn canonical_candidate(
             let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
             canonical_search(
                 &adapter,
-                &adapter.colors,
+                adapter.node_colors(),
                 context.automorphism_algorithm,
                 &leaf_candidate,
             )
@@ -676,7 +649,7 @@ fn canonical_candidate(
             };
             canonical_search_with_generator_filter(
                 &adapter,
-                &adapter.colors,
+                adapter.node_colors(),
                 context.automorphism_algorithm,
                 &leaf_candidate,
                 &filter_generators,
@@ -689,7 +662,7 @@ fn canonical_candidate(
             };
             canonical_search_with_generator_filter(
                 &adapter,
-                &adapter.colors,
+                adapter.node_colors(),
                 context.automorphism_algorithm,
                 &leaf_candidate,
                 &filter_generators,
@@ -779,7 +752,7 @@ impl ReactionSpan {
                 (adapter, initial_partition)
             } else {
                 let adapter = AutomorphismAdapter::new(incidence_graph, colors);
-                let partition = OrderedPartition::from_descriptors(&adapter.colors);
+                let partition = OrderedPartition::from_descriptors(adapter.node_colors());
                 (adapter, partition)
             }
         };

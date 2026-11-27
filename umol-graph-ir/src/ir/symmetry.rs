@@ -19,24 +19,12 @@ pub(crate) struct InitialColors {
     pub(crate) incidences: Vec<u32>,
 }
 
-/// Edge-colored simple graph and source-domain projection used by canonical search.
-///
-/// Source nodes occupy the leading `source_node_count` positions.
+/// Edge-colored simple graph adapter used by canonical search.
 #[derive(Clone, Debug)]
 pub(crate) struct AutomorphismAdapter {
     pub(crate) graph: Graph,
-    pub(crate) colors: Vec<u32>,
+    pub(crate) node_colors: Vec<u32>,
     pub(crate) edge_colors: Vec<u32>,
-    pub(crate) source_node_count: usize,
-}
-
-/// Automorphism data projected onto the source-entity domain.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct AutomorphismAdapterOutput {
-    pub(crate) source_orbits: Vec<NodeId>,
-    /// Source entity nodes in backend canonical-label order, used only to order search branches.
-    pub(crate) source_canonical_labels: Vec<NodeId>,
-    pub(crate) source_generators: Vec<Vec<NodeId>>,
 }
 
 impl AutomorphismAdapter {
@@ -48,9 +36,8 @@ impl AutomorphismAdapter {
 
         Self {
             graph: source.clone(),
-            colors: initial_colors.entities.clone(),
+            node_colors: initial_colors.entities.clone(),
             edge_colors: initial_colors.incidences.clone(),
-            source_node_count: source.node_count(),
         }
     }
 
@@ -58,12 +45,16 @@ impl AutomorphismAdapter {
         &self.graph
     }
 
+    pub(crate) fn node_colors(&self) -> &[u32] {
+        &self.node_colors
+    }
+
     pub(crate) fn edge_colors(&self) -> &[u32] {
         &self.edge_colors
     }
 
-    pub(crate) fn color(&self, node: NodeId) -> u32 {
-        self.colors[node.index()]
+    pub(crate) fn node_color(&self, node: NodeId) -> u32 {
+        self.node_colors[node.index()]
     }
 
     pub(crate) fn edge_color(&self, edge: EdgeId) -> u32 {
@@ -75,17 +66,16 @@ impl AutomorphismAdapter {
         partition: &OrderedPartition,
         algorithm: AutomorphismAlgorithm,
         scratch: &mut AutomorphismScratch,
-    ) -> (Vec<NodeId>, Vec<Vec<NodeId>>) {
+    ) -> AutomorphismGroup {
         let cell_indices = partition.cell_indices(self.graph().node_count());
         // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
         // exact adapter color here keeps orbit pruning restricted to true automorphisms.
-        let group = self.graph().automorphisms_with_scratch(
-            |node| (self.color(node), cell_indices[node.index()]),
+        self.graph().automorphisms_with_scratch(
+            |node| (self.node_color(node), cell_indices[node.index()]),
             |edge| self.edge_color(edge),
             algorithm,
             scratch,
-        );
-        self.project_automorphism_group(&group)
+        )
     }
 
     fn canonical_labeling_for_partition(
@@ -93,79 +83,32 @@ impl AutomorphismAdapter {
         partition: &OrderedPartition,
         algorithm: AutomorphismAlgorithm,
         scratch: &mut AutomorphismScratch,
-    ) -> AutomorphismAdapterOutput {
+    ) -> CanonicalLabeling {
         let cell_indices = partition.cell_indices(self.graph().node_count());
         // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
         // exact adapter color here keeps orbit pruning restricted to true automorphisms.
-        let labeling = self.graph().canonical_labeling_with_scratch(
-            |node| (self.color(node), cell_indices[node.index()]),
+        self.graph().canonical_labeling_with_scratch(
+            |node| (self.node_color(node), cell_indices[node.index()]),
             |edge| self.edge_color(edge),
             algorithm,
             scratch,
-        );
-        self.project_canonical_labeling(&labeling)
-    }
-
-    fn project_automorphism_group(
-        &self,
-        group: &AutomorphismGroup,
-    ) -> (Vec<NodeId>, Vec<Vec<NodeId>>) {
-        let source_orbits = (0..self.source_node_count)
-            .map(|index| {
-                let representative = group.orbit_of(NodeId(index as u32));
-                debug_assert!(representative.index() < self.source_node_count);
-                representative
-            })
-            .collect();
-        let source_generators = group
-            .generators()
-            .iter()
-            .map(|generator| {
-                debug_assert!(generator[..self.source_node_count]
-                    .iter()
-                    .all(|node| node.index() < self.source_node_count));
-                generator[..self.source_node_count].to_vec()
-            })
-            .collect();
-        (source_orbits, source_generators)
-    }
-
-    pub(crate) fn project_canonical_labeling(
-        &self,
-        labeling: &CanonicalLabeling,
-    ) -> AutomorphismAdapterOutput {
-        let (source_orbits, source_generators) =
-            self.project_automorphism_group(labeling.automorphisms());
-        let source_canonical_labels = labeling
-            .labels()
-            .iter()
-            .copied()
-            .filter(|node| node.index() < self.source_node_count)
-            .collect();
-        AutomorphismAdapterOutput {
-            source_orbits,
-            source_canonical_labels,
-            source_generators,
-        }
+        )
     }
 }
 
-fn source_orbits_from_generators(
-    source_node_count: usize,
-    generators: &[Vec<NodeId>],
-) -> Vec<NodeId> {
-    let mut sets = UnionFind::new(source_node_count);
+fn orbits_from_generators(node_count: usize, generators: &[Vec<NodeId>]) -> Vec<NodeId> {
+    let mut sets = UnionFind::new(node_count);
     for generator in generators {
-        debug_assert_eq!(generator.len(), source_node_count);
+        debug_assert_eq!(generator.len(), node_count);
         for (source, image) in generator.iter().enumerate() {
             sets.union(source, image.index());
         }
     }
 
-    let roots = (0..source_node_count)
+    let roots = (0..node_count)
         .map(|source| sets.find(source))
         .collect::<Vec<_>>();
-    let mut representatives = vec![usize::MAX; source_node_count];
+    let mut representatives = vec![usize::MAX; node_count];
     for (source, root) in roots.iter().copied().enumerate() {
         representatives[root] = representatives[root].min(source);
     }
@@ -404,19 +347,12 @@ impl OrderedPartition {
         Self { cells }
     }
 
-    pub(crate) fn first_non_singleton_entity_cell(&self, entity_count: usize) -> Option<usize> {
-        self.cells.iter().position(|cell| {
-            cell.len() > 1 && cell.first().is_some_and(|node| node.index() < entity_count)
-        })
+    pub(crate) fn first_non_singleton_cell(&self) -> Option<usize> {
+        self.cells.iter().position(|cell| cell.len() > 1)
     }
 
-    fn entity_order(&self, entity_count: usize) -> Vec<NodeId> {
-        self.cells
-            .iter()
-            .flatten()
-            .copied()
-            .filter(|node| node.index() < entity_count)
-            .collect()
+    fn node_order(&self) -> Vec<NodeId> {
+        self.cells.iter().flatten().copied().collect()
     }
 
     pub(crate) fn cell_indices(&self, node_count: usize) -> Vec<u32> {
@@ -481,14 +417,14 @@ pub(crate) fn same_cells(
             .zip(&target_partition.cells)
             .all(|(source_cell, target_cell)| {
                 source_cell.len() == target_cell.len()
-                    && source.color(source_cell[0]) == target.color(target_cell[0])
+                    && source.node_color(source_cell[0]) == target.node_color(target_cell[0])
             })
 }
 
-/// Whether the remapping `images` carries every entity node of `source` to a node of `target` with
-/// the same color and the same incidences.
+/// Whether the remapping `images` carries every node of `source` to a node of `target` with
+/// the same node color and the same edge-colored incidences.
 ///
-/// `images` holds the image of each entity node of `source`, and `target` has as many entity nodes.
+/// `images` holds the image of each node of `source`, and `target` has as many nodes.
 pub(crate) fn remapping_preserves_incidences(
     source: &AutomorphismAdapter,
     target: &AutomorphismAdapter,
@@ -502,28 +438,16 @@ pub(crate) fn remapping_preserves_incidences(
     ) {
         incidences.clear();
         for neighbor in adapter.graph().neighbors(node) {
-            if neighbor.node.index() < adapter.source_node_count {
-                incidences.push((image(neighbor.node), adapter.edge_color(neighbor.edge)));
-            } else {
-                let other = adapter
-                    .graph()
-                    .neighbors(neighbor.node)
-                    .iter()
-                    .map(|endpoint| endpoint.node)
-                    .find(|&endpoint| endpoint != node)
-                    .expect("a subdivision node joins two entity nodes");
-                incidences.push((image(other), adapter.color(neighbor.node)));
-            }
+            incidences.push((image(neighbor.node), adapter.edge_color(neighbor.edge)));
         }
         incidences.sort_unstable();
     }
 
     let mut source_incidences = Vec::new();
     let mut target_incidences = Vec::new();
-    (0..source.source_node_count).all(|index| {
-        let node = NodeId(index as u32);
-        let image = images[index];
-        if source.color(node) != target.color(image) {
+    source.graph().node_ids().all(|node| {
+        let image = images[node.index()];
+        if source.node_color(node) != target.node_color(image) {
             return false;
         }
         incidences(
@@ -657,12 +581,7 @@ where
         initial_residual_cell_sizes: initial
             .cells
             .iter()
-            .filter(|cell| {
-                cell.len() > 1
-                    && cell
-                        .first()
-                        .is_some_and(|node| node.index() < adapter.source_node_count)
-            })
+            .filter(|cell| cell.len() > 1)
             .map(Vec::len)
             .collect(),
         refinement_calls: 1,
@@ -705,13 +624,12 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    let Some(cell_index) = partition.first_non_singleton_entity_cell(adapter.source_node_count)
-    else {
+    let Some(cell_index) = partition.first_non_singleton_cell() else {
         #[cfg(test)]
         {
             stats.visited_leaves += 1;
         }
-        let entity_order = partition.entity_order(adapter.source_node_count);
+        let entity_order = partition.node_order();
         let candidate = leaf_candidate(&entity_order);
         let improves = if let Some(best) = best.as_ref() {
             #[cfg(test)]
@@ -728,26 +646,27 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
         return;
     };
 
+    let node_count = adapter.graph().node_count();
     let mut candidates = partition.cells[cell_index].clone();
     #[cfg(test)]
     {
         stats.backend_calls += 1;
     }
-    let mut automorphisms =
-        adapter.canonical_labeling_for_partition(&partition, algorithm, scratch);
-    if apply_generator_filter {
-        filter_generators(&mut automorphisms.source_generators);
-        automorphisms.source_orbits = source_orbits_from_generators(
-            adapter.source_node_count,
-            &automorphisms.source_generators,
-        );
-    }
+    let labeling = adapter.canonical_labeling_for_partition(&partition, algorithm, scratch);
+    let filtered_orbits = apply_generator_filter.then(|| {
+        let mut generators = labeling.automorphisms().generators().to_vec();
+        filter_generators(&mut generators);
+        orbits_from_generators(node_count, &generators)
+    });
 
-    let orbits = &automorphisms.source_orbits;
     let mut representatives = BTreeMap::<NodeId, NodeId>::new();
     for candidate in candidates {
+        let orbit = match &filtered_orbits {
+            Some(orbits) => orbits[candidate.index()],
+            None => labeling.automorphisms().orbit_of(candidate),
+        };
         representatives
-            .entry(orbits[candidate.index()])
+            .entry(orbit)
             .and_modify(|representative| *representative = (*representative).min(candidate))
             .or_insert(candidate);
     }
@@ -761,8 +680,8 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     {
         stats.branch_order_calls += 1;
     }
-    let mut ranks = vec![0; adapter.source_node_count];
-    for (rank, node) in automorphisms.source_canonical_labels.iter().enumerate() {
+    let mut ranks = vec![0; node_count];
+    for (rank, node) in labeling.labels().iter().enumerate() {
         ranks[node.index()] = rank;
     }
     candidates.sort_unstable_by_key(|node| ranks[node.index()]);
@@ -854,32 +773,29 @@ where
     Visitor: FnMut(&[NodeId]) -> ControlFlow<B>,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    let entity_count = source.source_node_count;
+    let node_count = source.graph().node_count();
     let source_root = source_partition.refine(source.graph(), source.edge_colors());
     let target_root = target_partition.refine(target.graph(), target.edge_colors());
     if !same_cells(source, &source_root, target, &target_root) {
         return ControlFlow::Continue(());
     }
     let images = |source_order: &[NodeId], target_order: &[NodeId]| {
-        let mut images = vec![NodeId(0); entity_count];
+        let mut images = vec![NodeId(0); node_count];
         for (source_node, target_node) in source_order.iter().zip(target_order) {
             images[source_node.index()] = *target_node;
         }
         images
     };
-    if source_root
-        .first_non_singleton_entity_cell(entity_count)
-        .is_none()
-    {
+    if source_root.first_non_singleton_cell().is_none() {
         return visitor(&images(
-            &source_root.entity_order(entity_count),
-            &target_root.entity_order(entity_count),
+            &source_root.node_order(),
+            &target_root.node_order(),
         ));
     }
 
     let mut source_path = source_root;
     let mut target_path = Some(target_root.clone());
-    while let Some(cell_index) = source_path.first_non_singleton_entity_cell(entity_count) {
+    while let Some(cell_index) = source_path.first_non_singleton_cell() {
         target_path = target_path.map(|path| {
             let node = path.cells[cell_index][0];
             path.individualize(cell_index, node)
@@ -896,9 +812,8 @@ where
             target_path = None;
         }
     }
-    let source_order = source_path.entity_order(entity_count);
-    let first_images =
-        target_path.map(|path| images(&source_order, &path.entity_order(entity_count)));
+    let source_order = source_path.node_order();
+    let first_images = target_path.map(|path| images(&source_order, &path.node_order()));
     if let Some(images) = &first_images {
         if let ControlFlow::Break(value) = visitor(images) {
             return ControlFlow::Break(value);
@@ -909,8 +824,8 @@ where
     let mut pending = vec![target_root];
     while let Some(partition) = pending.pop() {
         let partition = partition.refine(target.graph(), target.edge_colors());
-        let Some(cell_index) = partition.first_non_singleton_entity_cell(entity_count) else {
-            let images = images(&source_order, &partition.entity_order(entity_count));
+        let Some(cell_index) = partition.first_non_singleton_cell() else {
+            let images = images(&source_order, &partition.node_order());
             if first_images.as_deref() != Some(images.as_slice()) {
                 if let ControlFlow::Break(value) = visitor(&images) {
                     return ControlFlow::Break(value);
@@ -919,16 +834,20 @@ where
             continue;
         };
 
-        let (mut source_orbits, mut source_generators) =
-            target.automorphisms_for_partition(&partition, algorithm, &mut scratch);
-        if apply_generator_filter {
-            filter_generators(&mut source_generators);
-            source_orbits = source_orbits_from_generators(entity_count, &source_generators);
-        }
+        let group = target.automorphisms_for_partition(&partition, algorithm, &mut scratch);
+        let filtered_orbits = apply_generator_filter.then(|| {
+            let mut generators = group.generators().to_vec();
+            filter_generators(&mut generators);
+            orbits_from_generators(node_count, &generators)
+        });
         let mut representatives = BTreeMap::<NodeId, NodeId>::new();
         for &candidate in &partition.cells[cell_index] {
+            let orbit = match &filtered_orbits {
+                Some(orbits) => orbits[candidate.index()],
+                None => group.orbit_of(candidate),
+            };
             representatives
-                .entry(source_orbits[candidate.index()])
+                .entry(orbit)
                 .and_modify(|representative| *representative = (*representative).min(candidate))
                 .or_insert(candidate);
         }

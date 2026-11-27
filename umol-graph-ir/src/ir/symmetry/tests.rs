@@ -9,9 +9,8 @@ use super::*;
 fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
     AutomorphismAdapter {
         graph: source.clone(),
-        colors: vec![0; source.node_count()],
+        node_colors: vec![0; source.node_count()],
         edge_colors: vec![0; source.edge_count()],
-        source_node_count: source.node_count(),
     }
 }
 
@@ -34,15 +33,12 @@ fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
     ],
     vec![NodeId(0), NodeId(0), NodeId(0), NodeId(3)],
 )]
-fn test_source_orbits_from_generators(
-    #[case] source_node_count: usize,
+fn test_orbits_from_generators(
+    #[case] node_count: usize,
     #[case] generators: Vec<Vec<NodeId>>,
     #[case] expected: Vec<NodeId>,
 ) {
-    assert_eq!(
-        source_orbits_from_generators(source_node_count, &generators),
-        expected,
-    );
+    assert_eq!(orbits_from_generators(node_count, &generators), expected);
 }
 
 #[rstest]
@@ -347,7 +343,7 @@ fn test_canonical_search_stats(#[case] node_count: usize, #[case] expected: Cano
     };
     let actual = canonical_search(
         &adapter,
-        &adapter.colors,
+        adapter.node_colors(),
         AutomorphismAlgorithm::Nauty,
         &leaf_candidate,
     );
@@ -371,9 +367,8 @@ fn test_visit_remapping_candidates(
 ) {
     let adapter = AutomorphismAdapter {
         graph: Graph::new(source_colors.len(), &[]),
-        colors: vec![0; source_colors.len()],
+        node_colors: vec![0; source_colors.len()],
         edge_colors: Vec::new(),
-        source_node_count: source_colors.len(),
     };
     let mut actual = Vec::new();
     let flow: ControlFlow<()> = visit_remapping_candidates(
@@ -401,9 +396,8 @@ fn test_visit_remapping_candidates(
 fn test_visit_remapping_candidates_termination(#[case] accepted: Vec<NodeId>) {
     let adapter = AutomorphismAdapter {
         graph: Graph::new(3, &[]),
-        colors: vec![0; 3],
+        node_colors: vec![0; 3],
         edge_colors: Vec::new(),
-        source_node_count: 3,
     };
     let partition = OrderedPartition {
         cells: vec![vec![NodeId(0), NodeId(1), NodeId(2)]],

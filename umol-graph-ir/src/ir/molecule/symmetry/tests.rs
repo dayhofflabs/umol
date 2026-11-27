@@ -1415,7 +1415,7 @@ fn test_remapping_exists_individualized(
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let partition = |atoms: Vec<u32>| {
         atoms.into_iter().fold(
-            OrderedPartition::from_descriptors(&adapter.colors),
+            OrderedPartition::from_descriptors(adapter.node_colors()),
             |partition, atom| {
                 let node = incidence_graph.node_of(Entity::Atom(AtomId(atom)));
                 let cell_index = partition

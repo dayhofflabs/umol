@@ -792,9 +792,10 @@ reaction_span/canonicalize/tests.rs}`; **additive/internal (green)**. `[dep: S4b
     `577` `proptest` property tests, and `clippy --all-targets --features proptest -- -D warnings`
     without triggering any backend-pinned assertion failures under `Nauty`.
 
-#### S5b — Zero-subdivision `topology_search_input` and algorithm-independent test contracts
+#### S5b — Zero-subdivision `topology_search_input` and algorithm-independent test contracts [Done]
 
-**Module:** `umol-graph-ir/src/ir/{molecule/canonicalize.rs, molecule/canonicalize/tests.rs,
+**Module:** `umol-graph-ir/src/ir/{symmetry.rs, symmetry/tests.rs, molecule/symmetry.rs,
+molecule/symmetry/tests.rs, molecule/canonicalize.rs, molecule/canonicalize/tests.rs,
 reaction_span/canonicalize.rs, reaction_span/canonicalize/tests.rs}`; **additive/internal
 (green)**. `[dep: S5a]`
 
@@ -805,6 +806,22 @@ reaction_span/canonicalize.rs, reaction_span/canonicalize/tests.rs}`; **additive
   `test_canonical_candidate::{case_12_lhs_configuration, case_13_rhs_configuration,
   case_16_asymmetric_constraint}`) with algorithm-independent semantic invariants and explicit
   `Nauty` vs `TrailIr` canonicalization parity tests.
+- **Findings:**
+  - Removing modal bond subdivision from both `topology_search_input` builders eliminated the last
+    subdivision path in `umol-graph-ir`, allowing removal of `AutomorphismAdapter::source_node_count`,
+    `AutomorphismAdapterOutput`, `project_automorphism_group`, `project_canonical_labeling`, and the
+    subdivision fallback in `remapping_preserves_incidences`.
+  - Renamed `AutomorphismAdapter::{colors, color}` to `{node_colors, node_color}` (with matching
+    `node_colors()` / `edge_colors()` accessors), `OrderedPartition::{first_non_singleton_entity_cell,
+    entity_order}` to `{first_non_singleton_cell, node_order}`, and `source_orbits_from_generators`
+    to `orbits_from_generators`; `search_partition` and `visit_remapping_candidates` now consume
+    `CanonicalLabeling` and `AutomorphismGroup` directly without per-node clones when not filtering
+    generators.
+  - Replaced all 5 backend-pinned test assertions with algorithm-independent invariants (running both
+    `Nauty` and `TrailIr` and asserting exact canonical key parity plus sound subgroup-pruning leaf
+    bounds), and added `test_molecule_canonicalize_algorithm_parity` and
+    `test_reaction_span_canonicalize_algorithm_parity` verifying exact canonical form, hash, and
+    `canonical_eq` parity across all four `DescriptionLevel`s.
 
 ### S6 — Switch higher-layer defaults to `TrailIr` (Rust, `umol-py`, and docs)
 

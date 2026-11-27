@@ -115,36 +115,32 @@ impl Molecule {
                 .collect(),
         });
         let adapter = AutomorphismAdapter::new(&incidence, &colors);
-        let partition = OrderedPartition::from_descriptors(&adapter.colors);
-        let atom_colors_distinct = partition.cells.iter().all(|cell| {
-            cell.len() == 1
-                || cell[0].index() >= adapter.source_node_count
-                || !matches!(incidence.entity(cell[0]), Entity::Atom(_))
-        });
+        let partition = OrderedPartition::from_descriptors(adapter.node_colors());
+        let atom_colors_distinct = partition
+            .cells
+            .iter()
+            .all(|cell| cell.len() == 1 || !matches!(incidence.entity(cell[0]), Entity::Atom(_)));
         let partition = if atom_colors_distinct {
             partition.refine(adapter.graph(), adapter.edge_colors())
         } else {
             partition
         };
-        let (partition, automorphisms) = if partition
-            .first_non_singleton_entity_cell(adapter.source_node_count)
-            .is_none()
-        {
+        let (partition, automorphisms) = if partition.first_non_singleton_cell().is_none() {
             (partition, None)
         } else {
             let automorphisms = adapter.graph().automorphisms(
-                |node| adapter.color(node),
+                |node| adapter.node_color(node),
                 |edge| adapter.edge_color(edge),
                 config.automorphism_algorithm,
             );
             let descriptors = adapter
                 .graph()
                 .node_ids()
-                .map(|node| (adapter.color(node), automorphisms.orbit_of(node)))
+                .map(|node| (adapter.node_color(node), automorphisms.orbit_of(node)))
                 .collect::<Vec<_>>();
             let partition = OrderedPartition::from_descriptors(&descriptors);
             let automorphisms = partition
-                .first_non_singleton_entity_cell(adapter.source_node_count)
+                .first_non_singleton_cell()
                 .map(|_| Box::new(automorphisms));
             (partition, automorphisms)
         };
@@ -765,23 +761,20 @@ fn molecule_remapping_exists(
                     })
             });
         if source == target {
-            let images = (0..symmetry.adapter.source_node_count as u32)
-                .map(NodeId)
-                .collect::<Vec<_>>();
+            let images = symmetry.adapter.graph().node_ids().collect::<Vec<_>>();
             let preserved = matches_stereo(&images, orientation, changed);
             if preserved || unique_mapping {
                 return preserved;
             }
         }
         for generator in automorphisms.generators() {
-            let images = &generator[..symmetry.adapter.source_node_count];
             if source.iter().zip(target).any(|(&a, &b)| {
-                images[symmetry.incidence.node_of(Entity::Atom(a)).index()]
+                generator[symmetry.incidence.node_of(Entity::Atom(a)).index()]
                     != symmetry.incidence.node_of(Entity::Atom(b))
             }) {
                 continue;
             }
-            let preserved = matches_stereo(images, orientation, changed);
+            let preserved = matches_stereo(generator, orientation, changed);
             if preserved || unique_mapping {
                 return preserved;
             }
@@ -790,9 +783,7 @@ fn molecule_remapping_exists(
         if source != target {
             return false;
         }
-        let images = (0..symmetry.adapter.source_node_count as u32)
-            .map(NodeId)
-            .collect::<Vec<_>>();
+        let images = symmetry.adapter.graph().node_ids().collect::<Vec<_>>();
         return matches_stereo(&images, orientation, changed);
     }
     remapping_exists(
