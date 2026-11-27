@@ -258,49 +258,6 @@ fn relevant_cycle_enumeration(c: &mut Criterion) {
         });
     }
     group.finish();
-
-    let mut paths = c.benchmark_group("relevant_cycle_paths");
-    for (name, graph) in cycle_corpus() {
-        paths.bench_with_input(
-            BenchmarkId::new("vismara_direct", name),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph
-                        .try_enumerate_relevant_cycles(
-                            usize::MAX,
-                            RelevantCycleEnumerationAlgorithm::Vismara,
-                        )
-                        .expect("cycle corpus graphs are simple")
-                });
-            },
-        );
-        paths.bench_with_input(
-            BenchmarkId::new("vismara_fallback", name),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph.enumerate_relevant_cycles_fallback(
-                        usize::MAX,
-                        RelevantCycleEnumerationAlgorithm::Vismara,
-                    )
-                });
-            },
-        );
-        paths.bench_with_input(
-            BenchmarkId::new("vismara_total", name),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph.enumerate_relevant_cycles(
-                        usize::MAX,
-                        RelevantCycleEnumerationAlgorithm::Vismara,
-                    )
-                });
-            },
-        );
-    }
-    paths.finish();
 }
 
 fn simple_cycle_enumeration(c: &mut Criterion) {
@@ -313,43 +270,6 @@ fn simple_cycle_enumeration(c: &mut Criterion) {
         });
     }
     bounded.finish();
-
-    let mut paths = c.benchmark_group("simple_cycle_paths_bounded_8");
-    for (name, graph) in cycle_corpus() {
-        paths.bench_with_input(
-            BenchmarkId::new("read_tarjan_direct", name),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph
-                        .try_enumerate_simple_cycles(8, SimpleCycleEnumerationAlgorithm::ReadTarjan)
-                        .expect("cycle corpus graphs are simple")
-                });
-            },
-        );
-        paths.bench_with_input(
-            BenchmarkId::new("read_tarjan_fallback", name),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph.enumerate_simple_cycles_fallback(
-                        8,
-                        SimpleCycleEnumerationAlgorithm::ReadTarjan,
-                    )
-                });
-            },
-        );
-        paths.bench_with_input(
-            BenchmarkId::new("read_tarjan_total", name),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph.enumerate_simple_cycles(8, SimpleCycleEnumerationAlgorithm::ReadTarjan)
-                });
-            },
-        );
-    }
-    paths.finish();
 
     let cases = [
         ("path_6", path(6)),
@@ -476,10 +396,7 @@ fn traversal(c: &mut Criterion) {
         ("binary_tree_255", Graph::new(255, &tree_edges)),
         ("cycle_64", cycle(64)),
         ("four_hexagons", Graph::new(24, &disconnected_edges)),
-        (
-            "loops_parallel_isolated",
-            Graph::new(4, &[[0, 0], [0, 1], [0, 1], [1, 2]]),
-        ),
+        ("path_and_isolated", Graph::new(4, &[[0, 1], [1, 2]])),
     ];
     let mut components = c.benchmark_group("traversal/components");
     for (name, graph) in &graphs {
@@ -678,8 +595,17 @@ fn automorphism(c: &mut Criterion) {
     let incidence = [("adamantane", adamantane()), ("c60", fullerene_c60())]
         .into_iter()
         .map(|(name, graph)| {
-            let colors = incidence_colors(graph.node_count(), graph.edge_count());
-            (name, graph.subdivide_edges(), colors)
+            let n = graph.node_count();
+            let edges: Vec<[u32; 2]> = graph
+                .edge_ids()
+                .flat_map(|edge| {
+                    let [first, second] = graph.edge_endpoints(edge);
+                    let inserted = (n + edge.index()) as u32;
+                    [[first.0, inserted], [inserted, second.0]]
+                })
+                .collect();
+            let colors = incidence_colors(n, graph.edge_count());
+            (name, Graph::new(n + graph.edge_count(), &edges), colors)
         })
         .collect::<Vec<_>>();
 
@@ -700,8 +626,7 @@ fn automorphism(c: &mut Criterion) {
             });
         });
     }
-    for (name, subdivision, colors) in &incidence {
-        let graph = subdivision.graph();
+    for (name, graph, colors) in &incidence {
         group.bench_function(format!("incidence/{name}/class"), |b| {
             b.iter(|| {
                 graph.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty)

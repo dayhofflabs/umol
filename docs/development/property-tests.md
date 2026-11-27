@@ -259,34 +259,30 @@ A public semantic statement for simple-cycle enumeration can be organized as
 follows:
 
 ```text
-For graph G and maximum source-edge size b:
+For simple graph G and maximum edge size b:
 
-- every emitted Cycle is a cycle of G with at most b source edges;
+- every emitted Cycle is a cycle of G with at most b edges;
 - every such cycle is emitted exactly once;
 - node relabeling changes identifiers but not the represented cycle set;
-- enumeration and complete visitation produce the same cycle sequence;
-- direct and fallback operations agree on simple graphs;
-- the direct operation rejects a non-simple graph before emitting a cycle;
-- the combined operation agrees with the fallback on non-simple graphs.
+- enumeration and complete visitation produce the same cycle sequence.
 ```
 
 The current property suite supplies several kinds of evidence:
 
 | Assertion | Operational domain | Validation |
 | --- | --- | --- |
-| Soundness, completeness, size bound, and uniqueness | Generated multigraphs with bounded nodes and edges | Compare with enumeration of every edge subset satisfying the definition of a cycle. |
-| Direct/fallback/combined behavior | Generated simple and non-simple graphs | Compare all operation paths and their exact errors or emitted cycles. |
-| Visitor/enumerator agreement | Generated multigraphs | Collect visitor emissions and compare with enumeration. |
-| Relabeling behavior | Generated multigraphs under a fixed node reversal | Compare normalized source-edge sets. |
+| Soundness, completeness, size bound, and uniqueness | Generated simple graphs with bounded nodes and edges | Compare with enumeration of every edge subset satisfying the definition of a cycle. |
+| Visitor/enumerator agreement | Generated simple graphs | Collect visitor emissions and compare with enumeration. |
+| Relabeling behavior | Generated simple graphs under a fixed node reversal | Compare normalized edge sets. |
 | Small simple-graph completeness | Every checked-in simple graph through order six | Compare with definition-level exhaustive enumeration. |
-| Wider independent agreement | Captured simple-graph results through order eight and captured bounded multigraph results | Compare exact cycle collections. |
+| Wider independent agreement | Captured simple-graph results through order eight | Compare exact cycle collections. |
 | Chemically and graph-theoretically significant cases | Named literature fixtures | Compare source-stated results and preserve provenance. |
 
 The table communicates why the overlaps matter. The generated comparison finds
-small counterexamples and exercises multigraph behavior; the bounded
-simple-graph collection removes sampling within its bound; captured results
-provide an independently produced comparison; literature fixtures retain
-meaningful named structures. None is merely “more cases” for the same purpose.
+small counterexamples; the bounded simple-graph collection removes sampling
+within its bound; captured results provide an independently produced
+comparison; literature fixtures retain meaningful named structures. None is
+merely “more cases” for the same purpose.
 
 ### Minimum bases, relevant cycles, and ring families
 

@@ -1721,16 +1721,13 @@ says how results arrive.
 
 An operation returning a single value — one output struct, one set, one coloring, a count, an
 `Option` — takes none of these prefixes and has no visitor form; plural-sounding names for
-single-value operations, such as `automorphisms`, are not delivery prefixes. In this family,
-`try_*` marks restricted input-domain dispatch (simple graph against subdivision fallback), while
-`*_fallback` marks the corresponding fallback route. Both compose with the delivery prefix. The
-general meaning of `try_*` is defined under *Try prefix*. The execution contract behind the
-prefixes — streamability, visitor payload, and emission order — is defined in the algorithm
-execution guide.
+single-value operations, such as `automorphisms`, are not delivery prefixes. The general meaning
+of `try_*` is defined under *Try prefix*. The execution contract behind the prefixes —
+streamability, visitor payload, and emission order — is defined in the algorithm execution guide.
 
 **Not:** *iterative* for visitor delivery — an implementation may remain recursive while visiting
 results. Not a bare plural name for an eager collection-returning operation.
-**In code:** `visit_simple_cycles`, `try_visit_relevant_cycles`, `visit_perfect_matchings`,
+**In code:** `visit_simple_cycles`, `visit_relevant_cycles`, `visit_perfect_matchings`,
 `enumerate_relevant_cycles`; per the settled migration, `enumerate_subgraph_isomorphisms` and
 `visit_subgraph_isomorphisms`.
 
@@ -1950,8 +1947,7 @@ a checked operation cannot fail handles that result explicitly rather than requi
 public method solely to avoid it.
 
 **Not:** a general marker for fallibility.
-**In code:** `map`/`try_map`, `remap`/`try_remap`, `from_entries`/`try_from_entries`, and
-`try_visit_relevant_cycles` for restricted dispatch.
+**In code:** `map`/`try_map`, `remap`/`try_remap`, `from_entries`/`try_from_entries`.
 
 ### Underdetermined
 

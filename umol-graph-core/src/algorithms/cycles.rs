@@ -3,8 +3,7 @@
 //! Current operations provide breadth-first shortest-cycle queries; bounded
 //! Read--Tarjan simple-cycle visitation and collection; Vismara relevant-cycle
 //! visitation and collection; Horton minimum cycle bases; and Kolodzik Unique
-//! Ring Families. Read--Tarjan and Vismara expose strict simple-graph,
-//! explicit multigraph-fallback, and total dispatch operations. See [Read and
+//! Ring Families. See [Read and
 //! Tarjan (1975)](https://doi.org/10.1002/net.1975.5.3.237),
 //! [Horton (1987)](https://doi.org/10.1137/0216026),
 //! [Vismara (1997)](https://doi.org/10.37236/1294), and
@@ -12,14 +11,12 @@
 //! (2012)](https://doi.org/10.1021/ci200629w).
 
 use std::collections::{HashSet, VecDeque};
-use std::error::Error;
-use std::fmt;
 use std::ops::ControlFlow;
 use std::slice::Iter;
 
 use num_bigint::BigUint;
 
-use crate::graph::{Graph, SubdividedGraph, SubdivisionNodeSource};
+use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
 mod basis;
@@ -28,18 +25,6 @@ mod simple;
 mod urf;
 
 use self::basis::minimum_cycle_basis_horton;
-
-/// Error returned when a graph operation requires a simple graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct NonSimpleGraphError;
-
-impl fmt::Display for NonSimpleGraphError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "graph is not simple")
-    }
-}
-
-impl Error for NonSimpleGraphError {}
 
 /// An undirected cycle represented by corresponding node and edge sequences.
 ///
@@ -118,34 +103,6 @@ impl Cycle {
         Self { nodes, edges }
     }
 
-    fn map_edges(&self, source: &Graph, edge_sources: &[EdgeId]) -> Self {
-        let edges = self
-            .edges
-            .iter()
-            .map(|edge| edge_sources[edge.index()])
-            .collect();
-        Self::normalized(source, self.nodes.clone(), edges)
-    }
-
-    fn map_subdivision(
-        &self,
-        source: &Graph,
-        subdivision: &SubdividedGraph,
-        edge_sources: &[EdgeId],
-    ) -> Self {
-        let mut nodes = Vec::with_capacity(self.length() / 2);
-        let mut edges = Vec::with_capacity(self.length() / 2);
-        for &node in &self.nodes {
-            match subdivision.node_source(node) {
-                SubdivisionNodeSource::Node(node) => nodes.push(node),
-                SubdivisionNodeSource::Edge(edge) => {
-                    edges.push(edge_sources[edge.index()]);
-                }
-            }
-        }
-        Self::normalized(source, nodes, edges)
-    }
-
     pub fn nodes(&self) -> &[NodeId] {
         &self.nodes
     }
@@ -160,9 +117,6 @@ impl Cycle {
 }
 
 /// One minimum-total-length basis of the graph's binary cycle space.
-///
-/// Cycles use source graph identifiers. For graphs with parallel edges, the
-/// internal subdivision does not affect the reported cycle lengths.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MinimumCycleBasis {
     cycles: Vec<Cycle>,
@@ -341,31 +295,12 @@ impl Graph {
         }
     }
 
-    /// Visits every simple cycle using the direct simple-graph path.
+    /// Visits every simple cycle until traversal completes or the visitor
+    /// returns [`ControlFlow::Break`].
     ///
-    /// Returns [`NonSimpleGraphError`] before invoking `visitor` when the graph
-    /// contains a loop or parallel edges.
-    pub fn try_visit_simple_cycles<B, F>(
-        &self,
-        max_cycle_size: usize,
-        alg: SimpleCycleEnumerationAlgorithm,
-        mut visitor: F,
-    ) -> Result<ControlFlow<B>, NonSimpleGraphError>
-    where
-        F: FnMut(Cycle) -> ControlFlow<B>,
-    {
-        if !self.is_simple() {
-            return Err(NonSimpleGraphError);
-        }
-        Ok(match alg {
-            SimpleCycleEnumerationAlgorithm::ReadTarjan => {
-                self.visit_simple_cycles_read_tarjan(max_cycle_size, &mut visitor)
-            }
-        })
-    }
-
-    /// Visits every simple cycle using the multigraph-capable fallback path.
-    pub fn visit_simple_cycles_fallback<B, F>(
+    /// Traversal is deterministic for a fixed graph representation, but its
+    /// order is not a canonical ordering contract.
+    pub fn visit_simple_cycles<B, F>(
         &self,
         max_cycle_size: usize,
         alg: SimpleCycleEnumerationAlgorithm,
@@ -379,61 +314,6 @@ impl Graph {
                 self.visit_simple_cycles_read_tarjan(max_cycle_size, &mut visitor)
             }
         }
-    }
-
-    /// Visits every simple cycle until traversal completes or the visitor
-    /// returns [`ControlFlow::Break`].
-    ///
-    /// Traversal uses the direct path for simple graphs and the
-    /// multigraph-capable fallback otherwise. It is deterministic for a fixed
-    /// graph representation, but its order is not a canonical ordering
-    /// contract.
-    pub fn visit_simple_cycles<B, F>(
-        &self,
-        max_cycle_size: usize,
-        alg: SimpleCycleEnumerationAlgorithm,
-        mut visitor: F,
-    ) -> ControlFlow<B>
-    where
-        F: FnMut(Cycle) -> ControlFlow<B>,
-    {
-        if self.is_simple() {
-            match alg {
-                SimpleCycleEnumerationAlgorithm::ReadTarjan => {
-                    self.visit_simple_cycles_read_tarjan(max_cycle_size, &mut visitor)
-                }
-            }
-        } else {
-            self.visit_simple_cycles_fallback(max_cycle_size, alg, visitor)
-        }
-    }
-
-    /// Collects every simple cycle using the direct simple-graph path.
-    pub fn try_enumerate_simple_cycles(
-        &self,
-        max_cycle_size: usize,
-        alg: SimpleCycleEnumerationAlgorithm,
-    ) -> Result<Vec<Cycle>, NonSimpleGraphError> {
-        let mut cycles = Vec::new();
-        let _: ControlFlow<()> = self.try_visit_simple_cycles(max_cycle_size, alg, |cycle| {
-            cycles.push(cycle);
-            ControlFlow::Continue(())
-        })?;
-        Ok(cycles)
-    }
-
-    /// Collects every simple cycle using the multigraph-capable fallback path.
-    pub fn enumerate_simple_cycles_fallback(
-        &self,
-        max_cycle_size: usize,
-        alg: SimpleCycleEnumerationAlgorithm,
-    ) -> Vec<Cycle> {
-        let mut cycles = Vec::new();
-        let _: ControlFlow<()> = self.visit_simple_cycles_fallback(max_cycle_size, alg, |cycle| {
-            cycles.push(cycle);
-            ControlFlow::Continue(())
-        });
-        cycles
     }
 
     /// Collects every simple cycle selected by `alg`.
@@ -450,34 +330,13 @@ impl Graph {
         cycles
     }
 
-    /// Visits relevant cycles using the direct simple-graph path.
+    /// Visits relevant cycles until traversal completes or the visitor returns
+    /// [`ControlFlow::Break`].
     ///
-    /// Returns [`NonSimpleGraphError`] before invoking `visitor` when the graph
-    /// contains a loop or parallel edges.
-    pub fn try_visit_relevant_cycles<B, F>(
-        &self,
-        max_cycle_size: usize,
-        alg: RelevantCycleEnumerationAlgorithm,
-        mut visitor: F,
-    ) -> Result<ControlFlow<B>, NonSimpleGraphError>
-    where
-        F: FnMut(Cycle) -> ControlFlow<B>,
-    {
-        if !self.is_simple() {
-            return Err(NonSimpleGraphError);
-        }
-        Ok(match alg {
-            RelevantCycleEnumerationAlgorithm::Vismara => {
-                self::relevant::visit_relevant_cycles_vismara(self, max_cycle_size, &mut visitor)
-            }
-        })
-    }
-
-    /// Visits relevant cycles using the multigraph-capable fallback path.
-    ///
-    /// Cycles retain source graph identifiers after loop extraction,
-    /// subdivision, and projection.
-    pub fn visit_relevant_cycles_fallback<B, F>(
+    /// Traversal is deterministic for a fixed graph representation, but its
+    /// order is not a canonical ordering contract. Only cycles with at most
+    /// `max_cycle_size` edges are visited.
+    pub fn visit_relevant_cycles<B, F>(
         &self,
         max_cycle_size: usize,
         alg: RelevantCycleEnumerationAlgorithm,
@@ -488,75 +347,9 @@ impl Graph {
     {
         match alg {
             RelevantCycleEnumerationAlgorithm::Vismara => {
-                self::relevant::visit_relevant_cycles_vismara_fallback(
-                    self,
-                    max_cycle_size,
-                    &mut visitor,
-                )
+                self::relevant::visit_relevant_cycles_vismara(self, max_cycle_size, &mut visitor)
             }
         }
-    }
-
-    /// Visits relevant cycles until traversal completes or the visitor returns
-    /// [`ControlFlow::Break`].
-    ///
-    /// Traversal uses the direct path for simple graphs and the
-    /// multigraph-capable fallback otherwise. It is deterministic for a fixed
-    /// graph representation, but its order is not a canonical ordering
-    /// contract. Cycles always use source graph identifiers, including for
-    /// loops and parallel edges. Only cycles with at most `max_cycle_size`
-    /// source edges are visited.
-    pub fn visit_relevant_cycles<B, F>(
-        &self,
-        max_cycle_size: usize,
-        alg: RelevantCycleEnumerationAlgorithm,
-        mut visitor: F,
-    ) -> ControlFlow<B>
-    where
-        F: FnMut(Cycle) -> ControlFlow<B>,
-    {
-        if self.is_simple() {
-            match alg {
-                RelevantCycleEnumerationAlgorithm::Vismara => {
-                    self::relevant::visit_relevant_cycles_vismara(
-                        self,
-                        max_cycle_size,
-                        &mut visitor,
-                    )
-                }
-            }
-        } else {
-            self.visit_relevant_cycles_fallback(max_cycle_size, alg, visitor)
-        }
-    }
-
-    /// Collects relevant cycles using the direct simple-graph path.
-    pub fn try_enumerate_relevant_cycles(
-        &self,
-        max_cycle_size: usize,
-        alg: RelevantCycleEnumerationAlgorithm,
-    ) -> Result<Vec<Cycle>, NonSimpleGraphError> {
-        let mut cycles = Vec::new();
-        let _: ControlFlow<()> = self.try_visit_relevant_cycles(max_cycle_size, alg, |cycle| {
-            cycles.push(cycle);
-            ControlFlow::Continue(())
-        })?;
-        Ok(cycles)
-    }
-
-    /// Collects relevant cycles using the multigraph-capable fallback path.
-    pub fn enumerate_relevant_cycles_fallback(
-        &self,
-        max_cycle_size: usize,
-        alg: RelevantCycleEnumerationAlgorithm,
-    ) -> Vec<Cycle> {
-        let mut cycles = Vec::new();
-        let _: ControlFlow<()> =
-            self.visit_relevant_cycles_fallback(max_cycle_size, alg, |cycle| {
-                cycles.push(cycle);
-                ControlFlow::Continue(())
-            });
-        cycles
     }
 
     /// Collects the relevant cycles selected by `alg`.
@@ -577,9 +370,7 @@ impl Graph {
 
     /// Select one minimum-total-length basis of the binary cycle space.
     ///
-    /// The returned basis is not canonically ordered. Self-loops contribute
-    /// one-edge basis cycles, and parallel-edge cycles retain their source
-    /// `EdgeId` identities.
+    /// The returned basis is not canonically ordered.
     pub fn minimum_cycle_basis(&self, alg: MinimumCycleBasisAlgorithm) -> MinimumCycleBasis {
         match alg {
             MinimumCycleBasisAlgorithm::Horton => minimum_cycle_basis_horton(self),
@@ -596,11 +387,8 @@ impl Graph {
     // BFS with edge exclusion. O(V+E).
     fn shortest_cycle_through_edge_bfs(&self, edge: EdgeId) -> Option<usize> {
         let [u, v] = self.edge_endpoints(edge);
-        if u == v {
-            return Some(1);
-        }
 
-        let mut dist = vec![u32::MAX; self.node_bound()];
+        let mut dist = vec![u32::MAX; self.node_count()];
         let mut queue = VecDeque::new();
         dist[u.index()] = 0;
         queue.push_back(u);
@@ -645,7 +433,7 @@ mod tests {
     use super::ShortestCycleAlgorithm::Bfs;
     use super::SimpleCycleEnumerationAlgorithm::ReadTarjan;
     use super::UniqueRingFamilyAlgorithm::Kolodzik;
-    use super::{Cycle, NonSimpleGraphError, UniqueRingFamilyId};
+    use super::{Cycle, UniqueRingFamilyId};
     use crate::graph::Graph;
     use crate::id::{EdgeId, NodeId};
 
@@ -670,21 +458,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::self_loop(
-        Graph::new(1, &[[0, 0]]),
-        vec![NodeId(0)],
-        vec![EdgeId(0)],
-        Cycle { nodes: vec![NodeId(0)], edges: vec![EdgeId(0)] },
-    )]
-    #[case::digon(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        vec![NodeId(1), NodeId(0)],
-        vec![EdgeId(1), EdgeId(0)],
-        Cycle {
-            nodes: vec![NodeId(0), NodeId(1)],
-            edges: vec![EdgeId(0), EdgeId(1)],
-        },
-    )]
     #[case::triangle(
         Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
         vec![NodeId(0), NodeId(1), NodeId(2)],
@@ -710,24 +483,6 @@ mod tests {
         Cycle {
             nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
             edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        },
-    )]
-    #[case::parallel_first(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        vec![NodeId(0), NodeId(1)],
-        vec![EdgeId(1), EdgeId(0)],
-        Cycle {
-            nodes: vec![NodeId(0), NodeId(1)],
-            edges: vec![EdgeId(0), EdgeId(1)],
-        },
-    )]
-    #[case::parallel_second(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        vec![NodeId(0), NodeId(1)],
-        vec![EdgeId(2), EdgeId(0)],
-        Cycle {
-            nodes: vec![NodeId(0), NodeId(1)],
-            edges: vec![EdgeId(0), EdgeId(2)],
         },
     )]
     fn test_cycle_normalized(
@@ -778,29 +533,6 @@ mod tests {
             edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
         }]),
     )]
-    #[case::parallel_edges(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        vec![
-            (
-                vec![NodeId(0), NodeId(1)],
-                vec![EdgeId(1), EdgeId(0)],
-            ),
-            (
-                vec![NodeId(0), NodeId(1)],
-                vec![EdgeId(2), EdgeId(0)],
-            ),
-        ],
-        HashSet::from([
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(1)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(2)],
-            },
-        ]),
-    )]
     fn test_cycle_hash(
         #[case] graph: Graph,
         #[case] paths: Vec<(Vec<NodeId>, Vec<EdgeId>)>,
@@ -814,8 +546,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::self_loop(1, vec![[0, 0]], EdgeId(0), Some(1))]
-    #[case::digon(2, vec![[0, 1], [0, 1]], EdgeId(0), Some(2))]
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], EdgeId(0), Some(3))]
     #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], EdgeId(0), Some(4))]
     #[case::bridge(4, vec![[0, 1], [1, 2], [2, 3]], EdgeId(1), None)]
@@ -834,8 +564,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::self_loop(1, vec![[0, 0]], NodeId(0), Some(1))]
-    #[case::digon(2, vec![[0, 1], [0, 1]], NodeId(0), Some(2))]
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], NodeId(0), Some(3))]
     #[case::pendant(3, vec![[0, 1], [1, 2]], NodeId(0), None)]
     #[case::naphthalene_bridgehead(10, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [3, 6],
@@ -851,115 +579,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case::triangle(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    fn test_graph_try_visit_simple_cycles(#[case] graph: Graph, #[case] expected: Vec<Cycle>) {
-        let mut visited = Vec::new();
-        let result = graph.try_visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
-            visited.push(cycle);
-            ControlFlow::<()>::Continue(())
-        });
-
-        assert_eq!(result, Ok(ControlFlow::Continue(())));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
-    #[case::loop_edge(Graph::new(1, &[[0, 0]]))]
-    #[case::parallel_edges(Graph::new(2, &[[0, 1], [0, 1]]))]
-    fn test_graph_try_visit_simple_cycles_error(#[case] graph: Graph) {
-        let mut visited = Vec::new();
-        let result = graph.try_visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
-            visited.push(cycle);
-            ControlFlow::<()>::Continue(())
-        });
-
-        assert_eq!(result, Err(NonSimpleGraphError));
-        assert_eq!(visited, Vec::<Cycle>::new());
-    }
-
-    #[rstest]
-    #[case::triangle(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    fn test_graph_try_visit_simple_cycles_break(
-        #[case] graph: Graph,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        let mut visited = Vec::new();
-        let result = graph.try_visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
-            visited.push(cycle);
-            ControlFlow::Break(visited.len())
-        });
-
-        assert_eq!(result, Ok(ControlFlow::Break(1)));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
-    #[case::bounded_multigraph(
-        Graph::new(3, &[[0, 0], [0, 1], [0, 1], [1, 2], [0, 2]]),
-        2,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
-    fn test_graph_visit_simple_cycles_fallback(
-        #[case] graph: Graph,
-        #[case] max_cycle_size: usize,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        let mut visited = Vec::new();
-        let result = graph.visit_simple_cycles_fallback(max_cycle_size, ReadTarjan, |cycle| {
-            visited.push(cycle);
-            ControlFlow::<()>::Continue(())
-        });
-
-        assert_eq!(result, ControlFlow::Continue(()));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
-    #[case::first(
-        Graph::new(3, &[[0, 0], [0, 1], [0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0)],
-            edges: vec![EdgeId(0)],
-        }],
-    )]
-    fn test_graph_visit_simple_cycles_fallback_break(
-        #[case] graph: Graph,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        let mut visited = Vec::new();
-        let result = graph.visit_simple_cycles_fallback(usize::MAX, ReadTarjan, |cycle| {
-            visited.push(cycle);
-            ControlFlow::Break(visited.len())
-        });
-
-        assert_eq!(result, ControlFlow::Break(1));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
     fn test_graph_visit_simple_cycles() {
-        let graph = Graph::new(6, &[[0, 1], [1, 2], [2, 0], [3, 4], [3, 4], [5, 5]]);
+        let graph = Graph::new(
+            10,
+            &[
+                [0, 1],
+                [1, 2],
+                [2, 0],
+                [3, 4],
+                [4, 5],
+                [5, 3],
+                [6, 7],
+                [7, 8],
+                [8, 9],
+                [9, 6],
+            ],
+        );
         let mut visited = Vec::new();
         let result = graph.visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
             visited.push(cycle);
@@ -975,12 +610,12 @@ mod tests {
                     edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
                 },
                 Cycle {
-                    nodes: vec![NodeId(3), NodeId(4)],
-                    edges: vec![EdgeId(3), EdgeId(4)],
+                    nodes: vec![NodeId(3), NodeId(4), NodeId(5)],
+                    edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
                 },
                 Cycle {
-                    nodes: vec![NodeId(5)],
-                    edges: vec![EdgeId(5)],
+                    nodes: vec![NodeId(6), NodeId(7), NodeId(8), NodeId(9)],
+                    edges: vec![EdgeId(6), EdgeId(7), EdgeId(8), EdgeId(9)],
                 },
             ]
         );
@@ -1002,8 +637,8 @@ mod tests {
                 edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             },
             Cycle {
-                nodes: vec![NodeId(3), NodeId(4)],
-                edges: vec![EdgeId(3), EdgeId(4)],
+                nodes: vec![NodeId(3), NodeId(4), NodeId(5)],
+                edges: vec![EdgeId(3), EdgeId(4), EdgeId(5)],
             },
         ],
     )]
@@ -1011,7 +646,21 @@ mod tests {
         #[case] stop_after: usize,
         #[case] expected: Vec<Cycle>,
     ) {
-        let graph = Graph::new(6, &[[0, 1], [1, 2], [2, 0], [3, 4], [3, 4], [5, 5]]);
+        let graph = Graph::new(
+            10,
+            &[
+                [0, 1],
+                [1, 2],
+                [2, 0],
+                [3, 4],
+                [4, 5],
+                [5, 3],
+                [6, 7],
+                [7, 8],
+                [8, 9],
+                [9, 6],
+            ],
+        );
         let mut visited = Vec::new();
         let result = graph.visit_simple_cycles(usize::MAX, ReadTarjan, |cycle| {
             visited.push(cycle);
@@ -1027,89 +676,27 @@ mod tests {
     }
 
     #[rstest]
-    #[case::triangle(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    fn test_graph_try_enumerate_simple_cycles(#[case] graph: Graph, #[case] expected: Vec<Cycle>) {
-        assert_eq!(
-            graph.try_enumerate_simple_cycles(usize::MAX, ReadTarjan),
-            Ok(expected),
-        );
-    }
-
-    #[rstest]
-    #[case::loop_edge(Graph::new(1, &[[0, 0]]))]
-    #[case::parallel_edges(Graph::new(2, &[[0, 1], [0, 1]]))]
-    fn test_graph_try_enumerate_simple_cycles_error(#[case] graph: Graph) {
-        assert_eq!(
-            graph.try_enumerate_simple_cycles(usize::MAX, ReadTarjan),
-            Err(NonSimpleGraphError),
-        );
-    }
-
-    #[rstest]
-    #[case::simple(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        usize::MAX,
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    #[case::multigraph(
-        Graph::new(2, &[[0, 0], [0, 1], [0, 1]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
-    fn test_graph_enumerate_simple_cycles_fallback(
-        #[case] graph: Graph,
-        #[case] max_cycle_size: usize,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        assert_eq!(
-            graph.enumerate_simple_cycles_fallback(max_cycle_size, ReadTarjan),
-            expected,
-        );
-    }
-
-    #[rstest]
     #[case::zero_bound(
-        Graph::new(1, &[[0, 0]]),
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
         0,
         vec![],
     )]
-    #[case::one_bound(
-        Graph::new(3, &[[0, 0], [0, 1], [0, 1], [1, 2], [2, 0]]),
-        1,
-        vec![Cycle {
-            nodes: vec![NodeId(0)],
-            edges: vec![EdgeId(0)],
-        }],
-    )]
     #[case::two_bound(
-        Graph::new(3, &[[0, 0], [0, 1], [0, 1], [1, 2], [2, 0]]),
+        Graph::new(3, &[[0, 1], [1, 2], [2, 0]]),
         2,
+        vec![],
+    )]
+    #[case::three_bound(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3], [0, 2]]),
+        3,
         vec![
             Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(4)],
             },
             Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(2)],
+                nodes: vec![NodeId(0), NodeId(2), NodeId(3)],
+                edges: vec![EdgeId(4), EdgeId(2), EdgeId(3)],
             },
         ],
     )]
@@ -1153,24 +740,6 @@ mod tests {
             },
         ],
     )]
-    #[case::parallel_alternatives(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(1)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(2)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
     fn test_graph_enumerate_simple_cycles(
         #[case] graph: Graph,
         #[case] max_cycle_size: usize,
@@ -1183,115 +752,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::triangle(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    fn test_graph_try_visit_relevant_cycles(#[case] graph: Graph, #[case] expected: Vec<Cycle>) {
-        let mut visited = Vec::new();
-        let result = graph.try_visit_relevant_cycles(usize::MAX, Vismara, |cycle| {
-            visited.push(cycle);
-            ControlFlow::<()>::Continue(())
-        });
-
-        assert_eq!(result, Ok(ControlFlow::Continue(())));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
-    #[case::loop_edge(Graph::new(1, &[[0, 0]]))]
-    #[case::parallel_edges(Graph::new(2, &[[0, 1], [0, 1]]))]
-    fn test_graph_try_visit_relevant_cycles_error(#[case] graph: Graph) {
-        let mut visited = Vec::new();
-        let result = graph.try_visit_relevant_cycles(usize::MAX, Vismara, |cycle| {
-            visited.push(cycle);
-            ControlFlow::<()>::Continue(())
-        });
-
-        assert_eq!(result, Err(NonSimpleGraphError));
-        assert_eq!(visited, Vec::<Cycle>::new());
-    }
-
-    #[rstest]
-    #[case::triangle(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    fn test_graph_try_visit_relevant_cycles_break(
-        #[case] graph: Graph,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        let mut visited = Vec::new();
-        let result = graph.try_visit_relevant_cycles(usize::MAX, Vismara, |cycle| {
-            visited.push(cycle);
-            ControlFlow::Break(visited.len())
-        });
-
-        assert_eq!(result, Ok(ControlFlow::Break(1)));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
-    #[case::bounded_multigraph(
-        Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2], [0, 1]]),
-        2,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(4)],
-            },
-        ],
-    )]
-    fn test_graph_visit_relevant_cycles_fallback(
-        #[case] graph: Graph,
-        #[case] max_cycle_size: usize,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        let mut visited = Vec::new();
-        let result = graph.visit_relevant_cycles_fallback(max_cycle_size, Vismara, |cycle| {
-            visited.push(cycle);
-            ControlFlow::<()>::Continue(())
-        });
-
-        assert_eq!(result, ControlFlow::Continue(()));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
-    #[case::first(
-        Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2], [0, 1]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0)],
-            edges: vec![EdgeId(0)],
-        }],
-    )]
-    fn test_graph_visit_relevant_cycles_fallback_break(
-        #[case] graph: Graph,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        let mut visited = Vec::new();
-        let result = graph.visit_relevant_cycles_fallback(usize::MAX, Vismara, |cycle| {
-            visited.push(cycle);
-            ControlFlow::Break(visited.len())
-        });
-
-        assert_eq!(result, ControlFlow::Break(1));
-        assert_eq!(visited, expected);
-    }
-
-    #[rstest]
     fn test_graph_visit_relevant_cycles() {
-        let graph = Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2], [0, 1]]);
+        let graph = Graph::new(6, &[[0, 1], [1, 4], [0, 2], [2, 4], [0, 3], [3, 5], [4, 5]]);
         let mut visited = Vec::new();
         let result = graph.visit_relevant_cycles(usize::MAX, Vismara, |cycle| {
             visited.push(cycle);
@@ -1303,20 +765,16 @@ mod tests {
             visited,
             vec![
                 Cycle {
-                    nodes: vec![NodeId(0)],
-                    edges: vec![EdgeId(0)],
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(2)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(3), EdgeId(2)],
                 },
                 Cycle {
-                    nodes: vec![NodeId(0), NodeId(1)],
-                    edges: vec![EdgeId(1), EdgeId(4)],
+                    nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(5), NodeId(3)],
+                    edges: vec![EdgeId(0), EdgeId(1), EdgeId(6), EdgeId(5), EdgeId(4)],
                 },
                 Cycle {
-                    nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-                    edges: vec![EdgeId(1), EdgeId(2), EdgeId(3)],
-                },
-                Cycle {
-                    nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-                    edges: vec![EdgeId(4), EdgeId(2), EdgeId(3)],
+                    nodes: vec![NodeId(0), NodeId(2), NodeId(4), NodeId(5), NodeId(3)],
+                    edges: vec![EdgeId(2), EdgeId(3), EdgeId(6), EdgeId(5), EdgeId(4)],
                 },
             ]
         );
@@ -1326,20 +784,20 @@ mod tests {
     #[case::first(
         1,
         vec![Cycle {
-            nodes: vec![NodeId(0)],
-            edges: vec![EdgeId(0)],
+            nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(3), EdgeId(2)],
         }],
     )]
     #[case::second(
         2,
         vec![
             Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
+                nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(3), EdgeId(2)],
             },
             Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(4)],
+                nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(5), NodeId(3)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(6), EdgeId(5), EdgeId(4)],
             },
         ],
     )]
@@ -1347,7 +805,7 @@ mod tests {
         #[case] stop_after: usize,
         #[case] expected: Vec<Cycle>,
     ) {
-        let graph = Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2], [0, 1]]);
+        let graph = Graph::new(6, &[[0, 1], [1, 4], [0, 2], [2, 4], [0, 3], [3, 5], [4, 5]]);
         let mut visited = Vec::new();
         let result = graph.visit_relevant_cycles(usize::MAX, Vismara, |cycle| {
             visited.push(cycle);
@@ -1365,188 +823,57 @@ mod tests {
     #[rstest]
     #[case::triangle(
         Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    fn test_graph_try_enumerate_relevant_cycles(
-        #[case] graph: Graph,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        assert_eq!(
-            graph.try_enumerate_relevant_cycles(usize::MAX, Vismara),
-            Ok(expected),
-        );
-    }
-
-    #[rstest]
-    #[case::loop_edge(Graph::new(1, &[[0, 0]]))]
-    #[case::parallel_edges(Graph::new(2, &[[0, 1], [0, 1]]))]
-    fn test_graph_try_enumerate_relevant_cycles_error(#[case] graph: Graph) {
-        assert_eq!(
-            graph.try_enumerate_relevant_cycles(usize::MAX, Vismara),
-            Err(NonSimpleGraphError),
-        );
-    }
-
-    #[rstest]
-    #[case::simple(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
         usize::MAX,
         vec![Cycle {
             nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
             edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
         }],
     )]
-    #[case::multigraph(
-        Graph::new(2, &[[0, 0], [0, 1], [0, 1]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
-    fn test_graph_enumerate_relevant_cycles_fallback(
-        #[case] graph: Graph,
-        #[case] max_cycle_size: usize,
-        #[case] expected: Vec<Cycle>,
-    ) {
-        assert_eq!(
-            graph.enumerate_relevant_cycles_fallback(max_cycle_size, Vismara),
-            expected,
-        );
-    }
-
-    #[rstest]
-    #[case::direct(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2]]),
-        usize::MAX,
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-            edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-        }],
-    )]
-    #[case::fallback(
-        Graph::new(5, &[[0, 1], [1, 2], [0, 2], [3, 4], [3, 4]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(3), NodeId(4)],
-                edges: vec![EdgeId(3), EdgeId(4)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
-    #[case::loops(
-        Graph::new(2, &[[0, 0], [0, 0], [1, 1]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(1)],
-            },
-            Cycle {
-                nodes: vec![NodeId(1)],
-                edges: vec![EdgeId(2)],
-            },
-        ],
-    )]
-    #[case::parallel(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(1)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(2)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
-    #[case::longer_parallel(
-        Graph::new(3, &[[0, 1], [1, 2], [0, 2], [0, 1]]),
-        usize::MAX,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(3)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-                edges: vec![EdgeId(3), EdgeId(1), EdgeId(2)],
-            },
-        ],
-    )]
-    #[case::mixed(
+    #[case::disconnected(
         Graph::new(
             7,
             &[
-                [0, 0],
-                [1, 2], [2, 3], [3, 4], [1, 4],
-                [5, 6], [5, 6], [5, 6],
+                [0, 1], [1, 2], [0, 2],
+                [3, 4], [4, 5], [5, 6], [3, 6],
             ],
         ),
         usize::MAX,
         vec![
             Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
+                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             },
             Cycle {
-                nodes: vec![NodeId(5), NodeId(6)],
-                edges: vec![EdgeId(5), EdgeId(6)],
+                nodes: vec![NodeId(3), NodeId(4), NodeId(5), NodeId(6)],
+                edges: vec![EdgeId(3), EdgeId(4), EdgeId(5), EdgeId(6)],
+            },
+        ],
+    )]
+    #[case::unequal_theta(
+        Graph::new(6, &[[0, 1], [1, 4], [0, 2], [2, 4], [0, 3], [3, 5], [4, 5]]),
+        usize::MAX,
+        vec![
+            Cycle {
+                nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(2)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(3), EdgeId(2)],
             },
             Cycle {
-                nodes: vec![NodeId(5), NodeId(6)],
-                edges: vec![EdgeId(5), EdgeId(7)],
+                nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(5), NodeId(3)],
+                edges: vec![EdgeId(0), EdgeId(1), EdgeId(6), EdgeId(5), EdgeId(4)],
             },
             Cycle {
-                nodes: vec![NodeId(5), NodeId(6)],
-                edges: vec![EdgeId(6), EdgeId(7)],
-            },
-            Cycle {
-                nodes: vec![NodeId(1), NodeId(2), NodeId(3), NodeId(4)],
-                edges: vec![EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4)],
+                nodes: vec![NodeId(0), NodeId(2), NodeId(4), NodeId(5), NodeId(3)],
+                edges: vec![EdgeId(2), EdgeId(3), EdgeId(6), EdgeId(5), EdgeId(4)],
             },
         ],
     )]
     #[case::bounded(
-        Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2], [0, 1]]),
-        2,
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1), EdgeId(4)],
-            },
-        ],
+        Graph::new(6, &[[0, 1], [1, 4], [0, 2], [2, 4], [0, 3], [3, 5], [4, 5]]),
+        4,
+        vec![Cycle {
+            nodes: vec![NodeId(0), NodeId(1), NodeId(4), NodeId(2)],
+            edges: vec![EdgeId(0), EdgeId(1), EdgeId(3), EdgeId(2)],
+        }],
     )]
     fn test_graph_enumerate_relevant_cycles(
         #[case] graph: Graph,
@@ -1599,42 +926,6 @@ mod tests {
             },
         ],
         9,
-    )]
-    #[case::loop_and_triangle(
-        Graph::new(3, &[[0, 0], [0, 1], [1, 2], [0, 2]]),
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0)],
-                edges: vec![EdgeId(0)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1), NodeId(2)],
-                edges: vec![EdgeId(1), EdgeId(2), EdgeId(3)],
-            },
-        ],
-        4,
-    )]
-    #[case::parallel_pair(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        vec![Cycle {
-            nodes: vec![NodeId(0), NodeId(1)],
-            edges: vec![EdgeId(0), EdgeId(1)],
-        }],
-        2,
-    )]
-    #[case::parallel_triple(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        vec![
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(1)],
-            },
-            Cycle {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0), EdgeId(2)],
-            },
-        ],
-        4,
     )]
     fn test_graph_minimum_cycle_basis(
         #[case] graph: Graph,
@@ -1831,66 +1122,6 @@ mod tests {
                         edges: vec![EdgeId(2), EdgeId(3), EdgeId(7), EdgeId(5)],
                     },
                 ],
-            ),
-        ],
-    )]
-    #[case::loops(
-        Graph::new(2, &[[0, 0], [1, 1]]),
-        vec![
-            (
-                vec![NodeId(0)],
-                vec![EdgeId(0)],
-                1,
-                1,
-                vec![Cycle {
-                    nodes: vec![NodeId(0)],
-                    edges: vec![EdgeId(0)],
-                }],
-            ),
-            (
-                vec![NodeId(1)],
-                vec![EdgeId(1)],
-                1,
-                1,
-                vec![Cycle {
-                    nodes: vec![NodeId(1)],
-                    edges: vec![EdgeId(1)],
-                }],
-            ),
-        ],
-    )]
-    #[case::parallel(
-        Graph::new(2, &[[0, 1], [0, 1], [0, 1]]),
-        vec![
-            (
-                vec![NodeId(0), NodeId(1)],
-                vec![EdgeId(0), EdgeId(1)],
-                2,
-                1,
-                vec![Cycle {
-                    nodes: vec![NodeId(0), NodeId(1)],
-                    edges: vec![EdgeId(0), EdgeId(1)],
-                }],
-            ),
-            (
-                vec![NodeId(0), NodeId(1)],
-                vec![EdgeId(0), EdgeId(2)],
-                2,
-                1,
-                vec![Cycle {
-                    nodes: vec![NodeId(0), NodeId(1)],
-                    edges: vec![EdgeId(0), EdgeId(2)],
-                }],
-            ),
-            (
-                vec![NodeId(0), NodeId(1)],
-                vec![EdgeId(1), EdgeId(2)],
-                2,
-                1,
-                vec![Cycle {
-                    nodes: vec![NodeId(0), NodeId(1)],
-                    edges: vec![EdgeId(1), EdgeId(2)],
-                }],
             ),
         ],
     )]

@@ -27,9 +27,9 @@ impl Graph {
 
     // Tarjan's BCC via DFS. O(V+E). Tarjan 1972 "Depth-first search and linear graph algorithms".
     fn biconnected_components_tarjan(&self) -> Vec<Vec<NodeId>> {
-        let bound = self.node_bound();
-        let mut disc: Vec<Option<u32>> = vec![None; bound];
-        let mut low: Vec<u32> = vec![0; bound];
+        let node_count = self.node_count();
+        let mut disc: Vec<Option<u32>> = vec![None; node_count];
+        let mut low: Vec<u32> = vec![0; node_count];
         let mut timer: u32 = 0;
         let mut edge_stack: Vec<(NodeId, NodeId)> = Vec::new();
         let mut components: Vec<Vec<NodeId>> = Vec::new();

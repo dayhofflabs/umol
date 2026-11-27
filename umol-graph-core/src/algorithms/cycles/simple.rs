@@ -3,8 +3,7 @@
 //! Every extension retains a bounded return path to the start while avoiding
 //! the current path. Chains with only one fruitful extension are advanced
 //! without recursion. The minimum node fixes cycle rotation, and the ordering
-//! of the first and closing edges fixes reversal while preserving distinct
-//! parallel-edge cycles.
+//! of the first and closing edges fixes reversal.
 //!
 //! See [Read and Tarjan, *Bounds on Backtrack Algorithms for Listing Cycles,
 //! Paths, and Spanning Trees*
@@ -72,30 +71,11 @@ impl Graph {
     where
         F: FnMut(Cycle) -> ControlFlow<B>,
     {
-        if max_cycle_size == 0 {
+        if max_cycle_size < 3 {
             return ControlFlow::Continue(());
         }
 
-        let mut loops = vec![Vec::new(); self.node_count()];
-        for edge in self.edge_ids() {
-            let [first, second] = self.edge_endpoints(edge);
-            if first == second {
-                loops[first.index()].push(edge);
-            }
-        }
-
         for start in self.node_ids() {
-            for &edge in &loops[start.index()] {
-                if let ControlFlow::Break(value) =
-                    visitor(Cycle::normalized(self, vec![start], vec![edge]))
-                {
-                    return ControlFlow::Break(value);
-                }
-            }
-            if max_cycle_size < 2 {
-                continue;
-            }
-
             let mut path = Path::new(start, self.node_count(), self.edge_count());
             if let ControlFlow::Break(value) =
                 visit_from(self, start, max_cycle_size, &mut path, visitor)
@@ -181,7 +161,7 @@ fn extensions(
             continue;
         }
         if neighbor.node == start {
-            if path.nodes.len() >= 2
+            if path.nodes.len() >= 3
                 && path
                     .edges
                     .first()

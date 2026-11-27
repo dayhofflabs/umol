@@ -6,7 +6,7 @@
 //! entity kind (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally exposes the
 //! induced edge correspondence over the two graphs.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{Add, Sub};
@@ -369,22 +369,13 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
 
 impl Correspondence<NodeId> {
     /// The induced edge correspondence: `(left_edge, right_edge)` pairs whose endpoints are matched
-    /// to a unique edge on the other side. Returns `None` when the declared node spaces do not
-    /// describe `left` and `right`, or when parallel edges make the induced pairing non-unique.
+    /// to an edge on the other side. Returns `None` when the declared node spaces do not describe
+    /// `left` and `right`.
     pub fn edge_matched_pairs(&self, left: &Graph, right: &Graph) -> Option<Vec<(EdgeId, EdgeId)>> {
         if self.left_count != left.node_count() || self.right_count != right.node_count() {
             return None;
         }
 
-        let mut right_edges: HashMap<[NodeId; 2], (EdgeId, bool)> = HashMap::new();
-        for edge in right.edge_ids() {
-            right_edges
-                .entry(right.edge_endpoints(edge))
-                .and_modify(|(_, unique)| *unique = false)
-                .or_insert((edge, true));
-        }
-
-        let mut used_right = BTreeSet::new();
         let mut matched_pairs = Vec::new();
         for left_edge in left.edge_ids() {
             let [left_first, left_second] = left.edge_endpoints(left_edge);
@@ -393,24 +384,15 @@ impl Correspondence<NodeId> {
             else {
                 continue;
             };
-            let endpoints = if right_first <= right_second {
-                [right_first, right_second]
-            } else {
-                [right_second, right_first]
-            };
-            let Some(&(right_edge, unique)) = right_edges.get(&endpoints) else {
-                continue;
-            };
-            if !unique || !used_right.insert(right_edge) {
-                return None;
+            if let Some(right_edge) = right.find_edge(right_first, right_second) {
+                matched_pairs.push((left_edge, right_edge));
             }
-            matched_pairs.push((left_edge, right_edge));
         }
         Some(matched_pairs)
     }
 
     /// The number of edges shared under the node matching (the maximum-common-edge-subgraph
-    /// objective), or `None` when the edge correspondence is not uniquely induced.
+    /// objective), or `None` when the declared node spaces do not describe `left` and `right`.
     pub fn shared_edge_count(&self, left: &Graph, right: &Graph) -> Option<usize> {
         self.edge_matched_pairs(left, right)
             .map(|pairs| pairs.len())
@@ -447,8 +429,7 @@ impl GraphCorrespondence {
     /// whenever every structurally matched edge is admissible — a subiso match, a common *induced*
     /// subgraph, or a common-subgraph walk whose adjacency enforces the edge predicate; not for an
     /// edge-subgraph result whose producer selects the edge component directly. Returns `None` when the
-    /// node correspondence does not describe the supplied graphs or does not induce unique edge
-    /// pairs.
+    /// node correspondence does not describe the supplied graphs.
     pub fn induce(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Option<Self> {
         let edges = Correspondence::new(
             nodes.edge_matched_pairs(left, right)?,
@@ -1366,16 +1347,6 @@ mod tests {
         Correspondence::new(vec![(n(0), n(0))], 2, 1)
             .expect("correspondence producer preserves partial-bijection invariants"),
     )]
-    #[case::parallel_left(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Graph::new(2, &[[0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
-    #[case::parallel_right(
-        Graph::new(2, &[[0, 1]]),
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
     fn test_graph_correspondence_induce_error(
         #[case] left: Graph,
         #[case] right: Graph,
@@ -1543,16 +1514,6 @@ mod tests {
         Correspondence::new(vec![(n(0), n(0))], 2, 1)
             .expect("correspondence producer preserves partial-bijection invariants"),
     )]
-    #[case::parallel_left(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Graph::new(2, &[[0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
-    #[case::parallel_right(
-        Graph::new(2, &[[0, 1]]),
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
     fn test_correspondence_edge_matched_pairs_error(
         #[case] left: Graph,
         #[case] right: Graph,
@@ -1573,11 +1534,6 @@ mod tests {
         Graph::new(2, &[[0, 1]]),
         Correspondence::new(vec![(n(0), n(0))], 1, 2)
             .expect("correspondence producer preserves partial-bijection invariants"),
-    )]
-    #[case::parallel(
-        Graph::new(2, &[[0, 1]]),
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
     )]
     fn test_correspondence_shared_edge_count_error(
         #[case] left: Graph,

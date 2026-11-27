@@ -10,7 +10,7 @@ fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
     AutomorphismAdapter {
         graph: source.clone(),
         colors: vec![AutomorphismColor::Entity(0); source.node_count()],
-        node_sources: source.node_ids().map(SubdivisionNodeSource::Node).collect(),
+        node_sources: source.node_ids().map(AdapterNodeSource::Node).collect(),
         source_node_count: source.node_count(),
     }
 }
@@ -290,7 +290,7 @@ fn test_visit_remapping_candidates(
         graph: Graph::new(source_colors.len(), &[]),
         colors: vec![AutomorphismColor::Entity(0); source_colors.len()],
         node_sources: (0..source_colors.len() as u32)
-            .map(|node| SubdivisionNodeSource::Node(NodeId(node)))
+            .map(|node| AdapterNodeSource::Node(NodeId(node)))
             .collect(),
         source_node_count: source_colors.len(),
     };
@@ -322,7 +322,7 @@ fn test_visit_remapping_candidates_termination(#[case] accepted: Vec<NodeId>) {
         graph: Graph::new(3, &[]),
         colors: vec![AutomorphismColor::Entity(0); 3],
         node_sources: (0..3)
-            .map(|node| SubdivisionNodeSource::Node(NodeId(node)))
+            .map(|node| AdapterNodeSource::Node(NodeId(node)))
             .collect(),
         source_node_count: 3,
     };

@@ -22,13 +22,13 @@ impl Graph {
 
     // Branch-and-bound with greedy upper bound.
     fn maximum_independent_set_branch_and_bound(&self) -> Vec<NodeId> {
-        let bound = self.node_bound();
-        if bound == 0 {
+        let node_count = self.node_count();
+        if node_count == 0 {
             return Vec::new();
         }
 
         let node_ids: Vec<NodeId> = self.node_ids().collect();
-        let mut available = vec![true; bound];
+        let mut available = vec![true; node_count];
 
         let mut current = Vec::new();
         let mut best = Vec::new();

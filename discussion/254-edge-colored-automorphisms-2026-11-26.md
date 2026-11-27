@@ -91,6 +91,15 @@ Retired remnants and multigraph fallbacks removed in the same cleanup:
   `enumerate_relevant_cycles`) and dropping loop/subdivision paths in Horton MCB and Vismara.
 - Parallel-edge ambiguity checks in `Correspondence::edge_matched_pairs` / `shared_edge_count`
   (`umol-graph-core/src/correspondence.rs`).
+- Because `Molecule` stores `graph: Graph` directly and `Transaction` (`RollbackMethod::Journal`)
+  mutates `&mut Molecule` in place, transient self-loop and parallel bonds are no longer
+  representable during editing: `Edit::AddBonds` rejects self-loops and parallel bonds before
+  mutating `Graph` with `MoleculeApplyError::Integrity(DuplicateAtom / ParallelBonds)` (leaving
+  `Reaction::apply_deltas_at`'s `Ok(None)` path and Python's `InvalidStructureError` intact without
+  adding duplicate `TransactionError` variants), and `MoleculeEditor::{add_bond, add_bonds,
+  add_topology}` remain asserted (panicking on self-loops and parallel bonds, matching out-of-range
+  atoms). `Molecule::try_from_entries` and `ReactionSpan::try_from_entries` retain their exact error
+  contracts.
 
 ### 2. Simple `IncidenceGraph` (`StereoAnchor`) and `ReactionSpan` bond uniqueness
 
@@ -497,41 +506,53 @@ together). `[dep: none]`
 
 ### S1 — Strictly simple `Graph` and `DiGraph` (`umol-graph-core`)
 
-Close `Graph` and `DiGraph` to simple graphs and remove obsolete multigraph/remnant APIs.
+Retire obsolete multigraph/remnant APIs and close `Graph` and `DiGraph` to simple graphs.
 
-#### S1a — `GraphError` and checked/asserted simplicity on `Graph` and `DiGraph`
+#### S1a — Remove multigraph fallbacks, `SubdividedGraph`, `NonSimpleGraphError`, and bound remnants [Done]
 
-**Module:** `umol-graph-core/src/{graph.rs, digraph.rs, lib.rs}`, internal callers in
-`umol-graph-core/src/algorithms/`, `umol-graph-core/tests/property/graph.rs`; **breaking
-(red→green)**. `[dep: S0a, S0b]`
+**Module:** `umol-graph-core/src/{graph.rs, lib.rs, correspondence.rs, algorithms/}`,
+`umol-graph-core/{tests/property/, benches/algorithms.rs}`, `umol-graph-ir/src/ir/{symmetry.rs,
+molecule/canonicalize.rs, reaction_span/canonicalize.rs}`, `docs/development/{nomenclature.md,
+property-tests.md}`; **breaking (red→green)** (independently green commit). `[dep: S0a, S0b]`
+
+- Replace all `node_bound()` / `edge_bound()` calls inside `umol-graph-core` with `node_count()` /
+  `edge_count()`, and remove `Graph::{is_dense, node_bound, edge_bound, subdivide_edges}`,
+  `SubdividedGraph`, `SubdivisionNodeSource`, and `NonSimpleGraphError`.
+- Remove the 8 `try_*` / `*_fallback` cycle methods in `cycles.rs` (keeping the 4 direct
+  `visit_*` / `enumerate_*` methods), and drop loop/subdivision paths in Read--Tarjan, Horton MCB,
+  Vismara, and Kolodzik URF.
+- Simplify `Correspondence::edge_matched_pairs` and `shared_edge_count` by using `Graph::find_edge`
+  directly and dropping the parallel-edge ambiguity checks and multigraph test cases.
+- Replace `SubdivisionNodeSource` in `umol-graph-ir/src/ir/symmetry.rs` with a temporary private
+  `AdapterNodeSource` enum until `S5` removes subdivision completely.
+- Migrate `tests/property/{cycles.rs, cycles/captured.rs, cycles/exhaustive.rs, correspondence.rs}`
+  and `benches/algorithms.rs` to simple graphs, remove `multigraph-through-4-edges-5.tsv`, and
+  update [nomenclature.md](../docs/development/nomenclature.md) and
+  [property-tests.md](../docs/development/property-tests.md).
+
+#### S1b — `GraphError`, checked/asserted simplicity on `Graph` and `DiGraph`, and editing alignment
+
+**Module:** `umol-graph-core/src/{graph.rs, digraph.rs, lib.rs, algorithms/topological_sort.rs}`,
+`umol-graph-core/tests/property/`, `umol-graph-ir/src/ir/{molecule.rs, reaction_span.rs,
+incidence.rs, symmetry.rs, molecule/, reaction_span/}`, `umol-py/{src/, tests/}`,
+`docs/development/integrity.md`; **breaking (red→green)** (independently green commit). `[dep: S1a]`
 
 - Add `GraphError::{NodeOutOfBounds, SelfLoop, ParallelEdge}` (re-exported at crate root).
 - Add `Graph::{try_new, try_add_edge, try_extend_edges, try_extend}` and `DiGraph::try_new`; make
   asserted `Graph::{new, add_edge, extend_edges, extend}` and `DiGraph::new` enforce the same
   contract (rejecting out-of-range endpoints, self-loops, and parallel edges within batches or
-  against existing edges).
-- Replace all `node_bound()` / `edge_bound()` calls inside `umol-graph-core` with `node_count()` /
-  `edge_count()`, and remove `Graph::{is_simple, is_dense, node_bound, edge_bound}`.
-- Add `rstest` unit and `proptest` property tests covering checked error variants and asserted
-  panic boundaries on both `Graph` and `DiGraph` (replacing any self-loop cycle tests in
-  `topological_sort.rs` with 2-cycles).
-
-#### S1b — Remove multigraph fallbacks, `SubdividedGraph`, and `NonSimpleGraphError`
-
-**Module:** `umol-graph-core/src/{graph.rs, lib.rs, correspondence.rs, algorithms/cycles.rs,
-algorithms/cycles/basis.rs, algorithms/cycles/relevant.rs}`, `umol-graph-core/tests/property/cycles.rs`,
-`umol-graph-ir/src/ir/symmetry.rs`, `docs/development/nomenclature.md`; **breaking (red→green)**
-(restores workspace green after `S1a`). `[dep: S1a]`
-
-- Remove `Graph::subdivide_edges`, `SubdividedGraph`, `SubdivisionNodeSource`,
-  `NonSimpleGraphError`, the 8 `try_*` / `*_fallback` cycle methods in `cycles.rs` (keeping the 4
-  direct `visit_*` / `enumerate_*` methods), and loop/subdivision paths in Horton MCB and Vismara.
-- Simplify `Correspondence::edge_matched_pairs` and `shared_edge_count` by removing parallel-edge
-  ambiguity checks and their 4 multigraph test cases.
-- Replace `SubdivisionNodeSource` in `umol-graph-ir/src/ir/symmetry.rs` with a temporary private
-  indicator until `S5` removes subdivision completely.
-- Update `tests/property/cycles.rs` (simple-graph generators) and
-  [nomenclature.md](../docs/development/nomenclature.md).
+  against existing edges), keep `Graph::restore` panic-free on malformed inputs, and remove
+  `Graph::is_simple`.
+- Migrate `topological_sort.rs` self-loop tests to 2-cycles and migrate remaining `umol-graph-core`
+  property tests (`graph.rs`, `restore.rs`, `connectivity.rs`, `traversal.rs`) to simple-graph
+  generators; add `rstest` unit and `proptest` property tests covering all `GraphError` variants
+  and asserted panic boundaries on `Graph` and `DiGraph`.
+- Align `umol-graph-ir` and `umol-py`: preserve `Molecule::try_from_entries` and
+  `ReactionSpan::try_from_entries` error contracts; make `Edit::AddBonds` reject self-loops and
+  parallel bonds before mutating `Graph` with `MoleculeApplyError::Integrity(DuplicateAtom /
+  ParallelBonds)`; keep `MoleculeEditor::{add_bond, add_bonds, add_topology}` asserted; update
+  [integrity.md](../docs/development/integrity.md) and transient-parallel/self-loop tests in
+  `umol-graph-ir` and `umol-py`.
 
 ### S2 — Native weighted sparse nauty (`umol-nauty-sys`)
 

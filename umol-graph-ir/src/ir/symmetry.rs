@@ -6,10 +6,16 @@ use std::ops::ControlFlow;
 use std::{iter, mem};
 
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Graph, NodeId, SubdivisionNodeSource, UnionFind,
+    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, UnionFind,
 };
 
 use super::incidence::{Incidence, IncidenceGraph};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum AdapterNodeSource {
+    Node(NodeId),
+    Edge(EdgeId),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct InitialColors {
@@ -32,7 +38,7 @@ pub(crate) enum AutomorphismColor {
 pub(crate) struct AutomorphismAdapter {
     pub(crate) graph: Graph,
     pub(crate) colors: Vec<AutomorphismColor>,
-    pub(crate) node_sources: Vec<SubdivisionNodeSource>,
+    pub(crate) node_sources: Vec<AdapterNodeSource>,
     pub(crate) source_node_count: usize,
 }
 
@@ -60,7 +66,7 @@ impl AutomorphismAdapter {
             .collect::<Vec<_>>();
         let mut node_sources = source
             .node_ids()
-            .map(SubdivisionNodeSource::Node)
+            .map(AdapterNodeSource::Node)
             .collect::<Vec<_>>();
         let mut edges = Vec::new();
 
@@ -92,7 +98,7 @@ impl AutomorphismAdapter {
             }
 
             let occurrence = NodeId(node_sources.len() as u32);
-            node_sources.push(SubdivisionNodeSource::Edge(edge));
+            node_sources.push(AdapterNodeSource::Edge(edge));
             colors.push(AutomorphismColor::Incidence(
                 initial_colors.incidences[edge.index()],
             ));
@@ -118,7 +124,7 @@ impl AutomorphismAdapter {
         self.colors[node.index()]
     }
 
-    pub(crate) fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
+    pub(crate) fn node_source(&self, node: NodeId) -> AdapterNodeSource {
         self.node_sources[node.index()]
     }
 
@@ -143,13 +149,11 @@ impl AutomorphismAdapter {
         output: &AutomorphismOutput,
     ) -> AutomorphismAdapterOutput {
         let source_node = |node| match self.node_source(node) {
-            SubdivisionNodeSource::Node(source) if source.index() < self.source_node_count => {
-                source
-            }
-            SubdivisionNodeSource::Node(_) => {
+            AdapterNodeSource::Node(source) if source.index() < self.source_node_count => source,
+            AdapterNodeSource::Node(_) => {
                 unreachable!("disjoint colors preserve the source-node domain")
             }
-            SubdivisionNodeSource::Edge(_) => {
+            AdapterNodeSource::Edge(_) => {
                 unreachable!("disjoint colors preserve the adapter node domain")
             }
         };
@@ -160,11 +164,11 @@ impl AutomorphismAdapter {
             .canonical_labels()
             .iter()
             .filter_map(|&node| match self.node_source(node) {
-                SubdivisionNodeSource::Node(source) if source.index() < self.source_node_count => {
+                AdapterNodeSource::Node(source) if source.index() < self.source_node_count => {
                     Some(source)
                 }
-                SubdivisionNodeSource::Node(_) => None,
-                SubdivisionNodeSource::Edge(_) => None,
+                AdapterNodeSource::Node(_) => None,
+                AdapterNodeSource::Edge(_) => None,
             })
             .collect();
         let source_generators = output

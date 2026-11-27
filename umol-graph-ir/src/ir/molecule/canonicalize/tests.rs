@@ -1162,8 +1162,8 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
     Graph::new(2, &[[0, 1]]),
     vec![AutomorphismColor::Entity(0); 2],
     vec![
-        SubdivisionNodeSource::Node(NodeId(0)),
-        SubdivisionNodeSource::Node(NodeId(1)),
+        AdapterNodeSource::Node(NodeId(0)),
+        AdapterNodeSource::Node(NodeId(1)),
     ],
     vec![vec![NodeId(0), NodeId(1)]],
 )]
@@ -1185,10 +1185,10 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
         AutomorphismColor::Entity(1),
     ],
     vec![
-        SubdivisionNodeSource::Node(NodeId(0)),
-        SubdivisionNodeSource::Node(NodeId(1)),
-        SubdivisionNodeSource::Node(NodeId(2)),
-        SubdivisionNodeSource::Node(NodeId(3)),
+        AdapterNodeSource::Node(NodeId(0)),
+        AdapterNodeSource::Node(NodeId(1)),
+        AdapterNodeSource::Node(NodeId(2)),
+        AdapterNodeSource::Node(NodeId(3)),
     ],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
@@ -1209,10 +1209,10 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
         AutomorphismColor::Entity(2),
     ],
     vec![
-        SubdivisionNodeSource::Node(NodeId(0)),
-        SubdivisionNodeSource::Node(NodeId(1)),
-        SubdivisionNodeSource::Node(NodeId(2)),
-        SubdivisionNodeSource::Node(NodeId(3)),
+        AdapterNodeSource::Node(NodeId(0)),
+        AdapterNodeSource::Node(NodeId(1)),
+        AdapterNodeSource::Node(NodeId(2)),
+        AdapterNodeSource::Node(NodeId(3)),
     ],
     vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
@@ -1220,7 +1220,7 @@ fn test_topology_search_input(
     #[case] molecule: Molecule,
     #[case] expected_graph: Graph,
     #[case] expected_colors: Vec<AutomorphismColor>,
-    #[case] expected_node_sources: Vec<SubdivisionNodeSource>,
+    #[case] expected_node_sources: Vec<AdapterNodeSource>,
     #[case] expected_partition: Vec<Vec<NodeId>>,
 ) {
     let molecule = molecule.normalize().unwrap();
@@ -1604,14 +1604,14 @@ fn test_automorphism_adapter_new(
     assert!(adapter.graph().is_simple());
 
     for node in source.node_ids() {
-        assert_eq!(adapter.node_source(node), SubdivisionNodeSource::Node(node));
+        assert_eq!(adapter.node_source(node), AdapterNodeSource::Node(node));
         assert_eq!(
             adapter.color(node),
             AutomorphismColor::Entity(colors.entities[node.index()]),
         );
     }
     for adapter_node in adapter.graph().node_ids().skip(source.node_count()) {
-        let SubdivisionNodeSource::Edge(edge) = adapter.node_source(adapter_node) else {
+        let AdapterNodeSource::Edge(edge) = adapter.node_source(adapter_node) else {
             panic!("a node after the source nodes subdivides an incidence");
         };
         assert_eq!(

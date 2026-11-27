@@ -1,6 +1,6 @@
 //! Molecule canonicalization.
 
-use umol_graph_core::{EdgeId, Graph, NodeId, SubdivisionNodeSource};
+use umol_graph_core::{EdgeId, Graph, NodeId};
 
 use super::super::aromatic::aromatic_system_representative_action;
 use super::super::canonicalize::{
@@ -21,8 +21,8 @@ use super::super::stereo::{
 };
 use super::super::symmetry::{
     canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor,
-    CanonicalCandidate, InitialColors, OrderedPartition,
+    remapping_exists, remapping_preserves_incidences, AdapterNodeSource, AutomorphismAdapter,
+    AutomorphismColor, CanonicalCandidate, InitialColors, OrderedPartition,
 };
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::symmetry::{
@@ -175,7 +175,7 @@ fn topology_search_input(
         .map(AutomorphismColor::Entity)
         .collect::<Vec<_>>();
     let mut node_sources = (0..atom_count)
-        .map(|index| SubdivisionNodeSource::Node(NodeId(index as u32)))
+        .map(|index| AdapterNodeSource::Node(NodeId(index as u32)))
         .collect::<Vec<_>>();
     let mut edges = Vec::<[u32; 2]>::with_capacity(molecule.bonds().count() * 2);
 
@@ -187,7 +187,7 @@ fn topology_search_input(
             edges.push([first, second]);
         } else {
             let subdivision = NodeId(node_sources.len() as u32);
-            node_sources.push(SubdivisionNodeSource::Node(subdivision));
+            node_sources.push(AdapterNodeSource::Node(subdivision));
             colors.push(AutomorphismColor::Entity(bond_color));
             edges.push([first, subdivision.0]);
             edges.push([subdivision.0, second]);

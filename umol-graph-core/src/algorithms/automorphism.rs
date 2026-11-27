@@ -168,7 +168,7 @@ impl Graph {
         let node_total = nodes.len();
         let subdivided_total = node_total + edges.len();
 
-        let mut dense = vec![0u32; self.node_bound()];
+        let mut dense = vec![0u32; self.node_count()];
         for (pos, &id) in nodes.iter().enumerate() {
             dense[id.index()] = pos as u32;
         }

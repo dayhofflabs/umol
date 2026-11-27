@@ -27,7 +27,7 @@ pub use algorithms::common_subgraph::{
 pub use algorithms::connected_subgraphs::SubgraphEnumerationAlgorithm;
 pub use algorithms::connectivity::{BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm};
 pub use algorithms::cycles::{
-    Cycle, MinimumCycleBasis, MinimumCycleBasisAlgorithm, NonSimpleGraphError, RelevantCycleCount,
+    Cycle, MinimumCycleBasis, MinimumCycleBasisAlgorithm, RelevantCycleCount,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     UniqueRingFamilies, UniqueRingFamily, UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
 };
@@ -56,7 +56,7 @@ pub use correspondence::{
     GraphCorrespondenceComposeError,
 };
 pub use digraph::DiGraph;
-pub use graph::{Graph, Neighbor, SubdividedGraph, SubdivisionNodeSource};
+pub use graph::{Graph, Neighbor};
 pub use id::{EdgeId, IdRange, NodeId, RelationId};
 pub use relation::{
     FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,

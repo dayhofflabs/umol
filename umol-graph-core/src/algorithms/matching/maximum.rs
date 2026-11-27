@@ -39,7 +39,7 @@ pub struct Matching {
 impl Matching {
     fn from_mates(graph: &Graph, mates: &[i32]) -> Self {
         let mut edges = Vec::new();
-        let mut represented = vec![false; graph.node_bound()];
+        let mut represented = vec![false; graph.node_count()];
         for eid in graph.edge_ids() {
             let [a, b] = graph.edge_endpoints(eid);
             if mates[a.index()] == b.0 as i32 && !represented[a.index()] && !represented[b.index()]
@@ -352,7 +352,7 @@ fn backtrack_pair(graph: &Graph, order: &[NodeId], idx: usize, mate: &mut [i32])
 }
 
 fn augment_from(graph: &Graph, mate: &mut [i32], root: usize) -> bool {
-    let n = graph.node_bound();
+    let n = graph.node_count();
     let mut used = vec![false; n];
     let mut p = vec![-1i32; n];
     let mut base: Vec<usize> = (0..n).collect();
@@ -1243,7 +1243,7 @@ mod tests {
         let mut matchings = Vec::new();
 
         for mask in 0..subset_count {
-            let mut matched = vec![false; graph.node_bound()];
+            let mut matched = vec![false; graph.node_count()];
             let mut edges = Vec::new();
             let mut valid = true;
             for edge in graph.edge_ids() {
@@ -1292,7 +1292,7 @@ mod tests {
     }
 
     fn greedy_matching_size(graph: &Graph) -> usize {
-        let mut matched = vec![false; graph.node_bound()];
+        let mut matched = vec![false; graph.node_count()];
         let mut size = 0;
         for edge in graph.edge_ids() {
             let [first, second] = graph.edge_endpoints(edge);

@@ -43,7 +43,7 @@ where
 }
 
 fn graph_context_strategy() -> impl Strategy<Value = (Graph, Graph, Correspondence<NodeId>)> {
-    (strategy::multigraph(6, 10), strategy::multigraph(6, 10)).prop_flat_map(|(left, right)| {
+    (strategy::simple_graph(6, 10), strategy::simple_graph(6, 10)).prop_flat_map(|(left, right)| {
         let correspondence =
             correspondence_with_counts_strategy(left.node_count(), right.node_count());
         (Just(left), Just(right), correspondence)
