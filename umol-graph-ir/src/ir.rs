@@ -97,7 +97,7 @@ pub use id::{
     AromaticSystemId, AtomId, AtomPosition, BondId, DativeBondId, MulticenterBondId,
     NoncovalentBondId, StereoAtomId, StereoBondId, StereoLigandPosition,
 };
-pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel};
+pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel, StereoVirtualLigands};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::{

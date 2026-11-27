@@ -24,7 +24,7 @@ use crate::ir::{
     ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange,
     StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta, StereoBondFieldChange,
     StereoBondForm, StereoBondId, StereoConfigurationForm, StereoKind, StereoLigand,
-    StereoLigandKind, Stereogenicity, StereogenicityForm,
+    StereoLigandKind, StereoVirtualLigands, Stereogenicity, StereogenicityForm,
 };
 
 #[fixture]
@@ -607,9 +607,14 @@ fn test_incidence_cmp() {
         Incidence::MulticenterAtom,
         Incidence::NoncovalentEndpoint,
         Incidence::StereoSite,
-        Incidence::StereoLigand(StereoLigandKind::Atom),
-        Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
-        Incidence::StereoLigand(StereoLigandKind::LonePair),
+        Incidence::StereoAnchor(StereoVirtualLigands::empty()),
+        Incidence::StereoAnchor(StereoVirtualLigands::IMPLICIT_HYDROGEN),
+        Incidence::StereoAnchor(StereoVirtualLigands::LONE_PAIR),
+        Incidence::StereoAnchor(
+            StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
+        ),
+        Incidence::StereoAnchor(StereoVirtualLigands::VIRTUAL),
+        Incidence::StereoLigand,
     ];
 
     for pair in incidences.windows(2) {

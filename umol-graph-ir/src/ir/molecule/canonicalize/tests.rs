@@ -18,8 +18,8 @@ use crate::ir::{
     MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindForm, NumForm, StereoAtomConstraintForm,
     StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
-    TopicityForm, TopicityRelationForm,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair,
+    StereoVirtualLigands, Topicity, TopicityForm, TopicityRelationForm,
 };
 use crate::mol_dsl;
 
@@ -1561,13 +1561,13 @@ fn test_entity_order(
             Incidence::BondEndpoint,
             Incidence::BondEndpoint,
             Incidence::BondEndpoint,
-            Incidence::StereoSite,
-            Incidence::StereoLigand(StereoLigandKind::Atom),
-            Incidence::StereoLigand(StereoLigandKind::Atom),
-            Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
-            Incidence::StereoLigand(StereoLigandKind::LonePair),
+            Incidence::StereoAnchor(
+                StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
+            ),
+            Incidence::StereoLigand,
+            Incidence::StereoLigand,
         ],
-        5,
+        3,
     )]
 fn test_automorphism_adapter_new(
     #[case] molecule: Molecule,
@@ -1589,7 +1589,7 @@ fn test_automorphism_adapter_new(
     assert_eq!(
         incidence_graph
             .incidences()
-            .map(|(_, incidence)| incidence.clone())
+            .map(|(_, incidence)| *incidence)
             .collect::<Vec<_>>(),
         expected_incidences,
     );

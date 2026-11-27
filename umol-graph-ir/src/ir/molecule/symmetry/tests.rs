@@ -2244,7 +2244,7 @@ fn test_incidence_color(
         .unwrap();
     let (incidence, electron_count) = incidence_color(&molecule, &incidence_graph, edge);
 
-    assert_eq!((incidence.clone(), electron_count), expected);
+    assert_eq!((*incidence, electron_count), expected);
 }
 
 #[rstest]
