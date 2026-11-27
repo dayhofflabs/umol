@@ -6,10 +6,17 @@
 //! across 1-pattern × many-targets and many-patterns × 1-target loops without caching semantic
 //! state inside scratch buffers.
 
+use std::cell::RefCell;
 use std::cmp::Reverse;
+use std::ops::ControlFlow;
 
-use super::symmetry::{query_priority_order, QuerySymmetryConstraints, TargetStabilizerChain};
-use super::SubgraphIsomorphismAlgorithm;
+use super::predicate::SubgraphIsomorphismPredicate;
+use super::symmetry::{
+    is_canonical_double_orbit_embedding, query_priority_order, QuerySymmetryConstraints,
+    TargetStabilizerChain, TargetSymmetry,
+};
+use super::{bitset_ri, glasgow, ray_kirsch, vf2_rdkit, SubgraphIsomorphismAlgorithm};
+use crate::correspondence::Correspondence;
 use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
@@ -26,7 +33,6 @@ const WIDE_EAGER_ADJ_LIMIT: usize = 1024;
 /// Prior calls on a scratch instance never affect the output of subsequent calls; matching with
 /// a reused scratch produces results identical to a fresh scratch.
 #[derive(Clone, Debug, Default)]
-#[allow(dead_code, reason = "buffers consumed by matching engines")]
 pub struct SubgraphIsomorphismScratch {
     pub(crate) order: Vec<usize>,
     pub(crate) pos: Vec<usize>,
@@ -38,17 +44,12 @@ pub struct SubgraphIsomorphismScratch {
     pub(crate) placed: Vec<bool>,
     pub(crate) ordered_neighbors: Vec<usize>,
     pub(crate) cand_counts: Vec<usize>,
-    pub(crate) cand_u64: Vec<u64>,
-    pub(crate) cand_u128: Vec<u128>,
     pub(crate) cand_wide: Vec<u64>,
-    pub(crate) class_u64: Vec<u64>,
-    pub(crate) class_u128: Vec<u128>,
     pub(crate) class_wide: Vec<u64>,
     pub(crate) adj_wide: Vec<u64>,
     pub(crate) adj_built_wide: Vec<u64>,
     pub(crate) trail_u64: Vec<u64>,
     pub(crate) trail_u128: Vec<u128>,
-    pub(crate) trail_wide: Vec<u64>,
     pub(crate) target_chain: TargetStabilizerChain,
 }
 
@@ -61,7 +62,6 @@ impl SubgraphIsomorphismScratch {
 
 /// Width-specialized degree-threshold and adjacency bitsets for a prepared target graph.
 #[derive(Clone, Debug)]
-#[allow(dead_code, reason = "consumed by bitset matching engines")]
 pub(crate) enum TargetBitsets {
     U64 {
         deg_ge: Vec<u64>,
@@ -129,19 +129,17 @@ impl PreparedSubgraphTarget {
         self.graph.max_degree()
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
+    #[cfg(test)]
     pub(crate) fn degree_hist(&self) -> &[u32] {
         &self.degree_hist
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn bitsets(&self) -> &TargetBitsets {
         &self.bitsets
     }
 
     /// Necessary degree-sequence check: for every degree `d`, the target must contain at least as
     /// many vertices of degree `>= d` as the query.
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn satisfies_degree_sequence(&self, query_hist: &[u32]) -> bool {
         if query_hist.len() > self.degree_hist.len() {
             return false;
@@ -155,7 +153,6 @@ impl PreparedSubgraphTarget {
 
 /// Static vertex-order plan with flat CSR parent-edge lists (used by `Vf2Rdkit`).
 #[derive(Clone, Debug)]
-#[allow(dead_code, reason = "consumed by Vf2Rdkit matching engine")]
 pub(crate) struct StaticOrderPlan {
     pub(crate) order: Vec<usize>,
     pub(crate) parents_offsets: Vec<usize>,
@@ -164,7 +161,6 @@ pub(crate) struct StaticOrderPlan {
 
 /// Compiled bond-oriented instruction for `RayKirsch`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code, reason = "consumed by RayKirsch matching engine")]
 pub(crate) enum RkStep {
     /// Start a new connected component at `node` (with query degree `degree`).
     Seed { node: usize, degree: usize },
@@ -186,7 +182,6 @@ pub(crate) enum RkStep {
 
 /// Algorithm-specific precompiled query plan stored inside [`PreparedSubgraphQuery`].
 #[derive(Clone, Debug)]
-#[allow(dead_code, reason = "consumed by matching engines")]
 pub(crate) enum PreparedQueryPlan {
     Vf2Rdkit(StaticOrderPlan),
     RayKirsch(Vec<RkStep>),
@@ -214,7 +209,6 @@ pub struct PreparedSubgraphQuery {
     degree_hist: Vec<u32>,
     degrees: Vec<u32>,
     priority_order: Vec<u32>,
-    priority_rank: Vec<u32>,
     symmetry: QuerySymmetryConstraints,
     /// Flat CSR of strict lower-bound symmetry predecessors `lo` (`phi(lo) < phi(q)`) per `q`.
     sym_gt_offsets: Vec<u32>,
@@ -237,10 +231,6 @@ impl PreparedSubgraphQuery {
             .map(|node| graph.degree(node) as u32)
             .collect();
         let priority_order = query_priority_order(&graph);
-        let mut priority_rank = vec![0u32; node_count];
-        for (rank, &node) in priority_order.iter().enumerate() {
-            priority_rank[node as usize] = rank as u32;
-        }
         let plan = match algorithm {
             SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
                 PreparedQueryPlan::Vf2Rdkit(build_vf2rdkit_plan(&graph, None))
@@ -259,7 +249,6 @@ impl PreparedSubgraphQuery {
             degree_hist,
             degrees,
             priority_order,
-            priority_rank,
             symmetry,
             sym_gt_offsets: empty_offsets.clone(),
             sym_gt_nodes: Vec::new(),
@@ -332,28 +321,242 @@ impl PreparedSubgraphQuery {
         &self.symmetry
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
+    /// Visit every subgraph isomorphism of this prepared query in `target` until completion or
+    /// `visitor` returns [`ControlFlow::Break`], reusing `scratch`.
+    ///
+    /// When query symmetry constraints and/or `target_symmetry` are supplied, emits exactly one
+    /// canonical representative per orbit ordered lexicographically along `(Reverse(deg(q)), q)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `target_symmetry` is `Some(sym)` and `sym.node_count() != target.node_count()`.
+    ///
+    /// # Semantic properties
+    ///
+    /// - Reusing `scratch` produces results identical to a fresh [`SubgraphIsomorphismScratch`].
+    /// - The set of emitted embeddings is invariant across [`SubgraphIsomorphismAlgorithm`]
+    ///   variants.
+    pub fn visit_matches<B, P, F>(
+        &self,
+        target: &PreparedSubgraphTarget,
+        target_symmetry: Option<&TargetSymmetry>,
+        predicate: &mut P,
+        scratch: &mut SubgraphIsomorphismScratch,
+        mut visitor: F,
+    ) -> ControlFlow<B>
+    where
+        P: SubgraphIsomorphismPredicate,
+        F: FnMut(&[NodeId]) -> ControlFlow<B>,
+    {
+        match self.algorithm {
+            SubgraphIsomorphismAlgorithm::BitsetRi => bitset_ri::visit_prepared(
+                target,
+                self,
+                target_symmetry,
+                predicate,
+                scratch,
+                &mut visitor,
+            ),
+            SubgraphIsomorphismAlgorithm::Glasgow => glasgow::visit_prepared(
+                target,
+                self,
+                target_symmetry,
+                predicate,
+                scratch,
+                &mut visitor,
+            ),
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit => vf2_rdkit::visit_prepared(
+                target,
+                self,
+                target_symmetry,
+                predicate,
+                scratch,
+                &mut visitor,
+            ),
+            SubgraphIsomorphismAlgorithm::RayKirsch => ray_kirsch::visit_prepared(
+                target,
+                self,
+                target_symmetry,
+                predicate,
+                scratch,
+                &mut visitor,
+            ),
+            legacy => self.visit_matches_legacy(
+                target,
+                target_symmetry,
+                predicate,
+                scratch,
+                legacy,
+                &mut visitor,
+            ),
+        }
+    }
+
+    /// Return whether at least one subgraph isomorphism of this prepared query exists in `target`,
+    /// reusing `scratch`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `target_symmetry` is `Some(sym)` and `sym.node_count() != target.node_count()`.
+    pub fn has_match<P>(
+        &self,
+        target: &PreparedSubgraphTarget,
+        target_symmetry: Option<&TargetSymmetry>,
+        predicate: &mut P,
+        scratch: &mut SubgraphIsomorphismScratch,
+    ) -> bool
+    where
+        P: SubgraphIsomorphismPredicate,
+    {
+        self.visit_matches(target, target_symmetry, predicate, scratch, |_| {
+            ControlFlow::Break(())
+        })
+        .is_break()
+    }
+
+    /// Return the first subgraph isomorphism of this prepared query in `target` as a
+    /// [`Correspondence`], or `None` if no match exists, reusing `scratch`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `target_symmetry` is `Some(sym)` and `sym.node_count() != target.node_count()`.
+    pub fn first_match<P>(
+        &self,
+        target: &PreparedSubgraphTarget,
+        target_symmetry: Option<&TargetSymmetry>,
+        predicate: &mut P,
+        scratch: &mut SubgraphIsomorphismScratch,
+    ) -> Option<Correspondence<NodeId>>
+    where
+        P: SubgraphIsomorphismPredicate,
+    {
+        match self.visit_matches(target, target_symmetry, predicate, scratch, |embedding| {
+            ControlFlow::Break(Correspondence::from_images(embedding, target.node_count()))
+        }) {
+            ControlFlow::Break(correspondence) => Some(correspondence),
+            ControlFlow::Continue(()) => None,
+        }
+    }
+
+    /// Count every subgraph isomorphism of this prepared query in `target` without materializing
+    /// embeddings, reusing `scratch`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `target_symmetry` is `Some(sym)` and `sym.node_count() != target.node_count()`.
+    pub fn count_matches<P>(
+        &self,
+        target: &PreparedSubgraphTarget,
+        target_symmetry: Option<&TargetSymmetry>,
+        predicate: &mut P,
+        scratch: &mut SubgraphIsomorphismScratch,
+    ) -> u64
+    where
+        P: SubgraphIsomorphismPredicate,
+    {
+        match self.algorithm {
+            SubgraphIsomorphismAlgorithm::BitsetRi => {
+                bitset_ri::count_prepared(target, self, target_symmetry, predicate, scratch)
+            }
+            SubgraphIsomorphismAlgorithm::Glasgow => {
+                glasgow::count_prepared(target, self, target_symmetry, predicate, scratch)
+            }
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
+                vf2_rdkit::count_prepared(target, self, target_symmetry, predicate, scratch)
+            }
+            SubgraphIsomorphismAlgorithm::RayKirsch => {
+                ray_kirsch::count_prepared(target, self, target_symmetry, predicate, scratch)
+            }
+            legacy => {
+                let mut count = 0u64;
+                let _: ControlFlow<()> = self.visit_matches_legacy(
+                    target,
+                    target_symmetry,
+                    predicate,
+                    scratch,
+                    legacy,
+                    &mut |_| {
+                        count += 1;
+                        ControlFlow::Continue(())
+                    },
+                );
+                count
+            }
+        }
+    }
+
+    fn visit_matches_legacy<B, P>(
+        &self,
+        target: &PreparedSubgraphTarget,
+        target_symmetry: Option<&TargetSymmetry>,
+        predicate: &mut P,
+        scratch: &mut SubgraphIsomorphismScratch,
+        algorithm: SubgraphIsomorphismAlgorithm,
+        visitor: &mut impl FnMut(&[NodeId]) -> ControlFlow<B>,
+    ) -> ControlFlow<B>
+    where
+        P: SubgraphIsomorphismPredicate,
+    {
+        if let Some(ts) = target_symmetry {
+            assert_eq!(
+                ts.node_count(),
+                target.node_count(),
+                "target symmetry node count must match the prepared target graph"
+            );
+        }
+        let pred_cell = RefCell::new(predicate);
+        let mut node_match = |q: NodeId, t: NodeId| pred_cell.borrow_mut().match_node(q, t);
+        let mut edge_match = |qe: EdgeId, te: EdgeId| pred_cell.borrow_mut().match_edge(qe, te);
+        let has_q_sym = !self.symmetry.is_trivial();
+        let active_target_sym = target_symmetry.filter(|sym| !sym.is_trivial());
+        let mut emb_indices = Vec::with_capacity(self.graph.node_count());
+
+        target.graph().visit_subgraph_isomorphisms(
+            &self.graph,
+            &mut node_match,
+            &mut edge_match,
+            algorithm,
+            |embedding| {
+                if has_q_sym
+                    && !self
+                        .symmetry
+                        .constraints()
+                        .iter()
+                        .all(|&(lo, hi)| embedding[lo.index()] < embedding[hi.index()])
+                {
+                    return ControlFlow::Continue(());
+                }
+                if let Some(ts) = active_target_sym {
+                    emb_indices.clear();
+                    emb_indices.extend(embedding.iter().map(|n| n.index()));
+                    if !is_canonical_double_orbit_embedding(
+                        &emb_indices,
+                        &self.priority_order,
+                        &self.symmetry,
+                        ts,
+                        &mut scratch.target_chain,
+                    ) {
+                        return ControlFlow::Continue(());
+                    }
+                }
+                visitor(embedding)
+            },
+        )
+    }
+
     pub(crate) fn degree_hist(&self) -> &[u32] {
         &self.degree_hist
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn degrees(&self) -> &[u32] {
         &self.degrees
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn priority_order(&self) -> &[u32] {
         &self.priority_order
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
-    pub(crate) fn priority_rank(&self) -> &[u32] {
-        &self.priority_rank
-    }
-
     /// Query nodes `lo` constrained to satisfy `phi(lo) < phi(node)`.
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn sym_lower_bounds(&self, node: usize) -> &[u32] {
         let start = self.sym_gt_offsets[node] as usize;
         let end = self.sym_gt_offsets[node + 1] as usize;
@@ -361,14 +564,12 @@ impl PreparedSubgraphQuery {
     }
 
     /// Query nodes `hi` constrained to satisfy `phi(node) < phi(hi)`.
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn sym_upper_bounds(&self, node: usize) -> &[u32] {
         let start = self.sym_lt_offsets[node] as usize;
         let end = self.sym_lt_offsets[node + 1] as usize;
         &self.sym_lt_nodes[start..end]
     }
 
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn plan(&self) -> &PreparedQueryPlan {
         &self.plan
     }
@@ -844,5 +1045,123 @@ mod tests {
         let path4 = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
         let pq = PreparedSubgraphQuery::new(&path4, SubgraphIsomorphismAlgorithm::Vf2Rdkit);
         let _ = pq.with_symmetry(QuerySymmetryConstraints::none(3));
+    }
+
+    #[rstest]
+    #[case::empty_query(Graph::new(4, &[[0, 1], [1, 2]]), Graph::new(0, &[]))]
+    #[case::unsat_triangle_in_path(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), Graph::new(3, &[[0, 1], [1, 2], [0, 2]]))]
+    #[case::cross_inversion(Graph::new(4, &[[0, 2], [1, 3]]), Graph::new(2, &[[0, 1]]))]
+    #[case::square_in_cubane(
+        Graph::new(
+            8,
+            &[
+                [0, 1], [1, 2], [2, 3], [3, 0],
+                [4, 5], [5, 6], [6, 7], [7, 4],
+                [0, 4], [1, 5], [2, 6], [3, 7],
+            ],
+        ),
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]])
+    )]
+    #[case::hexagon_in_naphthalene(
+        Graph::new(
+            10,
+            &[
+                [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
+                [3, 6], [6, 7], [7, 8], [8, 9], [9, 4],
+            ],
+        ),
+        Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]])
+    )]
+    #[case::disconnected_two_edges_in_c6(
+        Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+        Graph::new(4, &[[0, 1], [2, 3]])
+    )]
+    fn test_prepared_subgraph_query_matches(#[case] target: Graph, #[case] query: Graph) {
+        use SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
+
+        use super::super::ClosureSubgraphIsomorphismPredicate;
+
+        let pt = PreparedSubgraphTarget::new(&target);
+        let q_sym = QuerySymmetryConstraints::from_graph(
+            &query,
+            |_| 0u8,
+            |_| 0u8,
+            AutomorphismAlgorithm::TrailIr,
+        );
+        let t_sym =
+            TargetSymmetry::from_graph(&target, |_| 0u8, |_| 0u8, AutomorphismAlgorithm::TrailIr);
+        let mut scratch = SubgraphIsomorphismScratch::new();
+        let mut pred = ClosureSubgraphIsomorphismPredicate::new(|_, _| true, |_, _| true);
+
+        for (use_q, use_h) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut baseline_embeddings: Option<Vec<Vec<usize>>> = None;
+            let ts = use_h.then_some(&t_sym);
+
+            for alg in [Vf2Rdkit, RayKirsch, BitsetRi, Glasgow] {
+                let mut pq = PreparedSubgraphQuery::new(&query, alg);
+                if use_q {
+                    pq = pq.with_symmetry(q_sym.clone());
+                }
+
+                let mut visited = Vec::new();
+                let _: ControlFlow<()> =
+                    pq.visit_matches(&pt, ts, &mut pred, &mut scratch, |emb| {
+                        visited.push(emb.iter().map(|n| n.index()).collect::<Vec<_>>());
+                        ControlFlow::Continue(())
+                    });
+                visited.sort_unstable();
+
+                let count = pq.count_matches(&pt, ts, &mut pred, &mut scratch);
+                let has = pq.has_match(&pt, ts, &mut pred, &mut scratch);
+                let first = pq.first_match(&pt, ts, &mut pred, &mut scratch);
+
+                assert_eq!(
+                    count,
+                    visited.len() as u64,
+                    "alg={alg:?} q={use_q} h={use_h}"
+                );
+                assert_eq!(has, !visited.is_empty(), "alg={alg:?} q={use_q} h={use_h}");
+                match first {
+                    None => assert!(visited.is_empty(), "alg={alg:?} q={use_q} h={use_h}"),
+                    Some(corr) => {
+                        let imgs: Vec<usize> = corr
+                            .matched_pairs()
+                            .iter()
+                            .map(|&(_, host)| host.index())
+                            .collect();
+                        assert!(
+                            visited.contains(&imgs),
+                            "first match {imgs:?} not in visited set for {alg:?}"
+                        );
+                    }
+                }
+
+                if let Some(ref expected) = baseline_embeddings {
+                    assert_eq!(
+                        &visited, expected,
+                        "embedding parity mismatch alg={alg:?} q={use_q} h={use_h}"
+                    );
+                } else {
+                    baseline_embeddings = Some(visited);
+                }
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::vf2_rdkit(SubgraphIsomorphismAlgorithm::Vf2Rdkit)]
+    #[case::ray_kirsch(SubgraphIsomorphismAlgorithm::RayKirsch)]
+    #[case::bitset_ri(SubgraphIsomorphismAlgorithm::BitsetRi)]
+    #[case::glasgow(SubgraphIsomorphismAlgorithm::Glasgow)]
+    #[should_panic(expected = "target symmetry node count must match")]
+    fn test_prepared_subgraph_query_visit_matches_error(#[case] alg: SubgraphIsomorphismAlgorithm) {
+        use super::super::ClosureSubgraphIsomorphismPredicate;
+
+        let pt = PreparedSubgraphTarget::new(&Graph::new(3, &[[0, 1], [1, 2]]));
+        let pq = PreparedSubgraphQuery::new(&Graph::new(0, &[]), alg);
+        let wrong_sym = TargetSymmetry::none(4);
+        let mut scratch = SubgraphIsomorphismScratch::new();
+        let mut pred = ClosureSubgraphIsomorphismPredicate::new(|_, _| true, |_, _| true);
+        let _ = pq.has_match(&pt, Some(&wrong_sym), &mut pred, &mut scratch);
     }
 }

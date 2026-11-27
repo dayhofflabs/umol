@@ -272,7 +272,6 @@ pub(crate) fn visit_direct<B, P: SubgraphIsomorphismPredicate>(
 }
 
 /// Count every subgraph isomorphism of `query` in `target` directly (without prepared carriers).
-#[allow(dead_code, reason = "wired into Graph::count_subgraph_isomorphisms")]
 pub(crate) fn count_direct<P: SubgraphIsomorphismPredicate>(
     target: &Graph,
     query: &Graph,
@@ -286,10 +285,6 @@ pub(crate) fn count_direct<P: SubgraphIsomorphismPredicate>(
 }
 
 /// Visit every subgraph isomorphism of a prepared query in a prepared target.
-#[allow(
-    dead_code,
-    reason = "wired into PreparedSubgraphQuery matching methods"
-)]
 pub(crate) fn visit_prepared<B, P: SubgraphIsomorphismPredicate>(
     target: &PreparedSubgraphTarget,
     query: &PreparedSubgraphQuery,
@@ -305,10 +300,6 @@ pub(crate) fn visit_prepared<B, P: SubgraphIsomorphismPredicate>(
 }
 
 /// Count every subgraph isomorphism of a prepared query in a prepared target.
-#[allow(
-    dead_code,
-    reason = "wired into PreparedSubgraphQuery matching methods"
-)]
 pub(crate) fn count_prepared<P: SubgraphIsomorphismPredicate>(
     target: &PreparedSubgraphTarget,
     query: &PreparedSubgraphQuery,

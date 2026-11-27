@@ -838,7 +838,7 @@ pub(crate) struct TargetStabilizerChain {
 }
 
 impl TargetStabilizerChain {
-    #[allow(dead_code, reason = "consumed by matching engines")]
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -999,10 +999,6 @@ pub(crate) fn is_canonical_double_orbit_with_built_chain(
 ///
 /// Returns `true` if and only if `embedding` is the unique lexicographic minimum of its
 /// `(G_Q × G_H)`-orbit `{h ∘ embedding ∘ g : g ∈ G_Q, h ∈ G_H}` ordered along `priority_order`.
-#[allow(
-    dead_code,
-    reason = "consumed by engines without an active push-down chain"
-)]
 pub(crate) fn is_canonical_double_orbit_embedding(
     embedding: &[usize],
     priority_order: &[u32],
