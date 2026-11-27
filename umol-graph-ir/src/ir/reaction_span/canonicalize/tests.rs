@@ -1073,15 +1073,16 @@ fn test_same_colors(
 )]
 #[case::removed_and_added_bond(
     ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
         bonds: vec![
             (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
-            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
         ],
         ..Default::default()
     }),
-    Graph::new(3, &[[0, 2], [2, 1], [0, 1]]),
+    Graph::new(4, &[[0, 3], [3, 1], [1, 2]]),
     vec![
+        AutomorphismColor::Entity(0),
         AutomorphismColor::Entity(0),
         AutomorphismColor::Entity(0),
         AutomorphismColor::Entity(2),
@@ -1090,8 +1091,9 @@ fn test_same_colors(
         SubdivisionNodeSource::Node(NodeId(0)),
         SubdivisionNodeSource::Node(NodeId(1)),
         SubdivisionNodeSource::Node(NodeId(2)),
+        SubdivisionNodeSource::Node(NodeId(3)),
     ],
-    vec![vec![NodeId(0), NodeId(1)], vec![NodeId(2)]],
+    vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
 )]
 fn test_topology_search_input(
     #[case] span: ReactionSpan,
@@ -1149,14 +1151,15 @@ fn test_topology_search_input(
 )]
 #[case::removed_and_added_bond(
     ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
         bonds: vec![
             (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
-            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
         ],
         ..Default::default()
     }),
     vec![
+        Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
         Entity::Bond(BondId(1)),
@@ -1349,10 +1352,10 @@ fn test_entity_order(#[case] span: ReactionSpan, #[case] expected: Vec<Entity>) 
 )]
 #[case::removed_and_added_bond(
     ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 3],
         bonds: vec![
             (AtomId(0), AtomId(1), EntitySpan::Added(BondForm::from_order(2))),
-            (AtomId(0), AtomId(1), EntitySpan::Removed(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Removed(BondForm::from_order(1))),
         ],
         ..Default::default()
     }),

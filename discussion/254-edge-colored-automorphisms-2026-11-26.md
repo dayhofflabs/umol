@@ -7,6 +7,7 @@ Relates: [120](120-molecular-graph-generation-2026-06-21.md),
 [176](176-ast-naming-2026-07-31.md),
 [216](216-canonicalization-performance-2026-08-30.md),
 [233](233-graph-ir-delta-review-2026-09-23.md),
+[238](238-non-cascading-removal-2026-10-16.md),
 [245](245-canonical-eq-cost-2026-11-12.md),
 [246](246-stereo-derived-readings-2026-11-12.md),
 [255](255-reaction-span-bond-normalization-2026-11-26.md),
@@ -476,18 +477,23 @@ reaction_span/symmetry.rs}`, affected `umol-graph-ir` tests; **breaking (red→g
 - Update `Molecule::incidence_graph`, `ReactionSpan::incidence_graph`, incidence color readers, and
   `incidence.rs` / `canonicalize` / `symmetry` unit tests; assert every `IncidenceGraph` is simple.
 
-#### S0b — Unique bond-endpoint integrity check on `ReactionSpan`
+#### S0b — Unique bond-endpoint integrity check on `ReactionSpan` [Done]
 
-**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `umol-graph-ir/src/ir/reaction_span/canonicalize/tests.rs`,
-`docs/development/integrity.md`; **breaking (red→green)** (integrity error variant + affected
-`removed_and_added_bond` tests updated together). `[dep: none]`
+**Module:** `umol-graph-ir/src/ir/{reaction_span.rs, reaction.rs, reaction_span/canonicalize.rs,
+reaction_span/canonicalize/tests.rs}`, `docs/development/integrity.md`; **breaking (red→green)**
+(integrity error variant + rule-level bond-endpoint uniqueness guard + affected tests updated
+together). `[dep: none]`
 
 - Add `ReactionSpanIntegrityError::ParallelBonds { atoms: [AtomId; 2] }`, enforced in
-  `check_reaction_span_entries` and `ReactionSpan::check_integrity` (inherited by
+  `check_reaction_span_entries` (inherited by `ReactionSpan::from_entries`, `superimpose`, and
   `Reaction::to_reaction_span`).
-- Update [integrity.md](../docs/development/integrity.md) and migrate/replace the
-  `removed_and_added_bond` tests; follow-up delta normalization is tracked in
-  [255](255-reaction-span-bond-normalization-2026-11-26.md).
+- Add provisional rule-level `bond_endpoints_are_disjoint` check in `Reaction::prepare_deltas`
+  (`ApplyPreconditionError::InconsistentReaction`) and `Reaction::apply_deltas_at`
+  (`ApplyError::Inconsistent`) with a TODO to revisit once delta normalization disposes of
+  same-endpoint remove+add combinations (leaving `Deltas::normalize` untouched).
+- Update [integrity.md](../docs/development/integrity.md), append dated addendum to
+  [238](238-non-cascading-removal-2026-10-16.md), and update affected tests; follow-up delta
+  normalization is tracked in [255](255-reaction-span-bond-normalization-2026-11-26.md).
 
 ### S1 — Strictly simple `Graph` and `DiGraph` (`umol-graph-core`)
 

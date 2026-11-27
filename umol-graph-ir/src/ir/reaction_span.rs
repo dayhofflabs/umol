@@ -7,7 +7,7 @@
 //! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::mem;
@@ -130,6 +130,8 @@ fn check_span_stereo_kind(
 pub enum ReactionSpanIntegrityError {
     #[error("reaction span entries reference unavailable {entity}")]
     InvalidReference { entity: Entity },
+    #[error("bond: parallel bonds on atoms {atoms:?}")]
+    ParallelBonds { atoms: [AtomId; 2] },
     #[error("reaction span lhs is not a valid molecule representation: {0}")]
     Lhs(MoleculeIntegrityError),
     #[error("reaction span rhs is not a valid molecule representation: {0}")]
@@ -151,8 +153,9 @@ impl ReactionSpan {
     /// # Panics
     ///
     /// Panics when a participant, site, ligand, or constraint references an entity absent from the
-    /// union frame or from a side on which the referring entry is present, when either projection
-    /// violates molecule representation integrity, or when a modified stereo entity changes kind.
+    /// union frame or from a side on which the referring entry is present, when two union bonds
+    /// share the same unordered atom pair, when either projection violates molecule representation
+    /// integrity, or when a modified stereo entity changes kind.
     /// Projection failures identify the invalid lhs or rhs. Use [`Self::try_from_entries`] for
     /// independently assembled or untrusted entries.
     pub fn from_entries(entries: ReactionSpanEntries) -> Self {
@@ -167,7 +170,9 @@ impl ReactionSpan {
     /// # Errors
     ///
     /// Returns [`ReactionSpanIntegrityError::InvalidReference`] when a participant, site, ligand,
-    /// or constraint references an entity absent from the union frame.
+    /// or constraint references an entity absent from the union frame, and
+    /// [`ReactionSpanIntegrityError::ParallelBonds`] when two union bonds share the same unordered
+    /// endpoint pair.
     /// [`ReactionSpanIntegrityError::Lhs`] or [`ReactionSpanIntegrityError::Rhs`] identifies a
     /// projection that violates [`Molecule`] representation integrity, including a repeated stereo
     /// ligand or a stereo frame exceeding the supported degree. A modified stereo entity carrying
@@ -220,8 +225,9 @@ impl ReactionSpan {
 
     /// Check the representation invariants required to interpret both sides of this span.
     ///
-    /// Union-frame references are established by checked construction. This check additionally
-    /// materializes both projections through the authoritative molecule integrity contract.
+    /// Union-frame references and bond-endpoint uniqueness are established by checked construction.
+    /// This check additionally materializes both projections through the authoritative molecule
+    /// integrity contract.
     pub(crate) fn check_integrity(&self) -> Result<(), ReactionSpanIntegrityError> {
         Molecule::try_from_entries(self.project_entries(Side::Left))
             .map_err(ReactionSpanIntegrityError::Lhs)?;
@@ -561,6 +567,21 @@ fn check_reaction_span_entries(
                 .map_err(|entity| ReactionSpanIntegrityError::InvalidReference { entity })?;
         }
     }
+
+    let mut bond_pairs = HashSet::with_capacity(entries.bonds.len());
+    for &(first, second, _) in &entries.bonds {
+        if first == second {
+            continue;
+        }
+        let atoms = if first <= second {
+            [first, second]
+        } else {
+            [second, first]
+        };
+        if !bond_pairs.insert(atoms) {
+            return Err(ReactionSpanIntegrityError::ParallelBonds { atoms });
+        }
+    }
     Ok(())
 }
 
@@ -600,9 +621,10 @@ impl ReactionSpan {
     /// constraints remapped into that union frame. Returns `None` when any correspondence component
     /// declares counts different from the supplied molecules or a matched bond, overlay, or stereo
     /// entity has incompatible incidence under the atom correspondence, and when the resulting span fails its
-    /// representation-integrity contract — a matched pair of stereo entities asserting different
-    /// stereo kinds, which each side satisfies alone. A compatible correspondence may leave
-    /// otherwise matchable entities unmatched; they are represented as removals and additions.
+    /// representation-integrity contract — such as a matched pair of stereo entities asserting
+    /// different stereo kinds, or an unmatched bond pair on matched endpoints producing parallel
+    /// union bonds. A compatible correspondence may leave otherwise matchable overlays unmatched;
+    /// they are represented as removals and additions.
     ///
     /// # Semantic properties
     ///
@@ -4276,11 +4298,8 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(
-        expected = "invalid reaction span entries: reaction span entries reference unavailable atom 1"
-    )]
-    fn test_reaction_span_from_entries_error() {
-        ReactionSpan::from_entries(ReactionSpanEntries {
+    #[case::invalid_reference(
+        ReactionSpanEntries {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
             bonds: vec![(
                 AtomId(0),
@@ -4288,7 +4307,48 @@ mod tests {
                 EntitySpan::Unchanged(BondForm::default()),
             )],
             ..Default::default()
-        });
+        },
+        ReactionSpanIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        },
+    )]
+    #[case::parallel_bonds(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); 2],
+            bonds: vec![
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Removed(BondForm::from_order(1)),
+                ),
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Added(BondForm::from_order(2)),
+                ),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        },
+    )]
+    fn test_reaction_span_from_entries_error(
+        #[case] entries: ReactionSpanEntries,
+        #[case] expected: ReactionSpanIntegrityError,
+    ) {
+        let panic = catch_unwind(|| ReactionSpan::from_entries(entries))
+            .expect_err("invalid reaction span entries must panic");
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .expect("reaction span constructor panic must carry a message");
+
+        assert_eq!(
+            message,
+            format!("invalid reaction span entries: {expected}")
+        );
     }
 
     #[rstest]
@@ -4711,6 +4771,69 @@ mod tests {
             entity: Entity::Atom(AtomId(0)),
         }),
     )]
+    #[case::parallel_bonds_removed_and_added(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); 2],
+            bonds: vec![
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Removed(BondForm::from_order(1)),
+                ),
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Added(BondForm::from_order(2)),
+                ),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        },
+    )]
+    #[case::parallel_bonds_reversed_endpoints(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); 2],
+            bonds: vec![
+                (
+                    AtomId(1),
+                    AtomId(0),
+                    EntitySpan::Removed(BondForm::from_order(1)),
+                ),
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Added(BondForm::from_order(2)),
+                ),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        },
+    )]
+    #[case::parallel_bonds_unchanged(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); 2],
+            bonds: vec![
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Unchanged(BondForm::from_order(1)),
+                ),
+                (
+                    AtomId(0),
+                    AtomId(1),
+                    EntitySpan::Unchanged(BondForm::from_order(2)),
+                ),
+            ],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        },
+    )]
     fn test_reaction_span_try_from_entries_error(
         #[case] entries: ReactionSpanEntries,
         #[case] expected: ReactionSpanIntegrityError,
@@ -5029,6 +5152,10 @@ mod tests {
     #[case::invalid(
         ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(3)) },
         "reaction span entries reference unavailable atom 3",
+    )]
+    #[case::parallel_bonds(
+        ReactionSpanIntegrityError::ParallelBonds { atoms: [AtomId(0), AtomId(1)] },
+        "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]",
     )]
     #[case::conflicting_constraint_spans(
         ReactionSpanIntegrityError::ConflictingConstraintSpans {
@@ -5699,28 +5826,51 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_to_reaction_span_error() {
-        assert_eq!(
-            Reaction::new(
-                Molecule::from_entries(MoleculeEntries {
-                    atoms: vec![
-                        AtomForm::from_element(Element::C),
-                        AtomForm::from_element(Element::C),
-                    ],
-                    bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-                    ..Default::default()
-                }),
-                Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+    #[case::bond_order_mismatch(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(3),
+                },
+            })]),
+        )
+    )]
+    #[case::removed_and_added_same_endpoints(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Bond(BondDelta::Remove {
                     id: BondId(0),
-                    change: BondFieldChange::Order {
-                        old: NumForm::Lit(2),
-                        new: NumForm::Lit(3),
-                    },
-                })]),
-            )
-            .to_reaction_span(),
-            Err(Contradiction),
-        );
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(2),
+                }),
+            ]),
+        )
+    )]
+    fn test_reaction_to_reaction_span_error(#[case] reaction: Reaction) {
+        assert_eq!(reaction.to_reaction_span(), Err(Contradiction));
     }
 
     #[rstest]
@@ -7358,28 +7508,7 @@ mod tests {
             Correspondence::new(vec![], 0, 0).unwrap(),
         );
 
-        assert_eq!(
-            ReactionSpan::superimpose(&lhs, &rhs, &correspondence),
-            Some(ReactionSpan::from_entries(ReactionSpanEntries {
-                atoms: vec![
-                    EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-                    EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-                ],
-                bonds: vec![
-                    (
-                        AtomId(0),
-                        AtomId(1),
-                        EntitySpan::Removed(BondForm::from_order(1)),
-                    ),
-                    (
-                        AtomId(0),
-                        AtomId(1),
-                        EntitySpan::Added(BondForm::from_order(1)),
-                    ),
-                ],
-                ..Default::default()
-            })),
-        );
+        assert_eq!(ReactionSpan::superimpose(&lhs, &rhs, &correspondence), None,);
     }
 
     #[rstest]

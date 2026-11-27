@@ -197,8 +197,8 @@ fn same_colors(
 
 /// Construct the topology search input from the dense normalized colors of topology entities.
 ///
-/// The vertices are the atoms of the union graph. A removed and an added bond on one atom pair
-/// differ in color, so at most one of them is a direct edge.
+/// The vertices are the atoms of the union graph; bonds of the modal color become direct edges and
+/// remaining bonds are subdivided.
 fn topology_search_input(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,

@@ -262,6 +262,27 @@ impl React for [Molecule] {
     }
 }
 
+// TODO: revisit this check once delta normalization disposes of same-endpoint remove + add bond
+// combinations.
+fn bond_endpoints_are_disjoint(deltas: &Deltas) -> bool {
+    let mut bond_pairs = HashSet::new();
+    for delta in deltas.iter() {
+        let atoms = match delta {
+            Delta::Bond(BondDelta::Add { atoms, .. } | BondDelta::Remove { atoms, .. }) => *atoms,
+            _ => continue,
+        };
+        let pair = if atoms[0] <= atoms[1] {
+            atoms
+        } else {
+            [atoms[1], atoms[0]]
+        };
+        if !bond_pairs.insert(pair) {
+            return false;
+        }
+    }
+    true
+}
+
 fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
     fn permutation_is_valid(kind: StereoKind, permutation: Permutation) -> bool {
         permutation.degree() == kind.degree()
@@ -1265,6 +1286,9 @@ impl Reaction {
         correspondence: &MoleculeCorrespondence,
         mut deltas: Deltas,
     ) -> Result<Option<(Molecule, MoleculeCorrespondence)>, ApplyError> {
+        if !bond_endpoints_are_disjoint(&deltas) {
+            return Err(ApplyError::Inconsistent);
+        }
         deltas = reframe_deltas(deltas, &self.lhs, host, correspondence)?;
         let host_atom = |id: AtomId| {
             correspondence
@@ -2364,6 +2388,9 @@ impl Reaction {
         }
         let deltas = normalize_reaction_deltas(&self.lhs, self.deltas().clone())
             .map_err(|_| ApplyPreconditionError::InconsistentReaction)?;
+        if !bond_endpoints_are_disjoint(&deltas) {
+            return Err(ApplyPreconditionError::InconsistentReaction);
+        }
 
         check_reaction_dpo(&self.lhs, &deltas).map_err(ApplyPreconditionError::ReactionDpo)?;
 
@@ -6631,8 +6658,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_tracked_apply_at_aromatic_replacement(aromatic_bond_entries: MoleculeEntries) {
-        let host = Molecule::from_entries(aromatic_bond_entries.clone());
+    #[case::same_order([AtomId(0), AtomId(1)])]
+    #[case::reversed_order([AtomId(1), AtomId(0)])]
+    fn test_reaction_apply_at_parallel_bond_error(
+        #[case] added_atoms: [AtomId; 2],
+        aromatic_bond_entries: MoleculeEntries,
+    ) {
+        let host = Molecule::from_entries(aromatic_bond_entries);
         let reaction = Reaction::new(
             host.clone(),
             Deltas::from_iter([
@@ -6643,27 +6675,11 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(7),
-                    atoms: [AtomId(0), AtomId(1)],
+                    atoms: added_atoms,
                     attributes: BondForm::from_order(1),
-                }),
-                Delta::AromaticSystem(AromaticSystemDelta::Remove {
-                    id: AromaticSystemId(0),
-                    atoms: (0..6).map(AtomId).collect(),
-                    attributes: AromaticSystemForm::default(),
-                }),
-                Delta::AromaticSystem(AromaticSystemDelta::Add {
-                    id: AromaticSystemId(1),
-                    atoms: (0..6).map(AtomId).collect(),
-                    attributes: AromaticSystemForm::default(),
                 }),
             ]),
         );
-        let expected = Molecule::from_entries(MoleculeEntries {
-            bonds: [(1, 2), (2, 3), (3, 4), (4, 5), (5, 0), (0, 6), (0, 1)]
-                .map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1)))
-                .to_vec(),
-            ..aromatic_bond_entries
-        });
         let occurrence = MoleculeCorrespondence::new(
             Correspondence::identity(7),
             Correspondence::identity(7),
@@ -6674,41 +6690,30 @@ mod tests {
             Correspondence::empty(),
             Correspondence::empty(),
         );
-        let witness = MoleculeCorrespondence::new(
-            Correspondence::identity(7),
-            Correspondence::new(
-                (1..7).map(|id| (BondId(id), BondId(id - 1))).collect(),
-                7,
-                7,
-            )
-            .unwrap(),
-            Correspondence::empty(),
-            Correspondence::new(vec![], 1, 1).unwrap(),
-            Correspondence::empty(),
-            Correspondence::empty(),
-            Correspondence::empty(),
-            Correspondence::empty(),
+        assert_eq!(
+            reaction.apply_at(&host, &occurrence),
+            Err(ApplyError::Inconsistent)
         );
         assert_eq!(
             reaction.tracked_apply_at(&host, &occurrence),
-            Ok(Some((expected.clone(), witness.clone())))
+            Err(ApplyError::Inconsistent)
         );
-        let span = reaction
-            .apply_at_to_reaction_span(&host, &occurrence)
-            .unwrap()
-            .unwrap();
-        assert_eq!(span.lhs(), host);
-        assert_eq!(span.rhs(), expected);
-        assert_eq!(span.correspondence(), witness);
-        let realized = reaction
-            .apply_at_to_reaction(&host, &occurrence)
-            .unwrap()
-            .unwrap();
-        assert_eq!(realized.to_reaction_span().unwrap(), span);
         assert_eq!(
-            realized.tracked_apply_at(&host, &occurrence),
-            Ok(Some((expected, witness)))
+            reaction.apply_at_to_reaction(&host, &occurrence),
+            Err(ApplyError::Inconsistent)
         );
+        assert_eq!(
+            reaction.apply_at_to_reaction_span(&host, &occurrence),
+            Err(ApplyError::Inconsistent)
+        );
+        assert!(matches!(
+            reaction.apply(&host, MATCH_CONFIG),
+            Err(ApplyPreconditionError::InconsistentReaction)
+        ));
+        assert!(matches!(
+            reaction.tracked_apply(&host, MATCH_CONFIG),
+            Err(ApplyPreconditionError::InconsistentReaction)
+        ));
     }
 
     #[rstest]
@@ -6722,10 +6727,6 @@ mod tests {
         Delta::Bond(BondDelta::Remove { id: BondId(0), atoms: [AtomId(0), AtomId(1)], attributes: BondForm::from_order(1) }),
         Delta::AromaticSystem(AromaticSystemDelta::Remove { id: AromaticSystemId(0), atoms: (0..6).map(AtomId).collect(), attributes: AromaticSystemForm::default() })
     ], Some(vec![(1, 2, 1), (2, 3, 1), (3, 4, 1), (4, 5, 1), (5, 0, 1), (0, 6, 1)]), false)]
-    #[case::replaced_bond(true, vec![
-        Delta::Bond(BondDelta::Remove { id: BondId(0), atoms: [AtomId(0), AtomId(1)], attributes: BondForm::from_order(1) }),
-        Delta::Bond(BondDelta::Add { id: BondId(7), atoms: [AtomId(0), AtomId(1)], attributes: BondForm::from_order(1) })
-    ], None, true)]
     #[case::exocyclic(false, vec![
         Delta::Bond(BondDelta::Remove { id: BondId(6), atoms: [AtomId(0), AtomId(6)], attributes: BondForm::from_order(1) })
     ], Some(vec![(0, 1, 1), (1, 2, 1), (2, 3, 1), (3, 4, 1), (4, 5, 1), (5, 0, 1)]), true)]
