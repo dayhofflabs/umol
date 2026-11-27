@@ -10,6 +10,7 @@ readme = "README.md"
 keywords = ["algorithms", "graph", "isomorphism", "canonicalization"]
 description = "Graph data structures and algorithms for umol."
 exclude = ["/tests"]
+autobenches = false
 
 [lib]
 bench = false
@@ -39,11 +40,23 @@ name = "property"
 required-features = ["proptest"]
 
 [[bench]]
-name = "algorithms"
+name = "automorphism"
+harness = false
+
+[[bench]]
+name = "common_subgraph"
+harness = false
+
+[[bench]]
+name = "cycles"
 harness = false
 
 [[bench]]
 name = "graph"
+harness = false
+
+[[bench]]
+name = "matching"
 harness = false
 
 [[bench]]
@@ -52,6 +65,14 @@ harness = false
 
 [[bench]]
 name = "restore"
+harness = false
+
+[[bench]]
+name = "subgraph_isomorphism"
+harness = false
+
+[[bench]]
+name = "traversal"
 harness = false
 
 [lints.clippy]

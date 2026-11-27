@@ -26,7 +26,7 @@ use umol_graph_ir::ir::{
 };
 use umol_perm::Permutation;
 
-const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
+const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::TrailIr;
 
 struct CorpusCase {
     name: &'static str,

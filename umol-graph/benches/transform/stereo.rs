@@ -360,7 +360,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             perception.recognize(
                 &source,
                 &selection,
-                AutomorphismAlgorithm::Nauty,
+                AutomorphismAlgorithm::TrailIr,
                 RingConfig::default(),
                 4096
             ),
@@ -702,7 +702,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
             perception.recognize(
                 &source,
                 &filtered_selection,
-                AutomorphismAlgorithm::Nauty,
+                AutomorphismAlgorithm::TrailIr,
                 RingConfig::default(),
                 4096
             ),
@@ -719,7 +719,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                         .recognize(
                             black_box(&source),
                             black_box(&selection),
-                            AutomorphismAlgorithm::Nauty,
+                            AutomorphismAlgorithm::TrailIr,
                             RingConfig::default(),
                             4096,
                         )
@@ -734,7 +734,7 @@ pub(super) fn bench_stereo(c: &mut Criterion) {
                         .recognize(
                             black_box(&source),
                             black_box(&filtered_selection),
-                            AutomorphismAlgorithm::Nauty,
+                            AutomorphismAlgorithm::TrailIr,
                             RingConfig::default(),
                             4096,
                         )

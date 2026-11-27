@@ -1,6 +1,6 @@
 # 254 — Edge-colored graph automorphisms
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-26
 Relates: [120](120-molecular-graph-generation-2026-06-21.md),
 [143](143-vendored-nauty-integration-2026-07-11.md),
@@ -273,9 +273,9 @@ Rust/Python boundary: Rust-only (not bound in umol-py or GraphView).
 
 - **`GraphView` (`umol-graph-ir/src/ir/view/graph.rs`):**
   - `GraphView::automorphisms<AC: Ord, BC: Ord>(&self, atom_color: impl Fn(AtomId) -> AC, bond_color: impl Fn(BondId) -> BC, alg: AutomorphismAlgorithm) -> AtomAutomorphismGroup` (replaces `AtomAutomorphism`, exposing `atom_count`, `orbit_count`, `orbit_of`, `same_orbit`, `group_order`, `generators`).
-  - `GraphView::canonical_labeling<AC: Ord, BC: Ord>(&self, atom_color: impl Fn(AtomId) -> AC, bond_color: impl Fn(BondId) -> BC, alg: AutomorphismAlgorithm) -> AtomCanonicalLabeling` (exposing `labels(&self) -> Vec<AtomId>` and `automorphisms(&self) -> &AtomAutomorphismGroup`).
+  - `GraphView::canonical_labeling<AC: Ord, BC: Ord>(&self, atom_color: impl Fn(AtomId) -> AC, bond_color: impl Fn(BondId) -> BC, alg: AutomorphismAlgorithm) -> AtomCanonicalLabeling` (exposing `labels(&self) -> &[AtomId]`, `automorphisms(&self) -> &AtomAutomorphismGroup`, and `into_automorphisms(self) -> AtomAutomorphismGroup`).
 - **Internal `umol-graph-ir` canonicalization and `GraphSymmetry`:**
-  - `AutomorphismAdapter::new` wraps `incidence_graph.graph().clone()` with `colors` and
+  - `AutomorphismAdapter::new` wraps `incidence_graph.graph().clone()` with `node_colors` and
     `edge_colors = initial_colors.incidences.clone()` (zero subdivision, zero `Graph::new`).
   - `topology_search_input` (both `Molecule` and `ReactionSpan`) uses `molecule.raw_graph().clone()`
     / `span.graph().clone()` directly with `edge_colors` (zero modal bond subdivision).
@@ -288,13 +288,16 @@ Rust/Python boundary: Rust-only (not bound in umol-py or GraphView).
   - Unit tests assert algorithm-independent invariants (canonicalization parity between `Nauty` and
     `TrailIr`, relabeling invariance, sound pruning bounds) rather than hard-coding backend-specific
     generating bases or tie-broken labelings.
-- **Higher-layer config defaults (Rust + Python + `operations.md`):**
+- **Higher-layer config defaults (Rust + Python + normative docs):**
   - Switch default `automorphism_algorithm` from `AutomorphismAlgorithm::Nauty` to
     **`AutomorphismAlgorithm::TrailIr`** in `GraphSymmetryConfig` (`umol-graph-ir`),
     `CanonicalizeConfig`, `AddStereoConfig`, `RemoveStereoConfig`, `EnumerateStereoConfig`,
-    `StereoValidateConfig`, `StructuralFingerprintConfig` (`umol-graph`), and all corresponding
-    `umol-py` configs + `umol_py::algorithm::AutomorphismAlgorithm::{Nauty(), TrailIr()}` +
-    `umol-py/python/umol/_umol.pyi` + [operations.md](../docs/development/operations.md).
+    `StereoValidateConfig`, `SubstructureFeaturizer::new` (`umol-graph`), and all corresponding
+    `umol-py` configs (`CanonicalizeConfig`, `GraphSymmetryConfig`, `AddStereoConfig`,
+    `RemoveStereoConfig`, `EnumerateStereoConfig`, `StructuralFingerprintConfig`) +
+    `umol_py::algorithm::AutomorphismAlgorithm::{Nauty(), TrailIr()}` +
+    [operations.md](../docs/development/operations.md) +
+    [python-api.md](../docs/development/python-api.md).
 
 ## Exploratory evidence (`scratch/automorphism-edges`, 2026-11-26)
 
@@ -869,11 +872,12 @@ test_fingerprint.py}`, `docs/development/python-api.md`; **breaking (red→green
     `2` ignored), `cargo clippy -p umol-graph-ir -p umol-graph -p umol-py --all-targets -- -D
     warnings`, `maturin develop`, and `pytest -q umol-py/tests` (`3,658` passed, `2` skipped).
 
-### S7 — Final verification gate and deferrable benchmark retention
+### S7 — Final verification gate and permanent edge-colored benchmark suite
 
-#### S7a — Full workspace verification and Criterion confirmation
+#### S7a — Full workspace verification and Criterion confirmation [Done]
 
-**Module:** workspace-wide verification; **additive (green)**. `[dep: S6b]`
+**Module:** workspace-wide verification, `umol-graph-ir/benches/canonicalize.rs`,
+`umol-graph/benches/transform/stereo.rs`; **additive (green)**. `[dep: S6b]`
 
 - Run `cargo +nightly fmt --all`, `cargo test --workspace`,
   `cargo test -p umol-graph-core -p umol-graph-ir --features proptest --test property`,
@@ -881,20 +885,75 @@ test_fingerprint.py}`, `docs/development/python-api.md`; **breaking (red→green
   `pytest -q umol-py/tests`.
 - Re-run `umol-graph-ir` `canonicalize` and `constraint_readings` Criterion benchmarks to confirm
   production numbers match exploratory evidence; close out doc `254` in `discussion/000-status.md`.
+- **Findings:**
+  - Updated `ALGORITHM` in `umol-graph-ir/benches/canonicalize.rs` and explicit `recognize` calls in
+    `umol-graph/benches/transform/stereo.rs` from `Nauty` to `TrailIr` so production benchmarks track
+    the new default alongside `constraint_readings.rs`.
+  - Full verification passed cleanly in `umol-py/.venv` (Python `3.13.18`):
+    - `cargo +nightly fmt --all -- --check`: clean.
+    - `cargo test --workspace`: all workspace unit, integration, and doc tests passed (`0` failures).
+    - Property tests: `umol-graph-core` (`205` passed), `umol-graph-ir` (`577` passed, `1` ignored),
+      and `umol-graph` stereo suite (`35` passed).
+    - `cargo clippy --workspace --all-targets -- -D warnings`: clean.
+    - `RUSTDOCFLAGS="-D warnings" cargo doc -p umol-nauty-sys -p umol-graph-core -p umol-graph-ir -p umol-graph -p umol-io -p umol-py --no-deps`: clean (workspace-wide `--workspace` doc without `--all-features` hits an unrelated pre-existing feature-gated link in `umol-coordgen-sys`).
+    - `maturin develop` + `pytest -q umol-py/tests`: `3,658` passed, `2` skipped.
+  - Production Criterion confirmation (`--warm-up-time 0.2 --measurement-time 0.5 --sample-size 20`)
+    matched or improved on every exploratory figure:
+    - `umol-graph-ir/benches/canonicalize.rs`: `symmetry_heavy_radicals` `8.84 µs` (`2.89×` vs
+      pre-change baseline `25.51 µs`), `feature_free_disconnected` `13.46 µs` (`2.19×`),
+      `feature_free_connected` `12.48 µs` (`2.05×`), `para_stereo_cascade` `148.12 µs` (`1.69×`),
+      `symmetric_stereo_butanol` `43.22 µs` (`1.30×`), `para_stereo_trichloropentane` `21.05 µs`
+      (`1.27×`), `disconnected_rings` `18.37 µs` (`1.26×`), `symmetric_stereo_dimethylbutanol`
+      `123.54 µs` (`1.21×`), `overlay_heavy` `15.26 µs` (`1.20×`),
+      `symmetric_stereo_triisopropanolamine` `29.73 µs` (`1.19×`), `meso_dichlorobutane` `16.32 µs`
+      (`1.18×`, reversing the exploratory `+2.7%` noise), and `reaction_span/canonicalize/*`
+      `multicenter_nonuniform` `6.16 µs` (`1.24×`), `raw_forms` `19.08 µs` (`1.18×`),
+      `entity_constraints` `18.49 µs` (`1.18×`).
+    - `umol-graph-ir/benches/constraint_readings.rs` (`stereo_derived_readings/*`):
+      `square_planar/topicity` `253.8 ns` (`30.0×` vs baseline `7.61 µs`),
+      `square_planar/stereogenicity` `9.66 µs` (`1.65×`), `trigonal_bipyramidal/stereogenicity`
+      `179.35 µs` (`1.53×`), `trigonal_bipyramidal/topicity` `15.18 µs` (`1.21×`),
+      `cis_trans/stereogenicity` `6.44 µs` (`1.00×`).
 
-#### S7b — Optional permanent edge-colored benchmark suite (deferrable)
+#### S7b — Unified permanent automorphism benchmark suite [Done]
 
-**Module:** `umol-graph-core/benches/`; **additive (green)**. `[dep: S7a]`
+**Module:** `umol-graph-core/{benches/{automorphism.rs, common_subgraph.rs, cycles.rs, fixtures.rs,
+graph.rs, matching.rs, subgraph_isomorphism.rs, traversal.rs}, Cargo.toml}`; **additive (green)**.
+`[dep: S7a]`
 
-- Deferrable: promote a compact subset of the Tier 1--5 edge-colored benchmark corpus from
-  `scratch/automorphism-edges` into `umol-graph-core/benches/` if ongoing tracking of `TrailIr` vs
-  `Nauty` is desired. Core functionality and end-to-end benchmarks work without it.
+- Consolidate `umol-graph-core` automorphism benchmarks into one permanent suite covering
+  nodes-only and nodes+edges colorings across automorphism-only, canonical-labeling (fresh and
+  with `AutomorphismScratch`), stabilizer, and `canonical_key` workloads for both `Nauty` and
+  `TrailIr`.
+- **Findings:**
+  - Split the former monolithic `umol-graph-core/benches/algorithms.rs` into task-oriented
+    benchmarks with `autobenches = false` and shared `benches/fixtures.rs` (`automorphism`,
+    `cycles`, `matching`, `traversal`, `subgraph_isomorphism`, `common_subgraph`, plus moving
+    `induced_edges` and `correspondence_updates` into `graph.rs`).
+  - `umol-graph-core/benches/automorphism.rs` (181 benchmarks, ~25--26 min at Criterion defaults):
+    - `automorphism/nodes_only/{automorphisms, canonical_labeling}` (17 uniform-edge IR, molecular,
+      cage, combinatorial stress, degree-colored, and uniquely colored cases, `nauty` vs
+      `trail_ir`),
+    - `automorphism/nodes_and_edges/{automorphisms, canonical_labeling}` (21 multi-edge-color cases
+      spanning IR incidence shapes, deterministic generated molecular skeletons, symmetric cages and
+      fullerenes, combinatorial torture cases, and larger multi-ligand peptides/macrocycles/CdSe
+      clusters, `nauty` vs `trail_ir`),
+    - `automorphism/stabilizers/{nodes_only, nodes_and_edges}` (7 three-site stabilizer sequences
+      comparing `nauty`, `trail_ir`, and `trail_ir_scratch`),
+    - `automorphism/canonical_key` (4 cases, `nauty` vs `trail_ir`).
+  - Confirmed production Criterion medians for `trail_ir_scratch` vs weighted `nauty`:
+    `ethane_radicals` `335.7 ns` vs `5.61 µs` (`16.7×`), `propane` `988.6 ns` vs `6.02 µs`
+    (`6.09×`), `mol_gen_16_r2` / `40_r4` / `80_r6` `2.61×` / `2.15×` / `2.36×`,
+    `decapeptide_mixed_explicit_h` `19.56 µs` vs `334.1 µs` (`17.1×`), `decapeptide_cyclic_sym`
+    `35.41 µs` vs `332.7 µs` (`9.40×`), `cdse_t3_sph16` `84.15 µs` vs `177.6 µs` (`2.11×`),
+    `cdse_doped_sph16` `38.15 µs` vs `135.8 µs` (`3.56×`), `cdse_t3_stbu16` `133.9 µs` vs `5.067 ms`
+    (`37.8×`), and 3-site stabilizers (`cubane_2color` `1.86 µs` vs `4.31 µs` fresh / `4.29 µs`
+    `nauty`, `dimethylbutanol_stereo_levi` `4.50 µs` vs `7.27 µs` fresh / `7.78 µs` `nauty`).
 
-### Critical path and deferrable stages
+### Critical path and follow-ups
 
-- **Critical path:** `S0a/S0b -> S1a -> S1b -> S3a -> S4a -> S4b -> S5a -> S5b -> S6a -> S6b -> S7a`
-  (`S2a -> S2b` runs independently of `S0`/`S1` and joins at `S3a`).
-- **Deferrable:** `S7b` (permanent core edge-colored benchmark suite).
+- **Completed scope:** `S0a`--`S7b` (all planned stages, including `S7b`, completed; nothing
+  deferred within this document).
 - **Tracked follow-up (separate doc):** [255](255-reaction-span-bond-normalization-2026-11-26.md)
   covers `Reaction` / `ReactionSpan` normalization of removed+added bonds on the same atom pair and
   revisiting `ReactionSpanIntegrityError::ParallelBonds` once [233](233-graph-ir-delta-review-2026-09-23.md)
