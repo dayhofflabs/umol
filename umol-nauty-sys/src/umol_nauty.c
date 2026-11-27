@@ -1,6 +1,8 @@
 #include "umol_nauty.h"
+#include "umol_nauty_swg.h"
 
 #include <limits.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -8,6 +10,7 @@
 
 _Static_assert(sizeof(int) == sizeof(uint32_t), "nauty requires 32-bit int");
 _Static_assert(sizeof(int) == sizeof(int32_t), "nauty exponent must fit int32_t");
+_Static_assert(sizeof(sg_weight) == sizeof(int), "nauty edge weights require 32-bit int");
 
 static TLS_ATTR umol_nauty_generator_fn active_report_generator;
 static TLS_ATTR void *active_callback_context;
@@ -48,12 +51,15 @@ static umol_nauty_error map_nauty_error(int status)
     }
 }
 
-umol_nauty_error umol_nauty_run(
+static umol_nauty_error run_sparse_nauty(
     uint32_t vertex_count,
     const size_t *offsets,
     const uint32_t *neighbors,
+    const uint32_t *weights,
+    bool weighted,
     const uint32_t *colors,
     const uint32_t *partition,
+    bool get_canon,
     uint32_t *canonical_labels,
     uint32_t *orbits,
     umol_nauty_generator_fn report_generator,
@@ -81,17 +87,19 @@ umol_nauty_error umol_nauty_run(
     if (vertex_count == 0 || vertex_count > (uint32_t)INT_MAX) {
         return UMOL_NAUTY_INVALID_VERTEX_COUNT;
     }
-    if (offsets == NULL || colors == NULL || partition == NULL || canonical_labels == NULL ||
-        orbits == NULL || group_mantissa == NULL || group_exponent == NULL) {
+    if (offsets == NULL || colors == NULL || partition == NULL ||
+        (get_canon && canonical_labels == NULL) || orbits == NULL ||
+        group_mantissa == NULL || group_exponent == NULL) {
         return UMOL_NAUTY_NULL_POINTER;
     }
     if (offsets[0] != 0) return UMOL_NAUTY_INVALID_CSR;
 
     directed_edge_count = offsets[vertex_count];
-    if (directed_edge_count > 0 && neighbors == NULL) {
+    if (directed_edge_count > 0 && (neighbors == NULL || (weighted && weights == NULL))) {
         return UMOL_NAUTY_NULL_POINTER;
     }
-    if (directed_edge_count > SIZE_MAX / sizeof(int)) {
+    if (directed_edge_count > SIZE_MAX / sizeof(*graph.e) ||
+        (weighted && directed_edge_count > SIZE_MAX / sizeof(*graph.w))) {
         return UMOL_NAUTY_INTEGER_OVERFLOW;
     }
 
@@ -108,10 +116,13 @@ umol_nauty_error umol_nauty_run(
     graph.d = malloc((size_t)n * sizeof(*graph.d));
     if (directed_edge_count > 0) {
         graph.e = malloc(directed_edge_count * sizeof(*graph.e));
+        if (weighted) {
+            graph.w = malloc(directed_edge_count * sizeof(*graph.w));
+        }
     }
     if (lab == NULL || ptn == NULL || nauty_orbits == NULL ||
         graph.v == NULL || graph.d == NULL ||
-        (directed_edge_count > 0 && graph.e == NULL)) {
+        (directed_edge_count > 0 && (graph.e == NULL || (weighted && graph.w == NULL)))) {
         result = UMOL_NAUTY_ALLOCATION_FAILED;
         goto cleanup;
     }
@@ -121,6 +132,7 @@ umol_nauty_error umol_nauty_run(
     graph.vlen = (size_t)n;
     graph.dlen = (size_t)n;
     graph.elen = directed_edge_count;
+    graph.wlen = weighted ? directed_edge_count : 0;
 
     for (position = 0; position < (size_t)n; ++position) {
         size_t begin = offsets[position];
@@ -140,6 +152,14 @@ umol_nauty_error umol_nauty_run(
                 goto cleanup;
             }
             graph.e[edge_position] = (int)neighbor;
+            if (weighted) {
+                uint32_t weight = weights[edge_position];
+                if (weight >= (uint32_t)INT_MAX) {
+                    result = UMOL_NAUTY_INVALID_WEIGHT;
+                    goto cleanup;
+                }
+                graph.w[edge_position] = (sg_weight)weight;
+            }
         }
     }
 
@@ -165,8 +185,11 @@ umol_nauty_error umol_nauty_run(
             colors[partition[position]] == colors[partition[position + 1]];
     }
 
-    options.getcanon = TRUE;
+    options.getcanon = get_canon ? TRUE : FALSE;
     options.defaultptn = FALSE;
+    if (weighted) {
+        options.dispatch = &umol_dispatch_swg;
+    }
     options.userautomproc = report_generator == NULL ? NULL : report_automorphism;
     m = SETWORDSNEEDED(n);
     nauty_check(WORDSIZE, m, n, NAUTYVERSIONID);
@@ -174,15 +197,27 @@ umol_nauty_error umol_nauty_run(
     active_call = 1;
     active_report_generator = report_generator;
     active_callback_context = callback_context;
-    sparsenauty(
-        &graph,
-        lab,
-        ptn,
-        nauty_orbits,
-        &options,
-        &stats,
-        &canonical_graph
-    );
+    if (weighted) {
+        umol_sparsenauty_weighted(
+            &graph,
+            lab,
+            ptn,
+            nauty_orbits,
+            &options,
+            &stats,
+            get_canon ? &canonical_graph : NULL
+        );
+    } else {
+        sparsenauty(
+            &graph,
+            lab,
+            ptn,
+            nauty_orbits,
+            &options,
+            &stats,
+            get_canon ? &canonical_graph : NULL
+        );
+    }
     active_callback_context = NULL;
     active_report_generator = NULL;
     active_call = 0;
@@ -191,7 +226,9 @@ umol_nauty_error umol_nauty_run(
     if (result != UMOL_NAUTY_OK) goto cleanup;
 
     for (position = 0; position < (size_t)n; ++position) {
-        canonical_labels[position] = (uint32_t)lab[position];
+        if (get_canon) {
+            canonical_labels[position] = (uint32_t)lab[position];
+        }
         orbits[position] = (uint32_t)nauty_orbits[position];
     }
     *group_mantissa = stats.grpsize1;
@@ -207,4 +244,68 @@ cleanup:
     SG_FREE(graph);
     SG_FREE(canonical_graph);
     return result;
+}
+
+umol_nauty_error umol_nauty_run(
+    uint32_t vertex_count,
+    const size_t *offsets,
+    const uint32_t *neighbors,
+    const uint32_t *colors,
+    const uint32_t *partition,
+    uint32_t *canonical_labels,
+    uint32_t *orbits,
+    umol_nauty_generator_fn report_generator,
+    void *callback_context,
+    double *group_mantissa,
+    int32_t *group_exponent)
+{
+    return run_sparse_nauty(
+        vertex_count,
+        offsets,
+        neighbors,
+        NULL,
+        false,
+        colors,
+        partition,
+        true,
+        canonical_labels,
+        orbits,
+        report_generator,
+        callback_context,
+        group_mantissa,
+        group_exponent
+    );
+}
+
+umol_nauty_error umol_nauty_run_weighted(
+    uint32_t vertex_count,
+    const size_t *offsets,
+    const uint32_t *neighbors,
+    const uint32_t *weights,
+    const uint32_t *colors,
+    const uint32_t *partition,
+    bool get_canon,
+    uint32_t *canonical_labels,
+    uint32_t *orbits,
+    umol_nauty_generator_fn report_generator,
+    void *callback_context,
+    double *group_mantissa,
+    int32_t *group_exponent)
+{
+    return run_sparse_nauty(
+        vertex_count,
+        offsets,
+        neighbors,
+        weights,
+        true,
+        colors,
+        partition,
+        get_canon,
+        canonical_labels,
+        orbits,
+        report_generator,
+        callback_context,
+        group_mantissa,
+        group_exponent
+    );
 }

@@ -610,7 +610,7 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
     `umol_sparsenauty_weighted` from `umol_nauty_swg.o`, with all upstream nauty references
     `umol_nauty_`-prefixed via `build.rs`).
 
-#### S2b — Safe Rust weighted nauty boundary with `get_canon` control
+#### S2b — Safe Rust weighted nauty boundary with `get_canon` control [Done]
 
 **Module:** `umol-nauty-sys/{include/umol_nauty.h, src/umol_nauty.c, src/lib.rs}`; **additive
 (green)**. `[dep: S2a]`
@@ -619,6 +619,20 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
   `run_weighted` (with full CSR, weight, and partition validation).
 - Add `rstest` unit tables covering empty/singleton graphs, error variants, edge-color symmetry
   breaking, `get_canon = false`, stabilizers, group order, and multi-threaded concurrency.
+- **Findings:**
+  - Settled `run_weighted(&WeightedNautyInput, bool) -> Result<NautyOutput, NautyError>` keeping
+    `NautyOutput.canonical_labels: Vec<u32>` unchanged (empty, zero-allocation when
+    `get_canon = false`, passing `NULL` across FFI for `canonical_labels` and `canong`), preserving
+    strictly additive `S2b` scope while `S4a` separates `AutomorphismGroup` and `CanonicalLabeling`
+    in `umol-graph-core`.
+  - Factored the shared validation, allocation, TLS-guard, and cleanup flow in `umol_nauty.c` into
+    `static run_sparse_nauty` shared by `umol_nauty_run` and `umol_nauty_run_weighted`, and added
+    `_Static_assert(sizeof(sg_weight) == sizeof(int))`.
+  - Strengthened unit assertions over the scratch prototype to verify exact directed edge-weight
+    preservation on every reported generator, canonical-relabeling invariance across vertex
+    renumberings, the `i32::MAX as u32 - 1` weight boundary, `get_canon = true/false` parity across
+    all test tables, and mixed-mode multi-threaded concurrency (`69` passing `umol-nauty-sys` unit
+    tests).
 
 #### S2c — `umol-nauty-sys` provenance README
 
