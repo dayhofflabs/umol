@@ -588,7 +588,7 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
 
 ### S2 — Native weighted sparse nauty (`umol-nauty-sys`)
 
-#### S2a — Weighted sparse `dispatch_swg` in C
+#### S2a — Weighted sparse `dispatch_swg` in C [Done]
 
 **Module:** `umol-nauty-sys/src/umol_nauty_swg.{c,h}`, `umol-nauty-sys/build.rs`; **additive
 (green)**. `[dep: none]`
@@ -598,6 +598,17 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
   without modifying vendored upstream nauty C files. Include a brief file-header notice recording
   its derivation from upstream `nausparse.c` (Apache-2.0 §4(b)). Compile cleanly under
   `-Wall -Wextra`.
+- **Findings:**
+  - Hardened four edge cases while porting `umol_nauty_swg.c` from `scratch/automorphism-edges`:
+    guarded `umol_sparsenauty_weighted`'s self-loop scan on `sg->nde > 0` using indexed access
+    (avoiding `NULL + 0` pointer arithmetic UB on edgeless graphs), switched `MASH` arithmetic to
+    `unsigned long` (avoiding signed 32-bit `long` overflow on LLP64 platforms when
+    `wt == INT_MAX - 1`), guarded `init_swg` on `hin != NULL`, and unified the single-/multi-weight
+    non-singleton refinement loop without sorting single-weight splitters.
+  - Confirmed zero warnings under C11 `-Wall -Wextra`, untouched `umol-nauty-sys/nauty/`, and exact
+    symbol isolation (`libumol_nauty_shim.a` exports only `umol_dispatch_swg` and
+    `umol_sparsenauty_weighted` from `umol_nauty_swg.o`, with all upstream nauty references
+    `umol_nauty_`-prefixed via `build.rs`).
 
 #### S2b — Safe Rust weighted nauty boundary with `get_canon` control
 

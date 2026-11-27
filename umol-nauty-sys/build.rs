@@ -98,9 +98,13 @@ fn main() {
     let source_dir = PathBuf::from("nauty");
     let include_dir = PathBuf::from("include");
     let shim = PathBuf::from("src/umol_nauty.c");
+    let swg = PathBuf::from("src/umol_nauty_swg.c");
+    let swg_header = PathBuf::from("src/umol_nauty_swg.h");
     let word_size = target_word_size();
 
     println!("cargo:rerun-if-changed={}", shim.display());
+    println!("cargo:rerun-if-changed={}", swg.display());
+    println!("cargo:rerun-if-changed={}", swg_header.display());
     println!(
         "cargo:rerun-if-changed={}",
         include_dir.join("umol_nauty.h").display()
@@ -121,7 +125,9 @@ fn main() {
     let mut shim_build = cc::Build::new();
     shim_build
         .file(&shim)
+        .file(&swg)
         .include(&include_dir)
+        .include("src")
         .include(&source_dir)
         .std("c11")
         .warnings(true)
