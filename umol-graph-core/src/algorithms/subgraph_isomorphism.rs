@@ -20,6 +20,7 @@ use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
 mod predicate;
+mod symmetry;
 
 #[allow(
     unused_imports,
@@ -27,6 +28,7 @@ mod predicate;
 )]
 pub(crate) use predicate::ClosureSubgraphIsomorphismPredicate;
 pub use predicate::SubgraphIsomorphismPredicate;
+pub use symmetry::{QuerySymmetryConstraints, SymmetryGeneratorError, TargetSymmetry};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubgraphIsomorphismAlgorithm {
