@@ -189,7 +189,7 @@ Every stage ends **green** (`cargo test --workspace` + clippy `-D warnings`, and
 
 ### Stage S0 — Zero-API-churn foundations & primitives (additive/internal, green)
 - **S0a (`umol-graph-core`) — Done:** Cache `max_degree: u32` in `Csr` and expose `Graph::max_degree(&self) -> usize`; replace `BTreeSet` validation in `Correspondence::new` and `Correspondence::from_images` with inline zero-heap validation for `len <= 32`, empty fast-return, and skip-sort-if-sorted. Unit + property tests. **Additive (green).** `[dep: none]`
-- **S0b (`umol-graph-ir`):** Rewrite `induced_bonds` to use `right.raw_graph().find_edge` directly (no `BTreeMap`) and short-circuit empty pattern overlay kinds in `verify_overlays`. Unit tests covering overlay-free and overlay-bearing parity. **Additive (green).** `[dep: S0a]`
+- **S0b (`umol-graph-ir`) — Done:** Rewrite `induced_bonds` to use `right.raw_graph().find_edge` directly (no `BTreeMap`) and short-circuit empty pattern overlay kinds in `verify_overlays`. Unit tests covering overlay-free and overlay-bearing parity. **Additive (green).** `[dep: S0a]`
 
 ### Stage S1 — Core predicate trait, symmetry constraints, scratch, and prepared query/target (additive, green)
 - **S1a (`umol-graph-core`):** Define `SubgraphIsomorphismPredicate` trait (using `undetermined` edge hooks, query node equivalence classes, bulk `u64`/`u128` class candidate fill, optional edge-neighbor bitmask hook) and `ClosureSubgraphIsomorphismPredicate` adapter. Unit tests. **Additive (green).** `[dep: S0a]`

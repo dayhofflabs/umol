@@ -425,149 +425,195 @@ impl Molecule {
         let pattern = self;
         let bonds = induced_bonds(pattern, host, &atoms)?;
 
-        let dative_bonds = induced_dative_bonds(pattern, host, &atoms)?;
-        if dative_bonds.matched_pair_count() != pattern.dative_bonds().count() {
+        let dative_bonds = if pattern.dative_bonds().count() == 0 {
+            Correspondence::new(Vec::new(), 0, host.dative_bonds().count())
+                .expect("empty correspondence is valid")
+        } else if host.dative_bonds().count() < pattern.dative_bonds().count() {
             return None;
-        }
-        for &(p, h) in dative_bonds.matched_pairs() {
-            if !pattern
-                .dative_bond(p)
-                .attributes()
-                .matches(host.dative_bond(h).attributes())
-            {
+        } else {
+            let dative_bonds = induced_dative_bonds(pattern, host, &atoms)?;
+            if dative_bonds.matched_pair_count() != pattern.dative_bonds().count() {
                 return None;
             }
-        }
+            for &(p, h) in dative_bonds.matched_pairs() {
+                if !pattern
+                    .dative_bond(p)
+                    .attributes()
+                    .matches(host.dative_bond(h).attributes())
+                {
+                    return None;
+                }
+            }
+            dative_bonds
+        };
 
-        let aromatic_systems = induced_aromatic_systems(pattern, host, &atoms)?;
-        if aromatic_systems.matched_pair_count() != pattern.aromatic_systems().count() {
+        let aromatic_systems = if pattern.aromatic_systems().count() == 0 {
+            Correspondence::new(Vec::new(), 0, host.aromatic_systems().count())
+                .expect("empty correspondence is valid")
+        } else if host.aromatic_systems().count() < pattern.aromatic_systems().count() {
             return None;
-        }
-        for &(p, h) in aromatic_systems.matched_pairs() {
-            let p_view = pattern.aromatic_system(p);
-            let h_view = host.aromatic_system(h);
-            if matches!(p_view.electrons(), ElectronCountsForm::Lit(counts)
-                if counts.len() != p_view.atom_ids().len())
-                || matches!(h_view.electrons(), ElectronCountsForm::Lit(counts)
-                    if counts.len() != h_view.atom_ids().len())
-            {
+        } else {
+            let aromatic_systems = induced_aromatic_systems(pattern, host, &atoms)?;
+            if aromatic_systems.matched_pair_count() != pattern.aromatic_systems().count() {
                 return None;
             }
-            let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
-            // The host frame named in the pattern's own atom ids, so the pattern form can be
-            // restated into it before the two are compared.
-            let host_frame: Vec<AtomId> = h_view
-                .atom_ids()
-                .map(|host_atom| {
-                    atoms
-                        .left_of(host_atom)
-                        .expect("host overlay atom is matched")
-                })
-                .collect();
-            let action = DynPermutation::between(&pat_atoms, &host_frame)?;
-            if !p_view
-                .attributes()
-                .clone()
-                .reframe_by(&action)?
-                .matches(h_view.attributes())
-            {
-                return None;
+            for &(p, h) in aromatic_systems.matched_pairs() {
+                let p_view = pattern.aromatic_system(p);
+                let h_view = host.aromatic_system(h);
+                if matches!(p_view.electrons(), ElectronCountsForm::Lit(counts)
+                    if counts.len() != p_view.atom_ids().len())
+                    || matches!(h_view.electrons(), ElectronCountsForm::Lit(counts)
+                        if counts.len() != h_view.atom_ids().len())
+                {
+                    return None;
+                }
+                let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
+                // The host frame named in the pattern's own atom ids, so the pattern form can be
+                // restated into it before the two are compared.
+                let host_frame: Vec<AtomId> = h_view
+                    .atom_ids()
+                    .map(|host_atom| {
+                        atoms
+                            .left_of(host_atom)
+                            .expect("host overlay atom is matched")
+                    })
+                    .collect();
+                let action = DynPermutation::between(&pat_atoms, &host_frame)?;
+                if !p_view
+                    .attributes()
+                    .clone()
+                    .reframe_by(&action)?
+                    .matches(h_view.attributes())
+                {
+                    return None;
+                }
             }
-        }
+            aromatic_systems
+        };
 
-        let multicenter_bonds = induced_multicenter_bonds(pattern, host, &atoms)?;
-        if multicenter_bonds.matched_pair_count() != pattern.multicenter_bonds().count() {
+        let multicenter_bonds = if pattern.multicenter_bonds().count() == 0 {
+            Correspondence::new(Vec::new(), 0, host.multicenter_bonds().count())
+                .expect("empty correspondence is valid")
+        } else if host.multicenter_bonds().count() < pattern.multicenter_bonds().count() {
             return None;
-        }
-        for &(p, h) in multicenter_bonds.matched_pairs() {
-            let p_view = pattern.multicenter_bond(p);
-            let h_view = host.multicenter_bond(h);
-            if matches!(p_view.electrons(), ElectronCountsForm::Lit(counts)
-                if counts.len() != p_view.atom_ids().len())
-                || matches!(h_view.electrons(), ElectronCountsForm::Lit(counts)
-                    if counts.len() != h_view.atom_ids().len())
-            {
+        } else {
+            let multicenter_bonds = induced_multicenter_bonds(pattern, host, &atoms)?;
+            if multicenter_bonds.matched_pair_count() != pattern.multicenter_bonds().count() {
                 return None;
             }
-            let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
-            // The host frame named in the pattern's own atom ids, so the pattern form can be
-            // restated into it before the two are compared.
-            let host_frame: Vec<AtomId> = h_view
-                .atom_ids()
-                .map(|host_atom| {
-                    atoms
-                        .left_of(host_atom)
-                        .expect("host overlay atom is matched")
-                })
-                .collect();
-            let action = DynPermutation::between(&pat_atoms, &host_frame)?;
-            if !p_view
-                .attributes()
-                .clone()
-                .reframe_by(&action)?
-                .matches(h_view.attributes())
-            {
-                return None;
+            for &(p, h) in multicenter_bonds.matched_pairs() {
+                let p_view = pattern.multicenter_bond(p);
+                let h_view = host.multicenter_bond(h);
+                if matches!(p_view.electrons(), ElectronCountsForm::Lit(counts)
+                    if counts.len() != p_view.atom_ids().len())
+                    || matches!(h_view.electrons(), ElectronCountsForm::Lit(counts)
+                        if counts.len() != h_view.atom_ids().len())
+                {
+                    return None;
+                }
+                let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
+                // The host frame named in the pattern's own atom ids, so the pattern form can be
+                // restated into it before the two are compared.
+                let host_frame: Vec<AtomId> = h_view
+                    .atom_ids()
+                    .map(|host_atom| {
+                        atoms
+                            .left_of(host_atom)
+                            .expect("host overlay atom is matched")
+                    })
+                    .collect();
+                let action = DynPermutation::between(&pat_atoms, &host_frame)?;
+                if !p_view
+                    .attributes()
+                    .clone()
+                    .reframe_by(&action)?
+                    .matches(h_view.attributes())
+                {
+                    return None;
+                }
             }
-        }
+            multicenter_bonds
+        };
 
-        let noncovalent_bonds = induced_noncovalent_bonds(pattern, host, &atoms)?;
-        if noncovalent_bonds.matched_pair_count() != pattern.noncovalent_bonds().count() {
+        let noncovalent_bonds = if pattern.noncovalent_bonds().count() == 0 {
+            Correspondence::new(Vec::new(), 0, host.noncovalent_bonds().count())
+                .expect("empty correspondence is valid")
+        } else if host.noncovalent_bonds().count() < pattern.noncovalent_bonds().count() {
             return None;
-        }
-        for &(p, h) in noncovalent_bonds.matched_pairs() {
-            if !pattern
-                .noncovalent_bond(p)
-                .attributes()
-                .matches(host.noncovalent_bond(h).attributes())
-            {
+        } else {
+            let noncovalent_bonds = induced_noncovalent_bonds(pattern, host, &atoms)?;
+            if noncovalent_bonds.matched_pair_count() != pattern.noncovalent_bonds().count() {
                 return None;
             }
-        }
+            for &(p, h) in noncovalent_bonds.matched_pairs() {
+                if !pattern
+                    .noncovalent_bond(p)
+                    .attributes()
+                    .matches(host.noncovalent_bond(h).attributes())
+                {
+                    return None;
+                }
+            }
+            noncovalent_bonds
+        };
 
         // Stereo: a pattern stereo overlay matches iff the corresponding host site bears a stereo
         // element whose form, restated into the pattern's ligand frame (via the atom
         // correspondence), the pattern form admits. The comparison is over the whole form, so the
         // kind, the configuration and every frame-relative constraint are one question; an
         // `Undetermined` pattern configuration admits both handednesses.
-        let mut stereo_atom = Vec::new();
-        for sp in pattern.stereo_atoms().iter() {
-            let host_site =
-                map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is matched");
-            let sh = host.atom(host_site).stereo_atom()?;
-            let frame =
-                map_ligands(&atoms, sp.ligand_ids()).expect("matched pattern ligands are matched");
-            let action = Permutation::between(sh.ligand_ids(), &frame)?;
-            let restated = sh.attributes().clone().reframe_by(&action)?;
-            sp.attributes().matches(&restated).then_some(())?;
-            stereo_atom.push((sp.id(), sh.id()));
-        }
-        let stereo_atoms = Correspondence::new(
-            stereo_atom,
-            pattern.stereo_atoms().count(),
-            host.stereo_atoms().count(),
-        )
-        .ok()?;
+        let stereo_atoms = if pattern.stereo_atoms().count() == 0 {
+            Correspondence::new(Vec::new(), 0, host.stereo_atoms().count())
+                .expect("empty correspondence is valid")
+        } else if host.stereo_atoms().count() < pattern.stereo_atoms().count() {
+            return None;
+        } else {
+            let mut stereo_atom = Vec::with_capacity(pattern.stereo_atoms().count());
+            for sp in pattern.stereo_atoms().iter() {
+                let host_site =
+                    map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is matched");
+                let sh = host.atom(host_site).stereo_atom()?;
+                let frame = map_ligands(&atoms, sp.ligand_ids())
+                    .expect("matched pattern ligands are matched");
+                let action = Permutation::between(sh.ligand_ids(), &frame)?;
+                let restated = sh.attributes().clone().reframe_by(&action)?;
+                sp.attributes().matches(&restated).then_some(())?;
+                stereo_atom.push((sp.id(), sh.id()));
+            }
+            Correspondence::new(
+                stereo_atom,
+                pattern.stereo_atoms().count(),
+                host.stereo_atoms().count(),
+            )
+            .ok()?
+        };
 
-        let mut stereo_bond = Vec::new();
-        for sp in pattern.stereo_bonds().iter() {
-            let host_site = bonds
-                .right_of(sp.site_id())
-                .expect("a matched pattern bond is matched");
-            let sh = host.bond(host_site).stereo_bond()?;
-            let frame =
-                map_ligands(&atoms, sp.ligand_ids()).expect("matched pattern ligands are matched");
-            let action = Permutation::between(sh.ligand_ids(), &frame)?;
-            let restated = sh.attributes().clone().reframe_by(&action)?;
-            sp.attributes().matches(&restated).then_some(())?;
-            stereo_bond.push((sp.id(), sh.id()));
-        }
-        let stereo_bonds = Correspondence::new(
-            stereo_bond,
-            pattern.stereo_bonds().count(),
-            host.stereo_bonds().count(),
-        )
-        .ok()?;
+        let stereo_bonds = if pattern.stereo_bonds().count() == 0 {
+            Correspondence::new(Vec::new(), 0, host.stereo_bonds().count())
+                .expect("empty correspondence is valid")
+        } else if host.stereo_bonds().count() < pattern.stereo_bonds().count() {
+            return None;
+        } else {
+            let mut stereo_bond = Vec::with_capacity(pattern.stereo_bonds().count());
+            for sp in pattern.stereo_bonds().iter() {
+                let host_site = bonds
+                    .right_of(sp.site_id())
+                    .expect("a matched pattern bond is matched");
+                let sh = host.bond(host_site).stereo_bond()?;
+                let frame = map_ligands(&atoms, sp.ligand_ids())
+                    .expect("matched pattern ligands are matched");
+                let action = Permutation::between(sh.ligand_ids(), &frame)?;
+                let restated = sh.attributes().clone().reframe_by(&action)?;
+                sp.attributes().matches(&restated).then_some(())?;
+                stereo_bond.push((sp.id(), sh.id()));
+            }
+            Correspondence::new(
+                stereo_bond,
+                pattern.stereo_bonds().count(),
+                host.stereo_bonds().count(),
+            )
+            .ok()?
+        };
 
         Some(MoleculeCorrespondence::new(
             atoms,
@@ -1151,6 +1197,89 @@ mod tests {
                     .collect();
                 occurrences.sort();
                 assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::overlay_free_pattern_on_overlay_host(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "N" "O"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}] :dative-bonds [{:acceptor 3 :donors [4] :attrs "1"}] :noncovalent-bonds [{:atoms [0 4] :attrs "Hbd"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        6,
+        (0, 0, 0, 0, 0, 0),
+        (1, 1, 0, 1, 0, 0),
+    )]
+    #[case::overlay_pattern_on_matching_overlay_host(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "N" "O"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}] :dative-bonds [{:acceptor 3 :donors [4] :attrs "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]}"#),
+        6,
+        (0, 1, 0, 0, 0, 0),
+        (1, 1, 0, 0, 0, 0),
+    )]
+    #[case::overlay_pattern_on_overlay_free_host(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]}"#),
+        0,
+        (0, 0, 0, 0, 0, 0),
+        (0, 0, 0, 0, 0, 0),
+    )]
+    #[case::overlay_free_pattern_on_stereo_and_multicenter_host(
+        mol_dsl!(r#"{:atoms ["C #h1" "F" "Cl" "Br" "B" "B" "H"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :multicenter-bonds [{:atoms [4 5 6] :attrs "[2,0,0]"}] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "F"] :bonds [[0 1 "1"]]}"#),
+        1,
+        (0, 0, 0, 0, 0, 0),
+        (0, 0, 1, 0, 1, 0),
+    )]
+    fn test_molecule_substructure_matches_overlays(
+        #[case] host: Molecule,
+        #[case] pattern: Molecule,
+        #[case] expected_count: usize,
+        #[case] expected_matched_overlays: (usize, usize, usize, usize, usize, usize),
+        #[case] expected_right_counts: (usize, usize, usize, usize, usize, usize),
+    ) {
+        for strategy in STRATEGIES {
+            for subiso in SUBISO_ALGS {
+                let matches = pattern
+                    .substructure_matches(
+                        &host,
+                        SubstructureMatchConfig {
+                            match_algorithm: strategy,
+                            subgraph_isomorphism_algorithm: subiso,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                        },
+                    )
+                    .unwrap();
+                assert_eq!(matches.len(), expected_count, "{strategy:?}/{subiso:?}");
+                for correspondence in &matches {
+                    assert_eq!(
+                        correspondence.bonds().matched_pair_count(),
+                        pattern.bonds().count(),
+                    );
+                    assert_eq!(correspondence.bonds().left_count(), pattern.bonds().count());
+                    assert_eq!(correspondence.bonds().right_count(), host.bonds().count());
+                    assert_eq!(
+                        (
+                            correspondence.dative_bonds().matched_pair_count(),
+                            correspondence.aromatic_systems().matched_pair_count(),
+                            correspondence.multicenter_bonds().matched_pair_count(),
+                            correspondence.noncovalent_bonds().matched_pair_count(),
+                            correspondence.stereo_atoms().matched_pair_count(),
+                            correspondence.stereo_bonds().matched_pair_count(),
+                        ),
+                        expected_matched_overlays,
+                    );
+                    assert_eq!(
+                        (
+                            correspondence.dative_bonds().right_count(),
+                            correspondence.aromatic_systems().right_count(),
+                            correspondence.multicenter_bonds().right_count(),
+                            correspondence.noncovalent_bonds().right_count(),
+                            correspondence.stereo_atoms().right_count(),
+                            correspondence.stereo_bonds().right_count(),
+                        ),
+                        expected_right_counts,
+                    );
+                }
             }
         }
     }
