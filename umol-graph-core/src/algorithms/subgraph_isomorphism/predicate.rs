@@ -182,10 +182,6 @@ impl<P: SubgraphIsomorphismPredicate + ?Sized> SubgraphIsomorphismPredicate for 
 
 /// Internal adapter forwarding `Graph`'s closure-based entry points into
 /// [`SubgraphIsomorphismPredicate`]-generic search engines.
-#[allow(
-    dead_code,
-    reason = "used by Graph closure entry points once engines migrate to SubgraphIsomorphismPredicate"
-)]
 pub(crate) struct ClosureSubgraphIsomorphismPredicate<FN, FE> {
     node_match: FN,
     edge_match: FE,
@@ -196,10 +192,6 @@ where
     FN: FnMut(NodeId, NodeId) -> bool,
     FE: FnMut(EdgeId, EdgeId) -> bool,
 {
-    #[allow(
-        dead_code,
-        reason = "used by Graph closure entry points once engines migrate to SubgraphIsomorphismPredicate"
-    )]
     pub(crate) fn new(node_match: FN, edge_match: FE) -> Self {
         Self {
             node_match,

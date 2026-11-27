@@ -11,7 +11,7 @@ use std::ops::ControlFlow;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-    ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
+    ArcMatch, BitsetRi, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
 };
 use umol_graph_core::{
     EdgeId, Graph, NodeId, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
@@ -42,6 +42,7 @@ fn subiso_name(algorithm: SubgraphIsomorphismAlgorithm) -> &'static str {
         ArcMatch { .. } => "arcmatch",
         Vf2Rdkit => "vf2rdkit",
         RayKirsch => "raykirsch",
+        BitsetRi => "bitset_ri",
     }
 }
 

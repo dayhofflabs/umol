@@ -759,12 +759,12 @@ mod tests {
         assert_eq!(pq_vf2.algorithm(), SubgraphIsomorphismAlgorithm::Vf2Rdkit);
 
         // Symmetry CSR bounds for C_4 (D_4 constraints: (0,1), (0,2), (0,3), (1,3)):
-        assert_eq!(pq_rk.sym_lower_bounds(0), &[]);
+        assert_eq!(pq_rk.sym_lower_bounds(0), &[0u32; 0]);
         assert_eq!(pq_rk.sym_upper_bounds(0), &[1, 2, 3]);
         assert_eq!(pq_rk.sym_lower_bounds(1), &[0]);
         assert_eq!(pq_rk.sym_upper_bounds(1), &[3]);
         assert_eq!(pq_rk.sym_lower_bounds(3), &[0, 1]);
-        assert_eq!(pq_rk.sym_upper_bounds(3), &[]);
+        assert_eq!(pq_rk.sym_upper_bounds(3), &[0u32; 0]);
 
         // RayKirsch plan covers every vertex once (Seed/Extend) and every edge once (Extend/Close).
         match pq_rk.plan() {

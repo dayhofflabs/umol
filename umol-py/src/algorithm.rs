@@ -370,6 +370,7 @@ pub enum SubgraphIsomorphismAlgorithm {
     ArcMatch { path_length: usize },
     Vf2Rdkit(),
     RayKirsch(),
+    BitsetRi(),
 }
 
 #[pymethods]
@@ -394,6 +395,7 @@ impl SubgraphIsomorphismAlgorithm {
             }
             Self::Vf2Rdkit() => "SubgraphIsomorphismAlgorithm.Vf2Rdkit()".to_owned(),
             Self::RayKirsch() => "SubgraphIsomorphismAlgorithm.RayKirsch()".to_owned(),
+            Self::BitsetRi() => "SubgraphIsomorphismAlgorithm.BitsetRi()".to_owned(),
         }
     }
 
@@ -411,6 +413,7 @@ impl SubgraphIsomorphismAlgorithm {
             }
             GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit => Self::Vf2Rdkit(),
             GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch => Self::RayKirsch(),
+            GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi => Self::BitsetRi(),
         }
     }
 
@@ -424,6 +427,7 @@ impl SubgraphIsomorphismAlgorithm {
             }
             Self::Vf2Rdkit() => GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
             Self::RayKirsch() => GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch,
+            Self::BitsetRi() => GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
         }
     }
 }
@@ -783,6 +787,10 @@ mod tests {
         GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch,
         SubgraphIsomorphismAlgorithm::RayKirsch()
     )]
+    #[case::bitset_ri(
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
+        SubgraphIsomorphismAlgorithm::BitsetRi()
+    )]
     fn test_subgraph_isomorphism_algorithm_from_rust(
         #[case] algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
         #[case] expected: SubgraphIsomorphismAlgorithm,
@@ -814,6 +822,10 @@ mod tests {
     #[case::ray_kirsch(
         SubgraphIsomorphismAlgorithm::RayKirsch(),
         GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch
+    )]
+    #[case::bitset_ri(
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi
     )]
     fn test_subgraph_isomorphism_algorithm_to_rust(
         #[case] algorithm: SubgraphIsomorphismAlgorithm,
@@ -851,6 +863,11 @@ mod tests {
     #[case::ray_kirsch(
         SubgraphIsomorphismAlgorithm::RayKirsch(),
         "SubgraphIsomorphismAlgorithm.RayKirsch()",
+        None
+    )]
+    #[case::bitset_ri(
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
+        "SubgraphIsomorphismAlgorithm.BitsetRi()",
         None
     )]
     fn test_subgraph_isomorphism_algorithm_value(

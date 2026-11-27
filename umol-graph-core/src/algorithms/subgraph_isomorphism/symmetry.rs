@@ -788,17 +788,14 @@ impl TargetSymmetry {
         self.orbits[node.index()] == node
     }
 
-    #[allow(dead_code, reason = "consumed by bitset matching engines")]
     pub(crate) fn orbit_reps_u64(&self) -> u64 {
         self.orbit_reps_u64
     }
 
-    #[allow(dead_code, reason = "consumed by bitset matching engines")]
     pub(crate) fn orbit_reps_u128(&self) -> u128 {
         self.orbit_reps_u128
     }
 
-    #[allow(dead_code, reason = "consumed by bitset matching engines")]
     pub(crate) fn orbit_reps_words(&self) -> &[u64] {
         &self.orbit_reps_words
     }
@@ -847,7 +844,6 @@ impl TargetStabilizerChain {
     }
 
     /// Initialize level 0 from `target_sym`.
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn reset(&mut self, target_sym: &TargetSymmetry) {
         self.node_count = target_sym.node_count;
         self.levels.clear();
@@ -862,7 +858,6 @@ impl TargetStabilizerChain {
 
     /// Truncate the chain back to `depth` stabilized points (leaving `levels.len() == depth + 1`,
     /// or `0` when initialized from a trivial symmetry group).
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn truncate(&mut self, depth: usize) {
         if self.levels.is_empty() {
             return;
@@ -875,13 +870,11 @@ impl TargetStabilizerChain {
     }
 
     /// Current stabilizer depth (`d` means `S_d = Stab(t_0, ..., t_{d-1})` is at the top).
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn depth(&self) -> usize {
         self.levels.len().saturating_sub(1)
     }
 
     /// Whether the current top stabilizer `S_d` is trivial (`{1}`).
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn is_current_trivial(&self) -> bool {
         self.levels
             .last()
@@ -889,7 +882,6 @@ impl TargetStabilizerChain {
     }
 
     /// Whether `target_node` is the minimum vertex in its orbit under the current stabilizer `S_d`.
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn is_orbit_min_at_current(&self, target_node: usize) -> bool {
         match self.levels.last() {
             None => true,
@@ -902,7 +894,6 @@ impl TargetStabilizerChain {
     ///
     /// Returns `false` (leaving the chain unchanged) if `target_node` is not an `S_d`-orbit
     /// minimum.
-    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn try_push_orbit_min(&mut self, target_node: usize) -> bool {
         let Some(top) = self.levels.last_mut() else {
             return true;
@@ -931,11 +922,87 @@ impl TargetStabilizerChain {
     }
 }
 
+fn compute_suffix_is_global_min(embedding: &[usize], priority_order: &[u32]) -> Vec<bool> {
+    let n1 = embedding.len();
+    let mut suffix_is_global_min = vec![false; n1 + 1];
+    suffix_is_global_min[n1] = true;
+    for r in (0..n1).rev() {
+        let t_r = embedding[priority_order[r] as usize];
+        let smaller_in_prefix = (0..r)
+            .filter(|&i| embedding[priority_order[i] as usize] < t_r)
+            .count();
+        suffix_is_global_min[r] = suffix_is_global_min[r + 1] && smaller_in_prefix == t_r;
+    }
+    suffix_is_global_min
+}
+
+fn run_double_orbit_check(
+    embedding: &[usize],
+    query_sym: &QuerySymmetryConstraints,
+    target_sym: &TargetSymmetry,
+    target_levels: &[TargetStabilizerLevel],
+    suffix_is_global_min: &[bool],
+) -> bool {
+    let n1 = embedding.len();
+    let n2 = target_sym.node_count;
+    let g_init: Vec<u32> = (0..n1 as u32).collect();
+    let h_init: Vec<u32> = (0..n2 as u32).collect();
+    let mut g_tmp = vec![0u32; n1];
+
+    check_double_orbit_recursive(
+        0,
+        &g_init,
+        &h_init,
+        embedding,
+        query_sym,
+        target_levels,
+        suffix_is_global_min,
+        &mut g_tmp,
+    )
+}
+
+/// Exact leaf canonicality guard for combined `G_Q × G_H` symmetry reduction reusing an already
+/// pushed target stabilizer chain along `priority_order`.
+///
+/// Precondition: `chain` was initialized from `target_sym` and pushed with `try_push_orbit_min`
+/// across `priority_order` until trivial or complete.
+pub(crate) fn is_canonical_double_orbit_with_built_chain(
+    embedding: &[usize],
+    priority_order: &[u32],
+    query_sym: &QuerySymmetryConstraints,
+    target_sym: &TargetSymmetry,
+    chain: &TargetStabilizerChain,
+) -> bool {
+    let n1 = embedding.len();
+    debug_assert_eq!(n1, query_sym.node_count);
+    debug_assert_eq!(n1, priority_order.len());
+    debug_assert!(query_sym.is_trivial() || query_sym.priority_order == priority_order);
+    if n1 == 0 || target_sym.is_trivial() || query_sym.is_trivial() {
+        return true;
+    }
+
+    let suffix_is_global_min = compute_suffix_is_global_min(embedding, priority_order);
+    if suffix_is_global_min[0] {
+        return true;
+    }
+
+    run_double_orbit_check(
+        embedding,
+        query_sym,
+        target_sym,
+        &chain.levels,
+        &suffix_is_global_min,
+    )
+}
+
 /// Exact leaf canonicality guard for combined `G_Q × G_H` symmetry reduction.
 ///
 /// Returns `true` if and only if `embedding` is the unique lexicographic minimum of its
 /// `(G_Q × G_H)`-orbit `{h ∘ embedding ∘ g : g ∈ G_Q, h ∈ G_H}` ordered along `priority_order`.
-#[allow(dead_code, reason = "consumed by matching engines")]
+#[allow(
+    dead_code,
+    reason = "consumed by engines without an active push-down chain"
+)]
 pub(crate) fn is_canonical_double_orbit_embedding(
     embedding: &[usize],
     priority_order: &[u32],
@@ -951,18 +1018,7 @@ pub(crate) fn is_canonical_double_orbit_embedding(
         return true;
     }
 
-    // Precompute `suffix_is_global_min[r]`: true iff `embedding[p_r..]` already consists of the
-    // `n1 - r` smallest unused target ids in ascending order, so no injective completion can
-    // beat `embedding` from rank `r` onward.
-    let mut suffix_is_global_min = vec![false; n1 + 1];
-    suffix_is_global_min[n1] = true;
-    for r in (0..n1).rev() {
-        let t_r = embedding[priority_order[r] as usize];
-        let smaller_in_prefix = (0..r)
-            .filter(|&i| embedding[priority_order[i] as usize] < t_r)
-            .count();
-        suffix_is_global_min[r] = suffix_is_global_min[r + 1] && smaller_in_prefix == t_r;
-    }
+    let suffix_is_global_min = compute_suffix_is_global_min(embedding, priority_order);
     if suffix_is_global_min[0] {
         return true;
     }
@@ -982,20 +1038,12 @@ pub(crate) fn is_canonical_double_orbit_embedding(
         return true;
     }
 
-    let n2 = target_sym.node_count;
-    let g_init: Vec<u32> = (0..n1 as u32).collect();
-    let h_init: Vec<u32> = (0..n2 as u32).collect();
-    let mut g_tmp = vec![0u32; n1];
-
-    check_double_orbit_recursive(
-        0,
-        &g_init,
-        &h_init,
+    run_double_orbit_check(
         embedding,
         query_sym,
+        target_sym,
         &chain.levels,
         &suffix_is_global_min,
-        &mut g_tmp,
     )
 }
 
