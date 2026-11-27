@@ -90,7 +90,7 @@ pub struct AddStereoConfig(GraphAddStereoConfig);
 #[pymethods]
 impl AddStereoConfig {
     #[new]
-    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), ring_config=None, max_classification_trials=4096))]
+    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::TrailIr(), ring_config=None, max_classification_trials=4096))]
     fn new(
         selection: Option<&StereoSelection>,
         automorphism_algorithm: AutomorphismAlgorithm,
@@ -155,7 +155,7 @@ pub struct RemoveStereoConfig(GraphRemoveStereoConfig);
 #[pymethods]
 impl RemoveStereoConfig {
     #[new]
-    #[pyo3(signature = (*, selection=None, mode=RemoveStereoMode::All, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), max_classification_trials=4096))]
+    #[pyo3(signature = (*, selection=None, mode=RemoveStereoMode::All, automorphism_algorithm=AutomorphismAlgorithm::TrailIr(), max_classification_trials=4096))]
     fn new(
         selection: Option<&StereoSelection>,
         mode: RemoveStereoMode,
@@ -214,7 +214,7 @@ pub struct EnumerateStereoConfig(GraphEnumerateStereoConfig);
 #[pymethods]
 impl EnumerateStereoConfig {
     #[new]
-    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), max_classification_trials=4096))]
+    #[pyo3(signature = (*, selection=None, automorphism_algorithm=AutomorphismAlgorithm::TrailIr(), max_classification_trials=4096))]
     fn new(
         selection: Option<&StereoSelection>,
         automorphism_algorithm: AutomorphismAlgorithm,

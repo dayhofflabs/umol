@@ -1460,7 +1460,7 @@ pub struct GraphSymmetryConfig {
 impl Default for GraphSymmetryConfig {
     fn default() -> Self {
         Self {
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             max_classification_trials: 4096,
             include_constraints: false,
         }

@@ -325,7 +325,7 @@ def test_structural_fingerprint_config(max_bonds):
     expected = StructuralFingerprintConfig(
         max_bonds=max_bonds,
         subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(),
-        automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
+        automorphism_algorithm=AutomorphismAlgorithm.TrailIr(),
     )
 
     assert value.max_bonds == max_bonds
@@ -338,7 +338,7 @@ def test_structural_fingerprint_config(max_bonds):
     assert repr(value) == (
         f"StructuralFingerprintConfig(max_bonds={max_bonds}, "
         "subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(), "
-        "automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
+        "automorphism_algorithm=AutomorphismAlgorithm.TrailIr())"
     )
 
 

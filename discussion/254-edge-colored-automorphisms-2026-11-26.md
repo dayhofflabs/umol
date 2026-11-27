@@ -825,27 +825,49 @@ reaction_span/canonicalize.rs, reaction_span/canonicalize/tests.rs}`; **additive
 
 ### S6 — Switch higher-layer defaults to `TrailIr` (Rust, `umol-py`, and docs)
 
-#### S6a — Rust config defaults and `operations.md`
+#### S6a — Rust config defaults and `operations.md` [Done]
 
-**Module:** `umol-graph-ir/src/ir/molecule/symmetry.rs`, `umol-graph/src/{ops/canonicalize.rs,
-ops/transform/stereo.rs, ops/validate/stereo.rs, fingerprint/substructure.rs}`, affected tests,
-`docs/development/operations.md`; **breaking (red→green)** (default value change + default-checking
-tests updated together). `[dep: S5b]`
+**Module:** `umol-graph-ir/src/ir/molecule/{symmetry.rs, symmetry/tests.rs}`,
+`umol-graph/src/{ops/canonicalize.rs, ops/transform/stereo.rs, ops/validate/stereo.rs,
+ops/validate.rs, fingerprint/substructure.rs}`, `docs/development/operations.md`; **breaking
+(red→green)** (default value change + default-checking tests updated together). `[dep: S5b]`
 
 - Change default `automorphism_algorithm` from `AutomorphismAlgorithm::Nauty` to
   `AutomorphismAlgorithm::TrailIr` across all higher-layer configs and update
   [operations.md](../docs/development/operations.md).
+- **Findings:**
+  - Audited all non-test `AutomorphismAlgorithm` occurrences workspace-wide; switched defaults in
+    `GraphSymmetryConfig::default()`, `CanonicalizeConfig::default()`, `AddStereoConfig::default()`,
+    `RemoveStereoConfig::default()`, `EnumerateStereoConfig::default()`,
+    `StereoValidateConfig::default()` (inherited by `ValidateConfig::default()`), and
+    `SubstructureFeaturizer::new`, along with stereo config rustdoc and
+    [operations.md](../docs/development/operations.md).
+  - Updated default-checking unit tests in all affected modules; zero unrelated tests in
+    `umol-graph-ir` (`13,284` unit + all integration suites including `mol_macro_ui`) or
+    `umol-graph` (`4,885` unit + `154` bin/integration tests) depended on `Nauty` tie-breaking
+    under default configs.
 
-#### S6b — Python config defaults and test parity (`umol-py`)
+#### S6b — Python config defaults and test parity (`umol-py`) [Done]
 
-**Module:** `umol-py/src/{canonicalize.rs, symmetry.rs, transform.rs, fingerprint/config.rs}`,
-`umol-py/tests/`, `docs/development/python-api.md`; **breaking (red→green)**. `[dep: S6a]`
+**Module:** `umol-py/src/{canonicalize.rs, symmetry.rs, symmetry/tests.rs, transform.rs,
+fingerprint/config.rs}`, `umol-py/tests/{test_molecule.py, test_symmetry.py, test_transform.py,
+test_fingerprint.py}`, `docs/development/python-api.md`; **breaking (red→green)**. `[dep: S6a]`
 
 - Update all Python config defaults to `AutomorphismAlgorithm.TrailIr()` in lockstep with Rust (per
   [python-api.md](../docs/development/python-api.md); `AutomorphismAlgorithm.TrailIr()` itself was
   exposed in `S4b`), update `pytest` / Rust binding tests and
   [python-api.md](../docs/development/python-api.md), and verify in `umol-py/.venv` (Python 3.13)
   with `maturin develop` and `pytest -q umol-py/tests`.
+- **Findings:**
+  - Switched `#[pyo3(signature = ...)]` defaults to `AutomorphismAlgorithm::TrailIr()` across
+    `CanonicalizeConfig`, `GraphSymmetryConfig`, `AddStereoConfig`, `RemoveStereoConfig`,
+    `EnumerateStereoConfig`, and `StructuralFingerprintConfig` (`StereoValidateConfig` is not bound
+    in `umol-py`), and updated [python-api.md](../docs/development/python-api.md).
+  - Expanded Rust binding and `pytest` config tests to assert the `TrailIr()` default while keeping
+    explicit `Nauty()` roundtrip, repr, and mutation coverage.
+  - Verified in `umol-py/.venv` (Python `3.13.18`): `cargo test -p umol-py --lib` (`1,798` passed,
+    `2` ignored), `cargo clippy -p umol-graph-ir -p umol-graph -p umol-py --all-targets -- -D
+    warnings`, `maturin develop`, and `pytest -q umol-py/tests` (`3,658` passed, `2` skipped).
 
 ### S7 — Final verification gate and deferrable benchmark retention
 

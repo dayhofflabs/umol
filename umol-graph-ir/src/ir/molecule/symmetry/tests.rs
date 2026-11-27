@@ -2770,7 +2770,10 @@ fn test_exhaustive_topicity(
 #[rstest]
 fn test_graph_symmetry_config_default() {
     let config = GraphSymmetryConfig::default();
-    assert_eq!(config.automorphism_algorithm, AutomorphismAlgorithm::Nauty);
+    assert_eq!(
+        config.automorphism_algorithm,
+        AutomorphismAlgorithm::TrailIr
+    );
     assert_eq!(config.max_classification_trials, 4096);
     assert_eq!(config.include_constraints, false);
 }

@@ -13,7 +13,7 @@ pub struct CanonicalizeConfig {
 impl Default for CanonicalizeConfig {
     fn default() -> Self {
         Self {
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
         }
     }
 }
@@ -38,7 +38,7 @@ mod tests {
         assert_eq!(
             CanonicalizeConfig::default(),
             CanonicalizeConfig {
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             }
         );
     }
@@ -48,7 +48,7 @@ mod tests {
         assert_eq!(
             CanonicalizeConfig::default().context(),
             CanonicalizeContext {
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             }
         );
     }

@@ -32,7 +32,7 @@ impl SubstructureFeaturizer {
         Self {
             max_bonds,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
         }
     }
 
@@ -126,7 +126,7 @@ mod tests {
             SubstructureFeaturizer {
                 max_bonds: 2,
                 subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu,
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             }
         );
     }

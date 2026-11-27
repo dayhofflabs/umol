@@ -356,7 +356,7 @@ def test_stereo_config_new(constructor, kinds, classes):
     assert config.selection.sites is None
     assert config.selection.kinds == kinds
     assert config.selection.stereogenic_site_kinds == classes
-    assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert config.automorphism_algorithm == AutomorphismAlgorithm.TrailIr()
     assert config.max_classification_trials == 4096
     assert (
         eval(

@@ -351,7 +351,7 @@ impl StructuralFingerprintConfig {
         *,
         max_bonds,
         subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm::Esu(),
-        automorphism_algorithm=AutomorphismAlgorithm::Nauty(),
+        automorphism_algorithm=AutomorphismAlgorithm::TrailIr(),
     ))]
     fn new(
         max_bonds: u32,
@@ -981,14 +981,16 @@ mod tests {
     #[rstest]
     #[case::zero(
         0,
+        AutomorphismAlgorithm::TrailIr(),
         StructuralFingerprintConfig {
             max_bonds: 0,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty(),
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr(),
         }
     )]
-    #[case::positive(
+    #[case::positive_nauty(
         3,
+        AutomorphismAlgorithm::Nauty(),
         StructuralFingerprintConfig {
             max_bonds: 3,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
@@ -997,13 +999,14 @@ mod tests {
     )]
     fn test_structural_fingerprint_config_new(
         #[case] max_bonds: u32,
+        #[case] automorphism_algorithm: AutomorphismAlgorithm,
         #[case] expected: StructuralFingerprintConfig,
     ) {
         assert_eq!(
             StructuralFingerprintConfig::new(
                 max_bonds,
                 SubgraphEnumerationAlgorithm::Esu(),
-                AutomorphismAlgorithm::Nauty(),
+                automorphism_algorithm,
             ),
             expected
         );
@@ -1014,15 +1017,15 @@ mod tests {
         GraphSubstructureFeaturizer {
             max_bonds: 0,
             subgraph_enumeration_algorithm: GraphCoreSubgraphEnumerationAlgorithm::Esu,
-            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
         },
         StructuralFingerprintConfig {
             max_bonds: 0,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty(),
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr(),
         }
     )]
-    #[case::positive(
+    #[case::positive_nauty(
         GraphSubstructureFeaturizer {
             max_bonds: 3,
             subgraph_enumeration_algorithm: GraphCoreSubgraphEnumerationAlgorithm::Esu,
@@ -1046,15 +1049,15 @@ mod tests {
         StructuralFingerprintConfig {
             max_bonds: 0,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty(),
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr(),
         },
         GraphSubstructureFeaturizer {
             max_bonds: 0,
             subgraph_enumeration_algorithm: GraphCoreSubgraphEnumerationAlgorithm::Esu,
-            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
         }
     )]
-    #[case::positive(
+    #[case::positive_nauty(
         StructuralFingerprintConfig {
             max_bonds: 3,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
@@ -1078,23 +1081,26 @@ mod tests {
         StructuralFingerprintConfig {
             max_bonds: 0,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty(),
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr(),
         },
         0,
-        "StructuralFingerprintConfig(max_bonds=0, subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(), automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
+        AutomorphismAlgorithm::TrailIr(),
+        "StructuralFingerprintConfig(max_bonds=0, subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(), automorphism_algorithm=AutomorphismAlgorithm.TrailIr())"
     )]
-    #[case::positive(
+    #[case::positive_nauty(
         StructuralFingerprintConfig {
             max_bonds: 3,
             subgraph_enumeration_algorithm: SubgraphEnumerationAlgorithm::Esu(),
             automorphism_algorithm: AutomorphismAlgorithm::Nauty(),
         },
         3,
+        AutomorphismAlgorithm::Nauty(),
         "StructuralFingerprintConfig(max_bonds=3, subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(), automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
     )]
     fn test_structural_fingerprint_config_value(
         #[case] config: StructuralFingerprintConfig,
         #[case] expected_max_bonds: u32,
+        #[case] expected_automorphism_algorithm: AutomorphismAlgorithm,
         #[case] expected_repr: &str,
     ) {
         Python::attach(|py| {
@@ -1126,7 +1132,7 @@ mod tests {
                     .unwrap()
                     .extract::<AutomorphismAlgorithm>()
                     .unwrap(),
-                AutomorphismAlgorithm::Nauty()
+                expected_automorphism_algorithm
             );
             assert_eq!(
                 config.repr().unwrap().extract::<String>().unwrap(),

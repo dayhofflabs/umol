@@ -28,7 +28,7 @@ pub struct StereoValidateConfig {
 impl Default for StereoValidateConfig {
     fn default() -> Self {
         Self {
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             ring_config: RingConfig::default(),
         }
     }
@@ -626,7 +626,7 @@ mod tests {
         assert_eq!(
             StereoValidateConfig::default(),
             StereoValidateConfig {
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
                 ring_config: Default::default(),
             }
         );

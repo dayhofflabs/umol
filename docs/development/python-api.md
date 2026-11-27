@@ -515,7 +515,7 @@ All three configurations select all topology sites by default. Their other defau
 | RemoveStereoConfig | unrestricted | unrestricted | All |
 | EnumerateStereoConfig | Tetrahedral, CisTrans | unrestricted | none |
 
-All three default to AutomorphismAlgorithm.Nauty(); addition also uses RingConfig's
+All three default to AutomorphismAlgorithm.TrailIr(); addition also uses RingConfig's
 Rust default.
 
 Addition creates missing selected entities and preserves existing arrangements and source
@@ -559,7 +559,7 @@ inconsistency attribute.
 GraphSymmetry is an opaque immutable owner of auxiliary data. It has no public constructor and
 holds no molecule. copy() explicitly clones the data. GraphSymmetryConfig has writable
 keyword-configured fields automorphism_algorithm, max_classification_trials and
-include_constraints, defaulting to Nauty, 4096 and False. default() returns those defaults;
+include_constraints, defaulting to TrailIr, 4096 and False. default() returns those defaults;
 copy() is independent and the mutable config is unhashable. Preparation copies the config value.
 
 Molecule.graph_symmetry(config) returns GraphSymmetryView, which retains the molecule and owns

@@ -68,7 +68,7 @@ elements; Clar requires carbon. Rule rejection uses Contradictory and missing pa
 Molecule::graph_symmetry prepares GraphSymmetry and returns GraphSymmetryView. Queries on the
 molecule take the auxiliary data explicitly; view methods use their retained data and borrowed
 molecule. GraphSymmetryConfig selects the automorphism algorithm, include_constraints and
-max_classification_trials. Defaults are Nauty, false and 4096. All colors and checks read the
+max_classification_trials. Defaults are TrailIr, false and 4096. All colors and checks read the
 supplied forms; they do not copy or normalize the molecule. Entity constraints are included
 only when selected, and molecule constraints are excluded. Encoding-incompatible fields use
 singleton entity colors; this fallback does not diagnose or validate those fields.
