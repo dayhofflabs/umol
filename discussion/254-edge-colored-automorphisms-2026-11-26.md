@@ -634,7 +634,7 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
     all test tables, and mixed-mode multi-threaded concurrency (`69` passing `umol-nauty-sys` unit
     tests).
 
-#### S2c — `umol-nauty-sys` provenance README
+#### S2c — `umol-nauty-sys` provenance README [Done]
 
 **Module:** `umol-nauty-sys/{README.md, Cargo.toml}`; **additive (green)**. `[dep: S2b]`
 
@@ -643,6 +643,12 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
   build-time symbol prefixing in `build.rs`, and the umol-authored `umol_nauty.c` /
   `umol_nauty_swg.c` boundary (including `umol_nauty_swg.c`'s adaptation of `nausparse.c`'s sparse
   dispatch callbacks while keeping `umol-nauty-sys/nauty/` unmodified).
+- **Findings:**
+  - Switched `umol-nauty-sys/Cargo.toml` from `readme.workspace = true` (which previously pointed at
+    the workspace root `../README.md`) to crate-local `readme = "README.md"` and verified package
+    inclusion with `cargo package -p umol-nauty-sys --list --allow-dirty`.
+  - Kept all README links crate-local so the published crate remains self-contained without
+    broken workspace-relative paths.
 
 ### S3 — Pure-Rust `TrailIr` engine (`umol-graph-core` private modules)
 
