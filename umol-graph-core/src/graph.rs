@@ -55,6 +55,7 @@ struct Csr {
     endpoints: Vec<[NodeId; 2]>,
     node_count: usize,
     edge_count: usize,
+    max_degree: u32,
 }
 
 /// Undirected simple graph stored as compressed sparse row (CSR).
@@ -126,6 +127,11 @@ impl Graph {
         let start = self.csr.offsets[id.index()] as usize;
         let end = self.csr.offsets[id.index() + 1] as usize;
         end - start
+    }
+
+    /// Maximum vertex degree across the graph (`0` for empty or edgeless graphs).
+    pub fn max_degree(&self) -> usize {
+        self.csr.max_degree as usize
     }
 
     pub fn edge_endpoints(&self, id: EdgeId) -> [NodeId; 2] {
@@ -695,9 +701,13 @@ impl Graph {
             degree[b as usize] += 1;
         }
 
+        let mut max_degree = 0u32;
         let mut offsets = Vec::with_capacity(node_count + 1);
         offsets.push(0);
         for &d in &degree {
+            if d > max_degree {
+                max_degree = d;
+            }
             offsets.push(offsets.last().unwrap() + d);
         }
 
@@ -756,6 +766,7 @@ impl Graph {
             endpoints,
             node_count,
             edge_count,
+            max_degree,
         })
     }
 }
@@ -866,6 +877,47 @@ mod tests {
         assert_eq!(g.neighbors(NodeId(0)).len(), 2);
         assert_eq!(g.neighbors(NodeId(1))[0].node, NodeId(0));
         assert_eq!(g.neighbors(NodeId(2))[0].node, NodeId(0));
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 0)]
+    #[case::isolated_nodes(3, &[], 0)]
+    #[case::single_edge(2, &[[0, 1]], 1)]
+    #[case::path(4, &[[0, 1], [1, 2], [2, 3]], 2)]
+    #[case::star(5, &[[0, 1], [0, 2], [0, 3], [0, 4]], 4)]
+    fn test_graph_max_degree(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] expected: usize,
+    ) {
+        assert_eq!(Graph::new(node_count, edges).max_degree(), expected);
+    }
+
+    #[rstest]
+    fn test_graph_max_degree_mutation() {
+        let mut graph = Graph::new(3, &[[0, 1], [0, 2]]);
+        assert_eq!(graph.max_degree(), 2);
+
+        graph.add_node();
+        assert_eq!(graph.max_degree(), 2);
+
+        graph.add_edge(NodeId(0), NodeId(3));
+        assert_eq!(graph.max_degree(), 3);
+
+        let before_remove = graph.clone();
+        let compaction = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
+        assert_eq!(graph.max_degree(), 0);
+        assert_eq!(before_remove.max_degree(), 3);
+
+        graph.restore(
+            &compaction,
+            &[
+                (EdgeId(0), [NodeId(0), NodeId(1)]),
+                (EdgeId(1), [NodeId(0), NodeId(2)]),
+                (EdgeId(2), [NodeId(0), NodeId(3)]),
+            ],
+        );
+        assert_eq!(graph.max_degree(), 3);
     }
 
     #[rstest]

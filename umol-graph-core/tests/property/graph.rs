@@ -422,4 +422,73 @@ proptest! {
         prop_assert_eq!(plain, expected.clone());
         prop_assert_eq!(witnessed, expected);
     }
+
+    /// Cached `max_degree` equals the maximum endpoint-incidence count across construction,
+    /// extension, cascading removal, and restoration.
+    #[test]
+    fn test_graph_max_degree(
+        (mut graph, edges) in graph_with_simple_edges(16, 40),
+        extra_nodes in 0usize..6,
+        added in prop::collection::vec((0u32..22, 0u32..22), 0..16),
+        node_mask in any::<u16>(),
+    ) {
+        let endpoint_max_degree = |node_count: usize, edge_list: &[[u32; 2]]| -> usize {
+            let mut degrees = vec![0usize; node_count];
+            for &[a, b] in edge_list {
+                degrees[a as usize] += 1;
+                degrees[b as usize] += 1;
+            }
+            degrees.into_iter().max().unwrap_or(0)
+        };
+
+        prop_assert_eq!(graph.max_degree(), endpoint_max_degree(graph.node_count(), &edges));
+
+        graph.extend_nodes(extra_nodes);
+        prop_assert_eq!(graph.max_degree(), endpoint_max_degree(graph.node_count(), &edges));
+
+        let mut all_edges = edges;
+        let mut seen: HashSet<[u32; 2]> = all_edges
+            .iter()
+            .map(|&[a, b]| [a.min(b), a.max(b)])
+            .collect();
+        let node_count = graph.node_count();
+        let valid_added: Vec<[NodeId; 2]> = added
+            .into_iter()
+            .filter(|&(a, b)| (a as usize) < node_count && (b as usize) < node_count && a != b)
+            .filter(|&(a, b)| seen.insert([a.min(b), a.max(b)]))
+            .map(|(a, b)| [NodeId(a), NodeId(b)])
+            .collect();
+        graph.extend_edges(&valid_added);
+        all_edges.extend(valid_added.iter().map(|&[a, b]| [a.0, b.0]));
+        let before_remove_max = endpoint_max_degree(node_count, &all_edges);
+        prop_assert_eq!(graph.max_degree(), before_remove_max);
+
+        let removed_nodes: Vec<NodeId> = (0..node_count.min(16))
+            .filter(|&i| node_mask & (1u16 << i) != 0)
+            .map(NodeId::from)
+            .collect();
+        let compaction = graph.tracked_remove_cascading(removed_nodes.clone(), vec![]);
+        let surviving_nodes: Vec<u32> = (0..node_count as u32)
+            .filter(|&i| !removed_nodes.contains(&NodeId(i)))
+            .collect();
+        let mut surviving_degrees = vec![0usize; surviving_nodes.len()];
+        let mut saved_edges = Vec::new();
+        for (edge_idx, &[a, b]) in all_edges.iter().enumerate() {
+            if removed_nodes.contains(&NodeId(a)) || removed_nodes.contains(&NodeId(b)) {
+                saved_edges.push((EdgeId::from(edge_idx), [NodeId(a), NodeId(b)]));
+            } else {
+                let na = surviving_nodes.iter().position(|&id| id == a).unwrap();
+                let nb = surviving_nodes.iter().position(|&id| id == b).unwrap();
+                surviving_degrees[na] += 1;
+                surviving_degrees[nb] += 1;
+            }
+        }
+        prop_assert_eq!(
+            graph.max_degree(),
+            surviving_degrees.into_iter().max().unwrap_or(0),
+        );
+
+        graph.restore(&compaction, &saved_edges);
+        prop_assert_eq!(graph.max_degree(), before_remove_max);
+    }
 }

@@ -5,6 +5,7 @@ Date: 2026-11-26
 Relates: [233](233-graph-ir-delta-review-2026-09-23.md),
 [238](238-non-cascading-removal-2026-10-16.md),
 [254](254-edge-colored-automorphisms-2026-11-26.md),
+[256](256-subgraph-isomorphism-performance-2026-11-27.md),
 [integrity guide](../docs/development/integrity.md)
 
 ## Purpose
@@ -59,3 +60,7 @@ participants; the DPO aromatic-bond dangling checks remain covered by
    union-frame uniqueness rule.
 5. **Integrity check disposition:** align `ReactionSpanIntegrityError` across `Bond` and overlays
    once the structural-identity and normalization contracts are settled.
+6. **Pre-normalized `Deltas` caching (`PreparedReaction`, from [256](256-subgraph-isomorphism-performance-2026-11-27.md)):**
+   once delta normalization semantics are settled, evaluate a prepared reaction carrier caching
+   pre-normalized `Deltas` alongside `PreparedSubstructurePattern` so repeated reaction-template
+   application avoids calling `Reaction::prepare_deltas()` per host.
