@@ -44,7 +44,8 @@ pub use algorithms::refinement::{
     RefinementHash, RefinementRounds,
 };
 pub use algorithms::subgraph_isomorphism::{
-    QuerySymmetryConstraints, SubgraphIsomorphismAlgorithm, SubgraphIsomorphismPredicate,
+    PreparedSubgraphQuery, PreparedSubgraphTarget, QuerySymmetryConstraints,
+    SubgraphIsomorphismAlgorithm, SubgraphIsomorphismPredicate, SubgraphIsomorphismScratch,
     SymmetryGeneratorError, TargetSymmetry, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;

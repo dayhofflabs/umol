@@ -612,10 +612,6 @@ impl QuerySymmetryConstraints {
         &self.constraints
     }
 
-    #[allow(
-        dead_code,
-        reason = "consumed by PreparedSubgraphQuery and solvers in S1c/S2"
-    )]
     pub(crate) fn priority_order(&self) -> &[u32] {
         &self.priority_order
     }
@@ -792,17 +788,17 @@ impl TargetSymmetry {
         self.orbits[node.index()] == node
     }
 
-    #[allow(dead_code, reason = "consumed by BitsetRi and Glasgow solvers in S2")]
+    #[allow(dead_code, reason = "consumed by bitset matching engines")]
     pub(crate) fn orbit_reps_u64(&self) -> u64 {
         self.orbit_reps_u64
     }
 
-    #[allow(dead_code, reason = "consumed by BitsetRi and Glasgow solvers in S2")]
+    #[allow(dead_code, reason = "consumed by bitset matching engines")]
     pub(crate) fn orbit_reps_u128(&self) -> u128 {
         self.orbit_reps_u128
     }
 
-    #[allow(dead_code, reason = "consumed by BitsetRi and Glasgow solvers in S2")]
+    #[allow(dead_code, reason = "consumed by bitset matching engines")]
     pub(crate) fn orbit_reps_words(&self) -> &[u64] {
         &self.orbit_reps_words
     }
@@ -845,13 +841,13 @@ pub(crate) struct TargetStabilizerChain {
 }
 
 impl TargetStabilizerChain {
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Initialize level 0 from `target_sym`.
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn reset(&mut self, target_sym: &TargetSymmetry) {
         self.node_count = target_sym.node_count;
         self.levels.clear();
@@ -866,7 +862,7 @@ impl TargetStabilizerChain {
 
     /// Truncate the chain back to `depth` stabilized points (leaving `levels.len() == depth + 1`,
     /// or `0` when initialized from a trivial symmetry group).
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn truncate(&mut self, depth: usize) {
         if self.levels.is_empty() {
             return;
@@ -879,13 +875,13 @@ impl TargetStabilizerChain {
     }
 
     /// Current stabilizer depth (`d` means `S_d = Stab(t_0, ..., t_{d-1})` is at the top).
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn depth(&self) -> usize {
         self.levels.len().saturating_sub(1)
     }
 
     /// Whether the current top stabilizer `S_d` is trivial (`{1}`).
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn is_current_trivial(&self) -> bool {
         self.levels
             .last()
@@ -893,7 +889,7 @@ impl TargetStabilizerChain {
     }
 
     /// Whether `target_node` is the minimum vertex in its orbit under the current stabilizer `S_d`.
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn is_orbit_min_at_current(&self, target_node: usize) -> bool {
         match self.levels.last() {
             None => true,
@@ -906,7 +902,7 @@ impl TargetStabilizerChain {
     ///
     /// Returns `false` (leaving the chain unchanged) if `target_node` is not an `S_d`-orbit
     /// minimum.
-    #[allow(dead_code, reason = "consumed by solvers in S2")]
+    #[allow(dead_code, reason = "consumed by matching engines")]
     pub(crate) fn try_push_orbit_min(&mut self, target_node: usize) -> bool {
         let Some(top) = self.levels.last_mut() else {
             return true;
@@ -939,7 +935,7 @@ impl TargetStabilizerChain {
 ///
 /// Returns `true` if and only if `embedding` is the unique lexicographic minimum of its
 /// `(G_Q × G_H)`-orbit `{h ∘ embedding ∘ g : g ∈ G_Q, h ∈ G_H}` ordered along `priority_order`.
-#[allow(dead_code, reason = "consumed by solvers in S2")]
+#[allow(dead_code, reason = "consumed by matching engines")]
 pub(crate) fn is_canonical_double_orbit_embedding(
     embedding: &[usize],
     priority_order: &[u32],

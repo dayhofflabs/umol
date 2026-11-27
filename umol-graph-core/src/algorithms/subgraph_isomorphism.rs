@@ -20,6 +20,7 @@ use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
 mod predicate;
+mod prepared;
 mod symmetry;
 
 #[allow(
@@ -28,6 +29,7 @@ mod symmetry;
 )]
 pub(crate) use predicate::ClosureSubgraphIsomorphismPredicate;
 pub use predicate::SubgraphIsomorphismPredicate;
+pub use prepared::{PreparedSubgraphQuery, PreparedSubgraphTarget, SubgraphIsomorphismScratch};
 pub use symmetry::{QuerySymmetryConstraints, SymmetryGeneratorError, TargetSymmetry};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
