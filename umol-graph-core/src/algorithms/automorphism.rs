@@ -14,6 +14,9 @@ use umol_nauty_sys::{run as run_vendored_nauty, NautyInput};
 use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
+mod trail_ir;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomorphismAlgorithm {
     Nauty,

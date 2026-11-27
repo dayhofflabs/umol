@@ -19,6 +19,7 @@ proptest = []
 
 [dependencies]
 bitvec = "1.0.1"
+foldhash = "0.2.0"
 num-bigint = "0.4"
 umol-nauty-sys = { path = "../umol-nauty-sys", version = "0.11.0" }
 
@@ -26,6 +27,8 @@ umol-nauty-sys = { path = "../umol-nauty-sys", version = "0.11.0" }
 criterion = "0.8.1"
 pretty_assertions = "1.4.1"
 proptest = "1.7.0"
+rand = "0.10.3"
+rand_chacha = "0.10"
 rstest = "0.26.1"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1.0"

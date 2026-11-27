@@ -652,7 +652,7 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
 
 ### S3 — Pure-Rust `TrailIr` engine (`umol-graph-core` private modules)
 
-#### S3a — `trail_ir` internal engine and exhaustive differential suite
+#### S3a — `trail_ir` internal engine and exhaustive differential suite [Done]
 
 **Module:** `umol-graph-core/src/algorithms/automorphism/trail_ir.rs` and child modules
 `trail_ir/{partition, preprocess, refine, components, search}.rs` (using `module.rs`, not
@@ -667,6 +667,26 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
   relabeling-invariance, and `get_canon = false` parity against weighted `Nauty` across all 13,598
   simple graphs on $n \le 8$ (`simple-through-8.g6`) with multi-color edges and representative
   molecular/cage/complex fixtures.
+- **Findings:**
+  - Dropped scratch-only ablation knobs (`TrailIrConfig`, `TargetCellHeuristic::{BestCell, Fsm}`,
+    and `target_cell_best`), keeping the settled production configuration directly (twin collapse,
+    `FirstSmallest`, `NUCR_MIN_CELLS = 8`).
+  - Consolidated internal code during porting without altering semantics: merged `refine_bucket` /
+    `refine_hit_edge_slice` into `refine_hit_targets`, inlined single-use `split_cell_sparse_binary`
+    and `sort_indirect_asc`, shared `common_prefix_len` across `components.rs` and `search.rs`, and
+    removed per-automorphism `first_lab` / `best_lab` clones in `ComponentSolver`.
+  - Kept `mod trail_ir;` strictly private with a temporary
+    `#[cfg_attr(not(test), allow(dead_code, unused_imports))]` attribute to be removed when `S4a`
+    wires `AutomorphismAlgorithm::TrailIr`.
+  - Replaced the prototype's hand-rolled refinement mixer and test PRNG with explicit dependencies
+    already present in `Cargo.lock`: `foldhash::fast::FixedState` (`foldhash = "0.2.0"`) for
+    deterministic word-at-a-time refinement invariant hashing (`Hasher::write_u32` / `write_usize`,
+    16-byte stack state) and `rand` / `rand_chacha` in `[dev-dependencies]` for deterministic
+    test relabelings.
+  - Verified exact minimum-id orbit representatives, group orders, exact generated subgroups
+    (`|G| <= 4,096`), relabeling invariance, `u32::MAX` edge colors, root and deep NUCR fixtures,
+    and `get_canon = true/false` parity against weighted `Nauty` across all `13,598` simple graphs
+    on $n \le 8$.
 
 ### S4 — Public edge-colored automorphism API (`umol-graph-core` & `GraphView`)
 

@@ -1918,9 +1918,12 @@ version = "0.11.0"
 dependencies = [
  "bitvec",
  "criterion",
+ "foldhash 0.2.0",
  "num-bigint",
  "pretty_assertions",
  "proptest",
+ "rand 0.10.3",
+ "rand_chacha 0.10.0",
  "rstest",
  "serde",
  "toml",
