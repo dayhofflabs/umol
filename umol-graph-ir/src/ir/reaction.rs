@@ -195,7 +195,7 @@ impl Iterator for ReactionProductsIter {
 ///
 /// ```
 /// use umol_graph_core::{
-///     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+///     AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 /// };
 /// use umol_graph_ir::ir::{
 ///     Molecule, React, Reaction, SubstructureMatchAlgorithm, SubstructureMatchConfig,
@@ -207,6 +207,9 @@ impl Iterator for ReactionProductsIter {
 ///     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
 ///     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
 ///     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+///     automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+///     reduce_pattern_symmetry: false,
+///     reduce_host_symmetry: false,
 /// };
 /// let product_sets = reactants.react(&reaction, config)?;
 ///
@@ -3050,7 +3053,9 @@ fn reframe_deltas(
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+    use umol_graph_core::{
+        AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    };
     use umol_perm::{Orientation, MAX_DEGREE};
 
     use super::super::boolean::BooleanForm;
@@ -3080,6 +3085,9 @@ mod tests {
         match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+        reduce_pattern_symmetry: false,
+        reduce_host_symmetry: false,
     };
 
     fn removal_frame_reactions(entity_kind: EntityKind) -> (Reaction, Reaction) {

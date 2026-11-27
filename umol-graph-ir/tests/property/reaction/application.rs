@@ -26,6 +26,9 @@ const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: MATCH_ALGORITHM,
     subgraph_isomorphism_algorithm: SUBISO_ALGORITHM,
     relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
+    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+    reduce_pattern_symmetry: false,
+    reduce_host_symmetry: false,
 };
 
 proptest! {

@@ -11,7 +11,8 @@ use std::ops::ControlFlow;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -42,7 +43,7 @@ pub enum SubstructureMatchAlgorithm {
     Incidence,
 }
 
-/// Algorithms used to enumerate substructure matches.
+/// Algorithms and symmetry-reduction options used to enumerate substructure matches.
 ///
 /// This type deliberately has no default at the graph-IR layer: every graph
 /// algorithm selection remains explicit at the call site.
@@ -54,6 +55,15 @@ pub struct SubstructureMatchConfig {
     pub subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
     /// Algorithm used to derive relevant-ring constraints requested by the pattern.
     pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+    /// Algorithm used to compute proper symmetry groups when pattern or host
+    /// symmetry reduction is enabled.
+    pub automorphism_algorithm: AutomorphismAlgorithm,
+    /// Emit one canonical representative per pattern-symmetry orbit instead of
+    /// all pattern-symmetric embeddings.
+    pub reduce_pattern_symmetry: bool,
+    /// Emit one canonical representative per host-symmetry orbit instead of
+    /// all host-symmetric embeddings.
+    pub reduce_host_symmetry: bool,
 }
 
 /// Matching rejected the pattern: it uses a construct matching does not
@@ -674,7 +684,9 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
     use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
-    use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+    use umol_graph_core::{
+        AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    };
 
     use super::super::id::AtomId;
     use super::super::molecule::Molecule;
@@ -717,6 +729,9 @@ mod tests {
                     match_algorithm: strategy,
                     subgraph_isomorphism_algorithm: subiso,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                    reduce_pattern_symmetry: false,
+                    reduce_host_symmetry: false,
                 };
                 let mut occurrences: Vec<Vec<AtomId>> = Vec::new();
                 let flow: ControlFlow<()> = pattern
@@ -756,6 +771,9 @@ mod tests {
                     match_algorithm: strategy,
                     subgraph_isomorphism_algorithm: subiso,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                    reduce_pattern_symmetry: false,
+                    reduce_host_symmetry: false,
                 };
                 let first = pattern
                     .visit_substructure_matches(&host, config, |correspondence| {
@@ -799,6 +817,9 @@ mod tests {
                 match_algorithm: strategy,
                 subgraph_isomorphism_algorithm: BitsetRi,
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             };
             let result = pattern
                 .visit_substructure_matches(&host, config, |_| ControlFlow::Continue::<()>(()));
@@ -1034,6 +1055,9 @@ mod tests {
                             match_algorithm: strategy,
                             subgraph_isomorphism_algorithm: subiso,
                             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                            reduce_pattern_symmetry: false,
+                            reduce_host_symmetry: false,
                         },
                     )
                     .unwrap()
@@ -1168,6 +1192,9 @@ mod tests {
                             match_algorithm: strategy,
                             subgraph_isomorphism_algorithm: subiso,
                             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                            reduce_pattern_symmetry: false,
+                            reduce_host_symmetry: false,
                         },
                     )
                     .unwrap()
@@ -1232,6 +1259,9 @@ mod tests {
                             match_algorithm: strategy,
                             subgraph_isomorphism_algorithm: subiso,
                             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                            reduce_pattern_symmetry: false,
+                            reduce_host_symmetry: false,
                         },
                     )
                     .unwrap();
@@ -1284,6 +1314,9 @@ mod tests {
             match_algorithm: GraphAndOverlays,
             subgraph_isomorphism_algorithm: BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         };
         assert_eq!(pattern.substructure_matches(&host, config), Err(expected));
     }

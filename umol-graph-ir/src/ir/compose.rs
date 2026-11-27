@@ -169,7 +169,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::{
-        Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+        AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
+        SubgraphIsomorphismAlgorithm,
     };
 
     use super::super::aromatic::AromaticSystemForm;
@@ -201,6 +202,9 @@ mod tests {
         match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+        reduce_pattern_symmetry: false,
+        reduce_host_symmetry: false,
     };
 
     #[rstest]

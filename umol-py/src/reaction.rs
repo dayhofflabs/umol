@@ -14,7 +14,10 @@ use umol_graph::ops::model::{
 use umol_graph::ops::resolve::{
     IsotopePolicy as GraphIsotopePolicy, ResolveConfig as GraphResolveConfig,
 };
-use umol_graph_core::CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm;
+use umol_graph_core::{
+    AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
+    CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
+};
 #[cfg(test)]
 use umol_graph_core::{
     Correspondence,
@@ -209,6 +212,9 @@ impl ReactionApplicationConfig {
             match_algorithm: self.match_algorithm.to_rust(),
             subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
             relevant_cycle_algorithm: self.relevant_cycle_algorithm.to_rust(),
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }
     }
 }
@@ -996,6 +1002,9 @@ mod tests {
                 match_algorithm,
                 subgraph_isomorphism_algorithm,
                 relevant_cycle_algorithm,
+                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             }),
             expected,
         );
@@ -1034,6 +1043,9 @@ mod tests {
                 match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
                 subgraph_isomorphism_algorithm: expected_subgraph_isomorphism_algorithm,
                 relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             }
         );
     }

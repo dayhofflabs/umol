@@ -1,6 +1,7 @@
 //! Python configuration for molecule substructure search.
 
 use pyo3::prelude::*;
+use umol_graph_core::AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm;
 #[cfg(test)]
 use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
@@ -106,6 +107,9 @@ impl SubstructureSearchConfig {
             match_algorithm: self.match_algorithm.to_rust(),
             subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
             relevant_cycle_algorithm: self.relevant_cycle_algorithm.to_rust(),
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }
     }
 }
@@ -189,6 +193,9 @@ mod tests {
                 match_algorithm,
                 subgraph_isomorphism_algorithm,
                 relevant_cycle_algorithm,
+                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             }),
             expected
         );
@@ -201,6 +208,9 @@ mod tests {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }
     )]
     #[case::incidence_glasgow(
@@ -213,6 +223,9 @@ mod tests {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }
     )]
     fn test_substructure_search_config_to_rust(

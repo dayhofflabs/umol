@@ -3,7 +3,8 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{
-    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 
@@ -44,6 +45,9 @@ proptest! {
                     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
                     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                    reduce_pattern_symmetry: false,
+                    reduce_host_symmetry: false,
                 },
             )
             .map_err(|error| TestCaseError::fail(format!("matching failed: {error}")))?;
@@ -74,6 +78,9 @@ proptest! {
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }).unwrap().next().unwrap().unwrap();
 
         prop_assert_eq!(witness.reverse().reverse(), witness.clone());

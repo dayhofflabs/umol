@@ -1260,6 +1260,7 @@ mod tests {
     use umol_graph::ingest::ingest_smiles;
     use umol_graph::ops::valence::ValenceTable as GraphValenceTable;
     use umol_graph_core::{
+        AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
         Correspondence as GraphCoreCorrespondence,
         RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
         SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
@@ -1992,6 +1993,9 @@ mod tests {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         });
 
         assert_eq!(
@@ -2008,6 +2012,9 @@ mod tests {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
             subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         });
 
         assert_eq!(

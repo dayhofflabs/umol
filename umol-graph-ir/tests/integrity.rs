@@ -117,6 +117,9 @@ fn test_molecule_electron_attributes(
             match_algorithm,
             subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         };
         assert_eq!(molecule.substructure_matches(&molecule, config), Ok(vec![]));
         let mut valid = molecule.clone();

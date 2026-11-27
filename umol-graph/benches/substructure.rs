@@ -15,7 +15,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{
+    AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomForm, AtomId, BondForm, ElectronCountsForm, Molecule, MoleculeEntries,
@@ -178,6 +180,9 @@ fn substructure_benchmark(c: &mut Criterion) {
                                         subgraph_isomorphism_algorithm: algorithm,
                                         relevant_cycle_algorithm:
                                             RelevantCycleEnumerationAlgorithm::Vismara,
+                                        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                                        reduce_pattern_symmetry: false,
+                                        reduce_host_symmetry: false,
                                     },
                                 )
                                 .unwrap(),
@@ -238,6 +243,9 @@ fn overlay_substructure_benchmark(c: &mut Criterion) {
                 match_algorithm: strategy,
                 subgraph_isomorphism_algorithm: BitsetRi,
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             };
             group.bench_function(format!("{name}/{}", strategy_name(strategy)), |b| {
                 b.iter(|| {

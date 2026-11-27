@@ -17,7 +17,9 @@
 use std::ops::ControlFlow;
 use std::sync::LazyLock;
 
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{
+    AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
 use umol_graph_ir::ir::{
     AsLit, BondId, Molecule, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
@@ -75,6 +77,9 @@ impl PatternFingerprinter {
                         match_algorithm: self.match_algorithm,
                         subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm,
                         relevant_cycle_algorithm: self.relevant_cycle_algorithm,
+                        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                        reduce_pattern_symmetry: false,
+                        reduce_host_symmetry: false,
                     },
                     |embedding| {
                         count_id = gboost_combine(count_id, COUNT_SALT);

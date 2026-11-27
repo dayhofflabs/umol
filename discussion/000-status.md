@@ -301,4 +301,4 @@ the statuses recorded here remain authoritative.
 | [253-resolver-undetermined-elements-2026-11-23.md](253-resolver-undetermined-elements-2026-11-23.md)             | Completed     | 2026-11-23   | |
 | [254-edge-colored-automorphisms-2026-11-26.md](254-edge-colored-automorphisms-2026-11-26.md)                     | Completed     | 2026-11-27   | |
 | [255-reaction-span-bond-normalization-2026-11-26.md](255-reaction-span-bond-normalization-2026-11-26.md)         | Proposed      | 2026-11-26   | Follow-up after 233 and 254: reconcile participant-key structural identity vs. 238 same-key Remove+Add across bonds and overlays, and revisit ReactionSpanIntegrityError::ParallelBonds. |
-| [256-subgraph-isomorphism-performance-2026-11-27.md](256-subgraph-isomorphism-performance-2026-11-27.md)         | In Progress   | 2026-11-27   | S0-S3 done; S4-S7 remaining. |
+| [256-subgraph-isomorphism-performance-2026-11-27.md](256-subgraph-isomorphism-performance-2026-11-27.md)         | In Progress   | 2026-11-27   | S0-S3 and S4a done; S4b-S7 remaining. |

@@ -5,8 +5,8 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph_core::{
-    Correspondence, GraphCorrespondence, NodeId, RelevantCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    AutomorphismAlgorithm, Correspondence, GraphCorrespondence, NodeId,
+    RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
@@ -20,6 +20,9 @@ const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+    reduce_pattern_symmetry: false,
+    reduce_host_symmetry: false,
 };
 
 fn application_case() -> (Reaction, Molecule, MoleculeCorrespondence) {

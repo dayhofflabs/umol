@@ -3,7 +3,9 @@ use libfuzzer_sys::fuzz_target;
 use umol_graph_ir::ir::{IntoIr, SubstructureMatchAlgorithm, SubstructureMatchConfig};
 use umol_graph_ir::dsl::{ReactionDefaults, ReactionDsl};
 use umol_edn::{read_string, FromEdn};
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{
+    AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
 
 fuzz_target!(|data: &str| {
     // Streaming path: single-pass over the bytes.
@@ -26,6 +28,9 @@ fuzz_target!(|data: &str| {
                 match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
                 subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             },
         ) {
             for application in applications.take(16) {

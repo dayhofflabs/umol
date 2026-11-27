@@ -5,7 +5,9 @@ use proptest::prelude::*;
 use rstest::rstest;
 use umol_chem::element::Element;
 use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{
+    AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, BondId, Molecule, MoleculeEntries, StereoAtomForm, StereoBondForm,
@@ -31,6 +33,9 @@ fn sorted_matches(
                 match_algorithm: strategy,
                 subgraph_isomorphism_algorithm: subiso,
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                reduce_pattern_symmetry: false,
+                reduce_host_symmetry: false,
             },
         )
         .expect("generated molecules carry no molecule-scope constraints")
