@@ -19,6 +19,15 @@ use crate::correspondence::Correspondence;
 use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
+mod predicate;
+
+#[allow(
+    unused_imports,
+    reason = "used by Graph closure entry points once engines migrate to SubgraphIsomorphismPredicate"
+)]
+pub(crate) use predicate::ClosureSubgraphIsomorphismPredicate;
+pub use predicate::SubgraphIsomorphismPredicate;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubgraphIsomorphismAlgorithm {
     /// VF2 — terminal-set backtracking + look-ahead (Cordella et al. 2004).

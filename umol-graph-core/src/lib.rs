@@ -44,7 +44,7 @@ pub use algorithms::refinement::{
     RefinementHash, RefinementRounds,
 };
 pub use algorithms::subgraph_isomorphism::{
-    SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    SubgraphIsomorphismAlgorithm, SubgraphIsomorphismPredicate, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::{
