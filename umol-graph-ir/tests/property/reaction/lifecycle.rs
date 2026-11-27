@@ -42,7 +42,7 @@ proptest! {
                 reaction.lhs(),
                 SubstructureMatchConfig {
                     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 },
             )
@@ -72,7 +72,7 @@ proptest! {
         .expect("identity atom correspondence induces a molecule correspondence");
         let (product, witness) = reaction.tracked_apply(reaction.lhs(), SubstructureMatchConfig {
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         }).unwrap().next().unwrap().unwrap();
 

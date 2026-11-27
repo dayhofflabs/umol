@@ -939,7 +939,7 @@ mod tests {
     fn test_reaction_application_config_value() {
         let config = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+            SubgraphIsomorphismAlgorithm::BitsetRi(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
         );
 
@@ -949,7 +949,7 @@ mod tests {
         );
         assert_eq!(
             config.subgraph_isomorphism_algorithm(),
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 }
+            SubgraphIsomorphismAlgorithm::BitsetRi()
         );
         assert_eq!(
             config.relevant_cycle_algorithm(),
@@ -961,7 +961,7 @@ mod tests {
                 "ReactionApplicationConfig(",
                 "match_algorithm=SubstructureMatchAlgorithm.Incidence(), ",
                 "subgraph_isomorphism_algorithm=",
-                "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6), ",
+                "SubgraphIsomorphismAlgorithm.BitsetRi(), ",
                 "relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
             )
         );
@@ -975,15 +975,15 @@ mod tests {
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         ReactionApplicationConfig::default()
     )]
-    #[case::incidence_arc_match(
+    #[case::incidence_bitset_ri(
         GraphIrSubstructureMatchAlgorithm::Incidence,
-        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+            SubgraphIsomorphismAlgorithm::BitsetRi(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
-        ),
+        )
     )]
     fn test_reaction_application_config_from_rust(
         #[case] match_algorithm: GraphIrSubstructureMatchAlgorithm,
@@ -1002,22 +1002,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vf2(
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        GraphCoreSubgraphIsomorphismAlgorithm::Vf2
-    )]
-    #[case::ullmann(
-        SubgraphIsomorphismAlgorithm::Ullmann(),
-        GraphCoreSubgraphIsomorphismAlgorithm::Ullmann
-    )]
-    #[case::ri(
-        SubgraphIsomorphismAlgorithm::Ri(),
-        GraphCoreSubgraphIsomorphismAlgorithm::Ri
-    )]
-    #[case::arc_match(
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-    )]
     #[case::vf2_rdkit(
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit
@@ -1025,6 +1009,14 @@ mod tests {
     #[case::ray_kirsch(
         SubgraphIsomorphismAlgorithm::RayKirsch(),
         GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch
+    )]
+    #[case::bitset_ri(
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi
+    )]
+    #[case::glasgow(
+        SubgraphIsomorphismAlgorithm::Glasgow(),
+        GraphCoreSubgraphIsomorphismAlgorithm::Glasgow
     )]
     fn test_reaction_application_config_to_rust(
         #[case] subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
@@ -2403,26 +2395,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vf2(ReactionApplicationConfig::new(
-        SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        RelevantCycleEnumerationAlgorithm::Vismara(),
-    ))]
-    #[case::ullmann(ReactionApplicationConfig::new(
-        SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Ullmann(),
-        RelevantCycleEnumerationAlgorithm::Vismara(),
-    ))]
-    #[case::ri(ReactionApplicationConfig::new(
-        SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Ri(),
-        RelevantCycleEnumerationAlgorithm::Vismara(),
-    ))]
-    #[case::arc_match(ReactionApplicationConfig::new(
-        SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        RelevantCycleEnumerationAlgorithm::Vismara(),
-    ))]
     #[case::vf2_rdkit(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
@@ -2431,6 +2403,16 @@ mod tests {
     #[case::ray_kirsch(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::RayKirsch(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
+    ))]
+    #[case::bitset_ri(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
+        RelevantCycleEnumerationAlgorithm::Vismara(),
+    ))]
+    #[case::glasgow(ReactionApplicationConfig::new(
+        SubstructureMatchAlgorithm::GraphAndOverlays(),
+        SubgraphIsomorphismAlgorithm::Glasgow(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     #[case::incidence(ReactionApplicationConfig::new(

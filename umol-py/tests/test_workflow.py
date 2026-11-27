@@ -192,7 +192,7 @@ def test_fingerprint_workflow():
     pattern_config = PatternFingerprintConfig(
         width=16,
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
     )
     structural_config = StructuralFingerprintConfig(
         max_bonds=0,
@@ -277,7 +277,7 @@ def test_substructure_workflow():
     host_snapshot = Molecule.from_smiles("CCO")
     config = SubstructureSearchConfig(
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
     )
 
     matches = pattern.substructure_matches(host, config=config)
@@ -324,7 +324,7 @@ def test_reaction_application_workflow():
     host_snapshot = Molecule.from_smiles("CCO")
     config = ReactionApplicationConfig(
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
     )
 
     applications = list(reaction.tracked_apply(host, config=config))

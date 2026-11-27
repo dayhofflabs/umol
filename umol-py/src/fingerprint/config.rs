@@ -790,12 +790,12 @@ mod tests {
     #[case::custom(
         512,
         SubstructureMatchAlgorithm::Incidence(),
-        SubgraphIsomorphismAlgorithm::Ullmann(),
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
@@ -853,13 +853,13 @@ mod tests {
         GraphPatternFingerprinter {
             width: 512,
             match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
-            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         },
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
@@ -884,13 +884,13 @@ mod tests {
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         GraphPatternFingerprinter {
             width: 512,
             match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
-            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
     )]
@@ -919,14 +919,14 @@ mod tests {
         PatternFingerprintConfig {
             width: 512,
             match_algorithm: SubstructureMatchAlgorithm::Incidence(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         512,
         SubstructureMatchAlgorithm::Incidence(),
-        SubgraphIsomorphismAlgorithm::Ullmann(),
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
-        "PatternFingerprintConfig(width=512, match_algorithm=SubstructureMatchAlgorithm.Incidence(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
+        "PatternFingerprintConfig(width=512, match_algorithm=SubstructureMatchAlgorithm.Incidence(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
     )]
     fn test_pattern_fingerprint_config_value(
         #[case] config: PatternFingerprintConfig,

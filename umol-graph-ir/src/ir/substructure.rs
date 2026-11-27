@@ -673,13 +673,8 @@ mod tests {
 
     use rstest::rstest;
     use umol_chem::element::Element;
-    use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-        ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
-    };
-    use umol_graph_core::{
-        RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
-        ARCMATCH_DEFAULT_PATH_LENGTH,
-    };
+    use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
+    use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 
     use super::super::id::AtomId;
     use super::super::molecule::Molecule;
@@ -691,16 +686,7 @@ mod tests {
     };
     use crate::mol_dsl;
 
-    const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
-        Vf2,
-        Ullmann,
-        Ri,
-        ArcMatch {
-            path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-        },
-        Vf2Rdkit,
-        RayKirsch,
-    ];
+    const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 4] = [Vf2Rdkit, RayKirsch, BitsetRi, Glasgow];
 
     const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
@@ -811,7 +797,7 @@ mod tests {
         for strategy in STRATEGIES {
             let config = SubstructureMatchConfig {
                 match_algorithm: strategy,
-                subgraph_isomorphism_algorithm: Vf2,
+                subgraph_isomorphism_algorithm: BitsetRi,
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
             };
             let result = pattern
@@ -1296,7 +1282,7 @@ mod tests {
         let host = mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
         let config = SubstructureMatchConfig {
             match_algorithm: GraphAndOverlays,
-            subgraph_isomorphism_algorithm: Vf2,
+            subgraph_isomorphism_algorithm: BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         };
         assert_eq!(pattern.substructure_matches(&host, config), Err(expected));

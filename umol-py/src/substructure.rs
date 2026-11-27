@@ -120,7 +120,7 @@ mod tests {
     fn test_substructure_search_config_new() {
         let config = SubstructureSearchConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+            SubgraphIsomorphismAlgorithm::BitsetRi(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
         );
 
@@ -130,7 +130,7 @@ mod tests {
         );
         assert_eq!(
             config.subgraph_isomorphism_algorithm(),
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 }
+            SubgraphIsomorphismAlgorithm::BitsetRi()
         );
         assert_eq!(
             config.relevant_cycle_algorithm(),
@@ -142,7 +142,7 @@ mod tests {
                 "SubstructureSearchConfig(",
                 "match_algorithm=SubstructureMatchAlgorithm.Incidence(), ",
                 "subgraph_isomorphism_algorithm=",
-                "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6), ",
+                "SubgraphIsomorphismAlgorithm.BitsetRi(), ",
                 "relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
             )
         );
@@ -168,15 +168,15 @@ mod tests {
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         SubstructureSearchConfig::default()
     )]
-    #[case::incidence_arc_match(
+    #[case::incidence_bitset_ri(
         GraphIrSubstructureMatchAlgorithm::Incidence,
-        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         SubstructureSearchConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
+            SubgraphIsomorphismAlgorithm::BitsetRi(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
-        ),
+        )
     )]
     fn test_substructure_search_config_from_rust(
         #[case] match_algorithm: GraphIrSubstructureMatchAlgorithm,
@@ -203,15 +203,15 @@ mod tests {
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
     )]
-    #[case::incidence_ullmann(
+    #[case::incidence_glasgow(
         SubstructureSearchConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::Ullmann(),
+            SubgraphIsomorphismAlgorithm::Glasgow(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
         ),
         GraphIrSubstructureMatchConfig {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
-            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         }
     )]

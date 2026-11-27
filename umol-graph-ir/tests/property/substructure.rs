@@ -4,12 +4,8 @@
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_chem::element::Element;
-use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-    ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
-};
-use umol_graph_core::{
-    RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
-};
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, BondId, Molecule, MoleculeEntries, StereoAtomForm, StereoBondForm,
@@ -19,16 +15,7 @@ use umol_graph_ir::ir::{
 
 use crate::strategies::molecule_strategy;
 
-const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
-    Vf2,
-    Ullmann,
-    Ri,
-    ArcMatch {
-        path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-    },
-    Vf2Rdkit,
-    RayKirsch,
-];
+const SUBISO: [SubgraphIsomorphismAlgorithm; 4] = [Vf2Rdkit, RayKirsch, BitsetRi, Glasgow];
 const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
 fn sorted_matches(
@@ -223,12 +210,12 @@ proptest! {
         host in molecule_strategy(),
         pattern in molecule_strategy(),
     ) {
-        let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
+        let baseline = sorted_matches(&pattern, &host, GraphAndOverlays, BitsetRi);
         for strategy in STRATEGIES {
             for subiso in SUBISO {
                 prop_assert_eq!(
                     sorted_matches(&pattern, &host, strategy, subiso),
-                    reference.clone(),
+                    baseline.clone(),
                     "{:?}/{:?}", strategy, subiso
                 );
             }
@@ -251,12 +238,12 @@ proptest! {
         // stored valence differing from the derived one — so a self-match is not
         // guaranteed; only cross-strategy / cross-algorithm agreement is.)
         let pattern = host.extract(&host.induced_subgraph(&subset));
-        let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
+        let baseline = sorted_matches(&pattern, &host, GraphAndOverlays, BitsetRi);
         for strategy in STRATEGIES {
             for subiso in SUBISO {
                 prop_assert_eq!(
                     sorted_matches(&pattern, &host, strategy, subiso),
-                    reference.clone(),
+                    baseline.clone(),
                     "{:?}/{:?}", strategy, subiso
                 );
             }

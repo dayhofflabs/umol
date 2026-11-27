@@ -18,7 +18,7 @@ use umol_graph_ir::ir::{
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
 };
 

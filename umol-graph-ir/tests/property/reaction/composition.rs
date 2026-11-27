@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 use crate::strategies::*;
 
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
-const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
+const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::BitsetRi;
 const RELEVANT_CYCLE_ALGORITHM: RelevantCycleEnumerationAlgorithm =
     RelevantCycleEnumerationAlgorithm::Vismara;
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {

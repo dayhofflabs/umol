@@ -310,18 +310,20 @@ optimized implementations do.
 
 ### Algorithm cross-validation is relative evidence
 
-The subgraph-isomorphism suite compares the named implementations with VF2 on
-generated labeled graphs and on planted subgraphs. This establishes agreement
-over the generated domain and ensures that the planted cases have at least one
-match. It should be described as cross-validation, not as an unconditional
-proof that every implementation is correct.
+Comparing named subgraph-isomorphism implementations (`Vf2Rdkit`, `RayKirsch`,
+`BitsetRi`, `Glasgow`) on larger generated graphs (`65..=128` and `> 128`)
+establishes agreement over the generated domain and ensures that planted cases
+have valid monomorphisms. It should be described as cross-validation, not as an
+unconditional proof that every implementation is correct; bounded small-graph
+tests separately validate soundness, completeness, and canonical symmetry-orbit
+representatives against independent definition-level enumeration.
 
-Where a separate theorem justifies a reduction, as recorded for ArcMatch, that
-argument and the cross-validation evidence have different roles:
+Where a separate theorem justifies a pruning or symmetry reduction, that
+argument and the property test have different roles:
 
 - the theorem justifies the transformation;
-- the property test checks the implementation and its agreement with the
-  reference path.
+- the property test checks the implementation and its agreement with
+  definition-level enumeration or cross-validated peers.
 
 ## `umol-graph-ir`: properties over multiple operational domains
 
@@ -528,9 +530,9 @@ successful roundtrips are. Generating only valid reactions would validate the
 happy path while leaving the public failure contract unstated.
 
 Algorithm choices in these properties must remain explicit. A reaction
-application property using `GraphAndOverlays` and VF2 validates the operation
-under those selected algorithms; it must not imply that an unmentioned hidden
-default is part of the semantic contract.
+application property using `GraphAndOverlays` and `BitsetRi` validates the
+operation under those selected algorithms; it must not imply that an unmentioned
+hidden default is part of the semantic contract.
 
 ## Public documentation shape
 

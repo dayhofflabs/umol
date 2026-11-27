@@ -37,13 +37,13 @@ def test_substructure_search_config_default():
     [
         pytest.param(
             SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Vf2(),
-            id="graph-vf2",
+            SubgraphIsomorphismAlgorithm.BitsetRi(),
+            id="graph-bitset-ri",
         ),
         pytest.param(
             SubstructureMatchAlgorithm.Incidence(),
-            SubgraphIsomorphismAlgorithm.Ullmann(),
-            id="incidence-ullmann",
+            SubgraphIsomorphismAlgorithm.Glasgow(),
+            id="incidence-glasgow",
         ),
     ],
 )
@@ -82,7 +82,7 @@ def test_substructure_search_config_keyword_error():
     ):
         SubstructureSearchConfig(
             SubstructureMatchAlgorithm.Incidence(),
-            SubgraphIsomorphismAlgorithm.Ullmann(),
+            SubgraphIsomorphismAlgorithm.Glasgow(),
         )
 
 
@@ -134,7 +134,7 @@ def test_molecule_substructure_matches_overlay():
         host,
         config=SubstructureSearchConfig(
             match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-            subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+            subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Glasgow(),
         ),
     )
 
@@ -158,7 +158,7 @@ def test_molecule_substructure_matches_empty():
         host,
         config=SubstructureSearchConfig(
             match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
-            subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+            subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
         ),
     ) == []
 

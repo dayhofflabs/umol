@@ -115,7 +115,7 @@ fn test_molecule_electron_attributes(
     ] {
         let config = SubstructureMatchConfig {
             match_algorithm,
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         };
         assert_eq!(molecule.substructure_matches(&molecule, config), Ok(vec![]));

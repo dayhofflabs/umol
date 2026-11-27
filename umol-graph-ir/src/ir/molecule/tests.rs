@@ -3946,7 +3946,7 @@ fn test_graph_view_visit_subgraph_isomorphisms() {
         &query.graph(),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
         |embedding| {
             matches.push(embedding.to_vec());
             ControlFlow::Continue(())
@@ -3981,7 +3981,7 @@ fn test_molecule_enumerate_subgraph_isomorphisms() {
         &query.graph(),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
     );
     matches.sort_unstable();
     assert_eq!(
@@ -4013,7 +4013,7 @@ fn test_graph_view_visit_subgraph_isomorphisms_at() {
         (AtomId(0), AtomId(0)),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
         |embedding| {
             matches.push(embedding.to_vec());
             ControlFlow::Continue(())
@@ -4036,7 +4036,7 @@ fn test_molecule_enumerate_subgraph_isomorphisms_at() {
         (AtomId(0), AtomId(0)),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
     );
     matches.sort_unstable();
     assert_eq!(

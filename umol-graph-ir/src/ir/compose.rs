@@ -199,7 +199,7 @@ mod tests {
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
         match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
 
@@ -1035,7 +1035,7 @@ mod tests {
         let a_inverse = a.reverse().unwrap();
         let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");
 
-        let alg = SubgraphIsomorphismAlgorithm::Vf2;
+        let alg = SubgraphIsomorphismAlgorithm::BitsetRi;
         let host = a.lhs().clone();
         let intermediate = a
             .apply(

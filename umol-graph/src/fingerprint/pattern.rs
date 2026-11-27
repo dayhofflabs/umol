@@ -155,7 +155,6 @@ static TEMPLATES: LazyLock<Vec<PatternTemplate>> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_core::ARCMATCH_DEFAULT_PATH_LENGTH;
 
     use super::*;
     use crate::ingest::ingest_smiles;
@@ -229,23 +228,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::incidence(
+    #[case::incidence_bitset_ri(
         SubstructureMatchAlgorithm::Incidence,
-        SubgraphIsomorphismAlgorithm::Vf2
-    )]
-    #[case::ullmann(
-        SubstructureMatchAlgorithm::GraphAndOverlays,
-        SubgraphIsomorphismAlgorithm::Ullmann
-    )]
-    #[case::ri(
-        SubstructureMatchAlgorithm::GraphAndOverlays,
-        SubgraphIsomorphismAlgorithm::Ri
-    )]
-    #[case::arc_match(
-        SubstructureMatchAlgorithm::GraphAndOverlays,
-        SubgraphIsomorphismAlgorithm::ArcMatch {
-            path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-        }
+        SubgraphIsomorphismAlgorithm::BitsetRi
     )]
     #[case::vf2_rdkit(
         SubstructureMatchAlgorithm::GraphAndOverlays,
@@ -254,6 +239,14 @@ mod tests {
     #[case::ray_kirsch(
         SubstructureMatchAlgorithm::GraphAndOverlays,
         SubgraphIsomorphismAlgorithm::RayKirsch
+    )]
+    #[case::bitset_ri(
+        SubstructureMatchAlgorithm::GraphAndOverlays,
+        SubgraphIsomorphismAlgorithm::BitsetRi
+    )]
+    #[case::glasgow(
+        SubstructureMatchAlgorithm::GraphAndOverlays,
+        SubgraphIsomorphismAlgorithm::Glasgow
     )]
     fn test_pattern_fingerprinter_fingerprint_algorithm(
         #[case] match_algorithm: SubstructureMatchAlgorithm,

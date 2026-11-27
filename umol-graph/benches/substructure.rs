@@ -1,7 +1,7 @@
 //! End-to-end substructure matching over the OpenSMILES corpus
 //! (`umol-io/tests/smiles_parsing/data/opensmiles`, ~9k molecules).
 //!
-//! Sweeps both `Molecule::substructure_matches` strategies against all six
+//! Sweeps both `Molecule::substructure_matches` strategies against all four
 //! subgraph-isomorphism algorithms, over three patterns of increasing cost.
 //!
 //! Small aromatic-ring and multicenter cases separately measure matching when
@@ -14,12 +14,8 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_chem::element::Element;
 use umol_graph::ingest::ingest_smiles;
-use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-    ArcMatch, BitsetRi, Glasgow, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
-};
-use umol_graph_core::{
-    RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
-};
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{BitsetRi, Glasgow, RayKirsch, Vf2Rdkit};
+use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomForm, AtomId, BondForm, ElectronCountsForm, Molecule, MoleculeEntries,
@@ -27,24 +23,11 @@ use umol_graph_ir::ir::{
 };
 use walkdir::WalkDir;
 
-const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
-    Vf2,
-    Ullmann,
-    Ri,
-    ArcMatch {
-        path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-    },
-    Vf2Rdkit,
-    RayKirsch,
-];
+const SUBISO: [SubgraphIsomorphismAlgorithm; 4] = [Vf2Rdkit, RayKirsch, BitsetRi, Glasgow];
 const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
 fn subiso_name(algorithm: SubgraphIsomorphismAlgorithm) -> &'static str {
     match algorithm {
-        Vf2 => "vf2",
-        Ullmann => "ullmann",
-        Ri => "ri",
-        ArcMatch { .. } => "arcmatch",
         Vf2Rdkit => "vf2rdkit",
         RayKirsch => "raykirsch",
         BitsetRi => "bitset_ri",
@@ -253,7 +236,7 @@ fn overlay_substructure_benchmark(c: &mut Criterion) {
         for strategy in STRATEGIES {
             let config = SubstructureMatchConfig {
                 match_algorithm: strategy,
-                subgraph_isomorphism_algorithm: Vf2,
+                subgraph_isomorphism_algorithm: BitsetRi,
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
             };
             group.bench_function(format!("{name}/{}", strategy_name(strategy)), |b| {

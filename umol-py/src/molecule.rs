@@ -1990,7 +1990,7 @@ mod tests {
         )];
         let config = SubstructureSearchConfig::from_rust(GraphIrSubstructureMatchConfig {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
-            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         });
 
@@ -2006,7 +2006,7 @@ mod tests {
         let host = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#));
         let config = SubstructureSearchConfig::from_rust(GraphIrSubstructureMatchConfig {
             match_algorithm: GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
-            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
+            subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         });
 

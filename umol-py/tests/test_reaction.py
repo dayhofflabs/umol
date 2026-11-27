@@ -142,30 +142,6 @@ def test_reaction_application_config_default():
     [
         pytest.param(
             SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Vf2(),
-            "SubgraphIsomorphismAlgorithm.Vf2()",
-            id="vf2",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Ullmann(),
-            "SubgraphIsomorphismAlgorithm.Ullmann()",
-            id="ullmann",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Ri(),
-            "SubgraphIsomorphismAlgorithm.Ri()",
-            id="ri",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
-            "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
-            id="arc-match",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
             SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
             "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
             id="vf2-rdkit",
@@ -175,6 +151,18 @@ def test_reaction_application_config_default():
             SubgraphIsomorphismAlgorithm.RayKirsch(),
             "SubgraphIsomorphismAlgorithm.RayKirsch()",
             id="ray-kirsch",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.BitsetRi(),
+            "SubgraphIsomorphismAlgorithm.BitsetRi()",
+            id="bitset-ri",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Glasgow(),
+            "SubgraphIsomorphismAlgorithm.Glasgow()",
+            id="glasgow",
         ),
         pytest.param(
             SubstructureMatchAlgorithm.Incidence(),
@@ -1771,16 +1759,16 @@ def test_reaction_tracked_apply_composition():
         pytest.param(
             ReactionApplicationConfig(
                 match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
-                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
             ),
-            id="graph-and-overlays-ullmann",
+            id="graph-and-overlays-bitset-ri",
         ),
         pytest.param(
             ReactionApplicationConfig(
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Glasgow(),
             ),
-            id="incidence-vf2",
+            id="incidence-glasgow",
         ),
     ],
 )

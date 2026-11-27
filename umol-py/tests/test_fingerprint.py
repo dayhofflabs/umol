@@ -276,7 +276,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 width=512,
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Ullmann()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
                 relevant_cycle_algorithm=(
                     RelevantCycleEnumerationAlgorithm.Vismara()
@@ -286,7 +286,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 width=512,
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Ullmann()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
                 relevant_cycle_algorithm=(
                     RelevantCycleEnumerationAlgorithm.Vismara()
@@ -295,7 +295,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
             "PatternFingerprintConfig(width=512, "
             "match_algorithm=SubstructureMatchAlgorithm.Incidence(), "
             "subgraph_isomorphism_algorithm="
-            "SubgraphIsomorphismAlgorithm.Ullmann(), "
+            "SubgraphIsomorphismAlgorithm.BitsetRi(), "
             "relevant_cycle_algorithm="
             "RelevantCycleEnumerationAlgorithm.Vismara())",
         ),
@@ -665,7 +665,7 @@ def test_molecule_counted_hashed_fingerprint(config, expected_entries):
                 width=64,
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Ullmann()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
             ),
             64,
