@@ -32,10 +32,12 @@ Exploratory prototyping and benchmarking in `scratch/automorphism-edges` establi
    (`dispatch_swg`) on 38/39 cases, delivering 1.1×--2.6× end-to-end speedups on symmetric
    `Molecule::canonicalize`, up to 1.19× on `ReactionSpan::canonicalize`, and 1.48×--29.3× on
    heavy stereo-symmetry derived readings.
-2. Both `Nauty` and `TrailIr` require simple graphs, and the only two production sources of
-   non-simple `Graph` instances in the workspace (`IncidenceGraph` virtual stereo-ligand backlinks
-   and `ReactionSpan` removed+added bonds on one atom pair) were representation artifacts that can
-   be eliminated cleanly so `Graph` and `DiGraph` themselves become strictly simple.
+2. Both `Nauty` and `TrailIr` require simple graphs. Eliminating the two structural non-simple
+   `Graph` representations in `umol-graph-ir` (`IncidenceGraph` virtual stereo-ligand backlinks
+   and `ReactionSpan` removed+added bonds on one atom pair), enforcing localized-bond simplicity
+   during editing, and deduplicating two higher-crate edge-list builders (`umol-graph` HMO
+   ring-bond unions and `umol-io` SMILES stereo-marker components) allow `Graph` and `DiGraph`
+   themselves to become strictly simple.
 
 This document records the settled design, data-type contracts, exploratory evidence, and the
 staged production implementation plan on `feature/automorphism-edge-colors`.
@@ -470,8 +472,8 @@ same stage.
 
 ### S0 — `umol-graph-ir` simple-graph prerequisites
 
-Eliminate the workspace's only two non-simple `Graph` producers before enforcing simplicity on
-`Graph`.
+Eliminate the two structural non-simple `Graph` representations in `umol-graph-ir` before enforcing
+simplicity on `Graph`.
 
 #### S0a — Uniform `StereoAnchor` encoding in `IncidenceGraph` [Done]
 
@@ -485,6 +487,8 @@ reaction_span/symmetry.rs}`, affected `umol-graph-ir` tests; **breaking (red→g
   `(StereoBond, site_bond)`), and unit `Incidence::StereoLigand` (on actual-atom ligands only).
 - Update `Molecule::incidence_graph`, `ReactionSpan::incidence_graph`, incidence color readers, and
   `incidence.rs` / `canonicalize` / `symmetry` unit tests; assert every `IncidenceGraph` is simple.
+- **Outcome:** Landed as planned with no extra edge cases; all `IncidenceGraph` instances are simple
+  with zero added vertices.
 
 #### S0b — Unique bond-endpoint integrity check on `ReactionSpan` [Done]
 
@@ -503,6 +507,12 @@ together). `[dep: none]`
 - Update [integrity.md](../docs/development/integrity.md), append dated addendum to
   [238](238-non-cascading-removal-2026-10-16.md), and update affected tests; follow-up delta
   normalization is tracked in [255](255-reaction-span-bond-normalization-2026-11-26.md).
+- **Findings:** `Reaction::test_reaction_tracked_apply_at_aromatic_replacement` asserted same-endpoint
+  `RemoveBond`+`AddBond` replacement identity, contradicting structural bond uniqueness in
+  [integrity.md](../docs/development/integrity.md); it was removed and the broader reconciliation
+  between structural participant-key identity and doc [238](238-non-cascading-removal-2026-10-16.md)
+  same-key `Remove`+`Add` semantics across bonds and overlays was recorded in
+  [255](255-reaction-span-bond-normalization-2026-11-26.md).
 
 ### S1 — Strictly simple `Graph` and `DiGraph` (`umol-graph-core`)
 
@@ -529,13 +539,20 @@ property-tests.md}`; **breaking (red→green)** (independently green commit). `[
   and `benches/algorithms.rs` to simple graphs, remove `multigraph-through-4-edges-5.tsv`, and
   update [nomenclature.md](../docs/development/nomenclature.md) and
   [property-tests.md](../docs/development/property-tests.md).
+- **Findings:** Reordered ahead of `S1b` so both `S1a` and `S1b` remain independently green commits
+  without interleaving obsolete multigraph/subdivision APIs with strict simplicity enforcement;
+  removing the multigraph cycle corpus also retired `generate_captured_results.py`'s multigraph
+  fixture generation.
 
-#### S1b — `GraphError`, checked/asserted simplicity on `Graph` and `DiGraph`, and editing alignment
+#### S1b — `GraphError`, checked/asserted simplicity on `Graph` and `DiGraph`, and editing alignment [Done]
 
-**Module:** `umol-graph-core/src/{graph.rs, digraph.rs, lib.rs, algorithms/topological_sort.rs}`,
-`umol-graph-core/tests/property/`, `umol-graph-ir/src/ir/{molecule.rs, reaction_span.rs,
-incidence.rs, symmetry.rs, molecule/, reaction_span/}`, `umol-py/{src/, tests/}`,
-`docs/development/integrity.md`; **breaking (red→green)** (independently green commit). `[dep: S1a]`
+**Module:** `umol-graph-core/src/{graph.rs, digraph.rs, lib.rs,
+algorithms/{topological_sort.rs, connectivity/components.rs, traversal.rs, matching/maximum.rs}}`,
+`umol-graph-core/{tests/property/, benches/restore.rs}`, `umol-graph-ir/src/ir/{molecule.rs,
+reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
+`umol-graph-ir/tests/property/edit.rs`, `umol-graph/src/ops/aromaticity/hmo.rs`,
+`umol-io/src/smiles/render/stereo.rs`, `umol-py/{src/, tests/}`, `docs/development/integrity.md`;
+**breaking (red→green)** (independently green commit). `[dep: S1a]`
 
 - Add `GraphError::{NodeOutOfBounds, SelfLoop, ParallelEdge}` (re-exported at crate root).
 - Add `Graph::{try_new, try_add_edge, try_extend_edges, try_extend}` and `DiGraph::try_new`; make
@@ -544,15 +561,30 @@ incidence.rs, symmetry.rs, molecule/, reaction_span/}`, `umol-py/{src/, tests/}`
   against existing edges), keep `Graph::restore` panic-free on malformed inputs, and remove
   `Graph::is_simple`.
 - Migrate `topological_sort.rs` self-loop tests to 2-cycles and migrate remaining `umol-graph-core`
-  property tests (`graph.rs`, `restore.rs`, `connectivity.rs`, `traversal.rs`) to simple-graph
-  generators; add `rstest` unit and `proptest` property tests covering all `GraphError` variants
-  and asserted panic boundaries on `Graph` and `DiGraph`.
+  unit tests, `benches/restore.rs`, and property tests (`graph.rs`, `restore.rs`, `connectivity.rs`,
+  `traversal.rs`) to simple graphs; add `rstest` unit and `proptest` property tests covering all
+  `GraphError` variants and asserted panic boundaries on `Graph` and `DiGraph`.
 - Align `umol-graph-ir` and `umol-py`: preserve `Molecule::try_from_entries` and
   `ReactionSpan::try_from_entries` error contracts; make `Edit::AddBonds` reject self-loops and
   parallel bonds before mutating `Graph` with `MoleculeApplyError::Integrity(DuplicateAtom /
   ParallelBonds)`; keep `MoleculeEditor::{add_bond, add_bonds, add_topology}` asserted; update
   [integrity.md](../docs/development/integrity.md) and transient-parallel/self-loop tests in
   `umol-graph-ir` and `umol-py`.
+- **Findings:**
+  - Enforcing simplicity inside `Graph::try_build_csr`'s existing degree pass and neighbor sort adds
+    zero extra heap allocation; `DiGraph::try_new` preserves input successor order while permitting
+    opposite-direction arcs `[a, b]` and `[b, a]`.
+  - Removing transient parallel/self-loop localized bonds during `Molecule` editing eliminated the
+    now-redundant bond simplicity scan in `Molecule::check_integrity`, required `Molecule::apply_edit`
+    and `apply_edit_with_undo` to return `Result<_, MoleculeApplyError>` (with direct `.into()`
+    conversions at `TransactionError` return sites in `apply.rs` rather than broadening scope to
+    redesign internal edit errors), and migrated deferred-integrity tests in `umol-graph-ir` and
+    `umol-py` to transient noncovalent-bond violations.
+  - Strict simplicity exposed two non-deduplicated edge-list builders in higher crates, both fixed
+    by canonicalizing and deduplicating edges before `Graph::new`:
+    `HmoAromaticity::recognize_with_exclusions` (`umol-graph/src/ops/aromaticity/hmo.rs`, shared
+    bonds across fused rings) and `derive_marker_components`
+    (`umol-io/src/smiles/render/stereo.rs`, shared candidate bonds across double-bond stereo sites).
 
 ### S2 — Native weighted sparse nauty (`umol-nauty-sys`)
 

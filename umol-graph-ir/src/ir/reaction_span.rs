@@ -17,7 +17,7 @@ use strum::EnumCount;
 use thiserror::Error;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, GraphCorrespondence,
-    NodeId, RelationId, VarRelationSet,
+    GraphError, NodeId, RelationId, VarRelationSet,
 };
 use umol_perm::{DynPermutation, Permutation};
 
@@ -199,6 +199,46 @@ impl ReactionSpan {
             .iter()
             .map(|(first, second, _)| [first.0, second.0])
             .collect();
+        let graph = match Graph::try_new(atoms.len(), &edges) {
+            Ok(graph) => graph,
+            Err(GraphError::SelfLoop { .. }) => {
+                for side in [Side::Left, Side::Right] {
+                    let atom_ids: Vec<AtomId> =
+                        projected_ids(atoms.iter().map(|span| entity_side(span, side).is_some()));
+                    let side_atom_count = atoms
+                        .iter()
+                        .filter(|span| entity_side(span, side).is_some())
+                        .count();
+                    let mut projected_bond_index = 0usize;
+                    for &(first, second, ref span) in &bonds {
+                        if entity_side(span, side).is_some() {
+                            if first == second {
+                                let atom = atom_ids[first.index()];
+                                let error = if atom.index() >= side_atom_count {
+                                    MoleculeIntegrityError::InvalidReference {
+                                        entity: Entity::Atom(atom),
+                                    }
+                                } else {
+                                    MoleculeIntegrityError::DuplicateAtom {
+                                        entity: Entity::Bond(BondId(projected_bond_index as u32)),
+                                        atom,
+                                    }
+                                };
+                                return Err(match side {
+                                    Side::Left => ReactionSpanIntegrityError::Lhs(error),
+                                    Side::Right => ReactionSpanIntegrityError::Rhs(error),
+                                });
+                            }
+                            projected_bond_index += 1;
+                        }
+                    }
+                }
+                unreachable!("every union bond belongs to at least one side")
+            }
+            Err(GraphError::NodeOutOfBounds { .. } | GraphError::ParallelEdge { .. }) => {
+                unreachable!("check_reaction_span_entries validated bond endpoints and uniqueness")
+            }
+        };
         let bond_values = bonds.into_iter().map(|(_, _, span)| span).collect();
         let dative_bonds = DativeBondSpans::new(dative);
         let aromatic_systems = AromaticSystemSpans::new(aromatic);
@@ -208,7 +248,7 @@ impl ReactionSpan {
         let stereo_bonds = StereoBondSpans::new(stereo_bonds);
 
         let span = Self {
-            graph: Graph::new(atoms.len(), &edges),
+            graph,
             atoms: Arc::new(atoms),
             bonds: Arc::new(bond_values),
             dative_bonds,
@@ -4812,6 +4852,36 @@ mod tests {
         ReactionSpanIntegrityError::ParallelBonds {
             atoms: [AtomId(0), AtomId(1)],
         },
+    )]
+    #[case::self_loop_lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(0),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::Bond(BondId(0)),
+            atom: AtomId(0),
+        }),
+    )]
+    #[case::self_loop_rhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(0),
+                EntitySpan::Added(BondForm::from_order(1)),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::Bond(BondId(0)),
+            atom: AtomId(0),
+        }),
     )]
     #[case::parallel_bonds_unchanged(
         ReactionSpanEntries {

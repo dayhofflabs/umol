@@ -657,7 +657,7 @@ fn test_molecule_apply_edit_remove_incidence(
         molecule.apply_edit(edit, &mut state).map(|()| None)
     };
     if mismatched {
-        assert_eq!(result, Err(TransactionError::OldStateMismatch));
+        assert_eq!(result, Err(TransactionError::OldStateMismatch.into()));
         assert_eq!(molecule, initial);
     } else {
         let undo = result.unwrap();
@@ -718,7 +718,7 @@ fn test_molecule_apply_edit_remove_error(
     } else {
         molecule.apply_edit(edit, &mut state)
     };
-    assert_eq!(result, Err(expected));
+    assert_eq!(result, Err(expected.into()));
     assert_eq!(molecule, initial);
     assert_eq!(state.atoms.initial, None);
     assert_eq!(state.bonds.initial, None);

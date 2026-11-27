@@ -1601,7 +1601,6 @@ fn test_automorphism_adapter_new(
         adapter.graph().edge_count(),
         source.edge_count() + expected_occurrence_nodes,
     );
-    assert!(adapter.graph().is_simple());
 
     for node in source.node_ids() {
         assert_eq!(adapter.node_source(node), AdapterNodeSource::Node(node));

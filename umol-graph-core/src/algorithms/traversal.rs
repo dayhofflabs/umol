@@ -633,13 +633,11 @@ mod tests {
             Finish { node: NodeId(2) }, Finish { node: NodeId(1) }, Finish { node: NodeId(0) }, FinishTree { root: NodeId(0) },
         ]
     )]
-    #[case::loops_parallel_isolated(
-        Graph::new(3, &[[0, 0], [0, 1], [0, 1]]), vec![NodeId(0), NodeId(1), NodeId(2)],
+    #[case::edge_and_isolated(
+        Graph::new(3, &[[0, 1]]), vec![NodeId(0), NodeId(1), NodeId(2)],
         vec![
             Discover { node: NodeId(0), parent: None },
-            NonTreeEdge { from: NodeId(0), to: NodeId(0), edge: EdgeId(0) },
-            Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(1) }) },
-            NonTreeEdge { from: NodeId(1), to: NodeId(0), edge: EdgeId(2) },
+            Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(0) }) },
             Finish { node: NodeId(1) }, Finish { node: NodeId(0) }, FinishTree { root: NodeId(0) },
             Discover { node: NodeId(2), parent: None }, Finish { node: NodeId(2) }, FinishTree { root: NodeId(2) },
         ]
@@ -696,14 +694,14 @@ mod tests {
             BreadthFirstEvent::FinishTree { root: NodeId(0) },
         ]
     )]
-    #[case::loops_parallel_isolated(
-        Graph::new(3, &[[0, 0], [0, 1], [0, 1]]), vec![NodeId(2), NodeId(0), NodeId(1), NodeId(2)], None,
+    #[case::edge_and_isolated(
+        Graph::new(3, &[[0, 1]]), vec![NodeId(2), NodeId(0), NodeId(1), NodeId(2)], None,
         vec![
             BreadthFirstEvent::Discover { node: NodeId(2), parent: None, depth: 0 },
             BreadthFirstEvent::Finish { node: NodeId(2), depth: 0 },
             BreadthFirstEvent::FinishTree { root: NodeId(2) },
             BreadthFirstEvent::Discover { node: NodeId(0), parent: None, depth: 0 },
-            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(1) }), depth: 1 },
+            BreadthFirstEvent::Discover { node: NodeId(1), parent: Some(Neighbor { node: NodeId(0), edge: EdgeId(0) }), depth: 1 },
             BreadthFirstEvent::Finish { node: NodeId(0), depth: 0 },
             BreadthFirstEvent::Finish { node: NodeId(1), depth: 1 },
             BreadthFirstEvent::FinishTree { root: NodeId(0) },

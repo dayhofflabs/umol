@@ -346,7 +346,6 @@ impl Molecule {
         }
 
         let graph = Graph::new(node as usize, &edges);
-        debug_assert!(graph.is_simple());
         debug_assert_eq!(graph.edge_count(), incidences.len());
         IncidenceGraph {
             graph,
@@ -492,7 +491,6 @@ impl ReactionSpan {
         }
 
         let graph = Graph::new(node as usize, &edges);
-        debug_assert!(graph.is_simple());
         IncidenceGraph {
             graph,
             entity_counts,
@@ -609,7 +607,6 @@ mod tests {
         #[case] expected: Vec<Entity>,
     ) {
         let inc = molecule.incidence_graph(level);
-        assert!(inc.graph().is_simple());
         assert_eq!(inc.graph().node_count(), expected.len());
         let got: Vec<Entity> = (0..expected.len())
             .map(|i| inc.entity(NodeId(i as u32)))
@@ -854,7 +851,6 @@ mod tests {
         #[case] expected: Vec<([NodeId; 2], Incidence)>,
     ) {
         let incidence = molecule.incidence_graph(IncidenceLevel::Full);
-        assert!(incidence.graph().is_simple());
         assert_eq!(
             incidence
                 .incidences()
@@ -939,7 +935,6 @@ mod tests {
         #[case] expected: Vec<([NodeId; 2], Incidence)>,
     ) {
         let incidence = span.incidence_graph(IncidenceLevel::Full);
-        assert!(incidence.graph().is_simple());
         assert_eq!(
             incidence
                 .incidences()

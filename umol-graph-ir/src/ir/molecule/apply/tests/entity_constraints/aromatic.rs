@@ -172,7 +172,7 @@ fn test_molecule_apply_aromatic_system_constraint_batches_error(
     } else {
         TransactionError::OldStateMismatch
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !journaled {
         for entry in &mut expected.aromatic[..failure] {
@@ -259,7 +259,7 @@ fn test_molecule_apply_edit_modify_aromatic_system_constraint(
         } else {
             molecule.apply_edit(edit, &mut state)
         };
-        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
         assert_eq!(molecule, expected);
     }
     if let Some(undo) = undo {

@@ -15,8 +15,8 @@ use strum::EnumCount;
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig};
 pub use transact::{RollbackMethod, TrackedTransaction, Transaction, TransactionError};
 use umol_graph_core::{
-    Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, IdRange,
-    NodeId, UnionFind,
+    Compaction, Correspondence, EdgeId, Graph, GraphCompaction, GraphCorrespondence, GraphError,
+    IdRange, NodeId, UnionFind,
 };
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
@@ -179,7 +179,8 @@ impl Molecule {
             .map(|(first, second, _)| [first.0, second.0])
             .collect();
         let bond_data: Vec<BondForm> = bonds.into_iter().map(|(_, _, d)| d).collect();
-        let graph = Graph::new(node_count, &edges);
+        let graph = Graph::try_new(node_count, &edges)
+            .map_err(|error| map_bond_graph_error(error, &edges, 0))?;
 
         Self::try_from_arcs(
             graph,
@@ -1032,6 +1033,26 @@ impl Molecule {
 
     pub(crate) fn add_bonds(&mut self, bonds: Vec<([AtomId; 2], BondForm)>) -> IdRange<BondId> {
         self.add_topology(Vec::new(), bonds).1
+    }
+
+    pub(crate) fn try_add_bonds(
+        &mut self,
+        bonds: Vec<([AtomId; 2], BondForm)>,
+    ) -> Result<IdRange<BondId>, MoleculeIntegrityError> {
+        let edges: Vec<_> = bonds
+            .iter()
+            .map(|(atoms, _)| atoms.map(NodeId::from))
+            .collect();
+        let bond_start = self.bonds.len();
+        self.graph.try_extend(0, &edges).map_err(|error| {
+            let raw_edges: Vec<[u32; 2]> = edges.iter().map(|&[a, b]| [a.0, b.0]).collect();
+            map_bond_graph_error(error, &raw_edges, bond_start)
+        })?;
+        if !bonds.is_empty() {
+            Arc::make_mut(&mut self.bonds)
+                .extend(bonds.into_iter().map(|(_, attributes)| attributes));
+        }
+        Ok(IdRange::new(bond_start, self.bonds.len()))
     }
 
     pub(crate) fn add_topology(
@@ -3018,6 +3039,33 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
     if let Some(first) = atoms.next() {
         for atom in atoms {
             uf.union(first.index(), atom.index());
+        }
+    }
+}
+
+fn map_bond_graph_error(
+    error: GraphError,
+    edges: &[[u32; 2]],
+    bond_offset: usize,
+) -> MoleculeIntegrityError {
+    match error {
+        GraphError::SelfLoop { node } => {
+            let index = edges
+                .iter()
+                .position(|&[first, second]| first == node && second == node)
+                .expect("self-loop error matches an input edge");
+            MoleculeIntegrityError::DuplicateAtom {
+                entity: Entity::Bond(BondId((bond_offset + index) as u32)),
+                atom: AtomId(node),
+            }
+        }
+        GraphError::ParallelEdge {
+            endpoints: [first, second],
+        } => MoleculeIntegrityError::ParallelBonds {
+            atoms: [AtomId(first), AtomId(second)],
+        },
+        GraphError::NodeOutOfBounds { .. } => {
+            unreachable!("bond endpoints were validated before graph construction")
         }
     }
 }

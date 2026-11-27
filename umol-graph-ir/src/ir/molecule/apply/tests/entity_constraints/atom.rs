@@ -165,7 +165,7 @@ fn test_molecule_apply_atom_constraint_batches_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(TransactionError::OldStateMismatch));
+    assert_eq!(result, Err(TransactionError::OldStateMismatch.into()));
     let mut atoms = vec![AtomForm::default(); 3];
     if !journaled {
         for atom in &mut atoms[..failure] {
@@ -258,7 +258,7 @@ fn test_molecule_apply_edit_modify_atom_constraint(
         } else {
             molecule.apply_edit(edit, &mut state)
         };
-        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
         assert_eq!(molecule, expected);
     }
     if let Some(undo) = undo {
@@ -290,6 +290,6 @@ fn test_molecule_apply_edit_modify_atom_constraint_error(
     } else {
         molecule.apply_edit(edit, &mut state)
     };
-    assert_eq!(result, Err(TransactionError::OldStateMismatch));
+    assert_eq!(result, Err(TransactionError::OldStateMismatch.into()));
     assert_eq!(molecule, initial);
 }

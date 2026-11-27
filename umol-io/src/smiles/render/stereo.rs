@@ -144,9 +144,17 @@ pub(super) fn derive_marker_components(
             .copied()
             .map(candidate_node);
         if let Some(first) = group.next() {
-            edges.extend(group.map(|other| [first, other]));
+            edges.extend(group.filter(|&other| other != first).map(|other| {
+                if first < other {
+                    [first, other]
+                } else {
+                    [other, first]
+                }
+            }));
         }
     }
+    edges.sort_unstable();
+    edges.dedup();
     let graph = Graph::new(candidates.len(), &edges);
     let roots = sites
         .iter()

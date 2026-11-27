@@ -121,7 +121,7 @@ fn test_molecule_apply_bond_batches_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     expected.atoms[0].charge = NumForm::Lit(1);
     if !journaled {
@@ -190,7 +190,7 @@ fn test_molecule_apply_edit_modify_bond_field(
     } else {
         molecule.apply_edit(edit, &mut state)
     };
-    assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+    assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
     assert_eq!(molecule, expected);
 
     if journaled {

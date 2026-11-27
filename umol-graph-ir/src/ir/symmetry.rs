@@ -106,7 +106,6 @@ impl AutomorphismAdapter {
             push_edge([occurrence, endpoints[1]]);
         }
         let graph = Graph::new(node_sources.len(), &edges);
-        debug_assert!(graph.is_simple());
 
         Self {
             graph,

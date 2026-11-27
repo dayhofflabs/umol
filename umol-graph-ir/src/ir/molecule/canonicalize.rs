@@ -195,7 +195,6 @@ fn topology_search_input(
     }
 
     let graph = Graph::new(node_sources.len(), &edges);
-    debug_assert!(graph.is_simple());
     let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
         let AutomorphismColor::Entity(color) = *color else {
             unreachable!("the topology search input uses entity colors")

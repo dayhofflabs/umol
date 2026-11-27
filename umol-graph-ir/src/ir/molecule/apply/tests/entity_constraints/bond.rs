@@ -141,7 +141,7 @@ fn test_molecule_apply_bond_constraint_batches_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(TransactionError::OldStateMismatch));
+    assert_eq!(result, Err(TransactionError::OldStateMismatch.into()));
     let mut expected = entries;
     if !journaled {
         for (_, _, attributes) in &mut expected.bonds[..failure] {
@@ -227,7 +227,7 @@ fn test_molecule_apply_edit_modify_bond_constraint(
         } else {
             molecule.apply_edit(edit, &mut state)
         };
-        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
         assert_eq!(molecule, expected);
     }
     if let Some(undo) = undo {

@@ -56,12 +56,19 @@ Boundary adapters translate the checked error into their own parse, conversion, 
 they do not reproduce the checks.
 
 MoleculeEditor::apply checks each edit's preconditions and mutates transient state without rollback;
-failure retains completed edits for further inspection and mutation. Its probe
-checks integrity before lending a molecule; failure retains the editor. Its finish checks integrity
-before returning the owned molecule; failure drops the editor. Molecule::apply and tracked_apply
-include finish. Transaction::apply also permits intermediate states that violate integrity;
-commit checks integrity and restores transaction-entry state on failure. Molecule::transact and
-tracked_transact include commit. A failed transaction probe leaves the transaction active.
+failure retains completed edits for further inspection and mutation. Localized-bond simplicity
+(in-range distinct endpoints and unique unordered endpoint pairs) is enforced by the underlying
+simple `Graph` when adding localized bonds: `MoleculeEditor::{add_bond, add_bonds, add_topology}`
+panic on self-loops or parallel bonds, while `Edit::AddBonds` rejects them before mutating the
+graph with `MoleculeApplyError::Integrity` (`DuplicateAtom` or `ParallelBonds`). Overlay and
+stereo-frame integrity remains deferred to publication: `probe` checks integrity before lending a
+molecule (retaining the editor on failure), and `finish` checks integrity before returning the
+owned molecule (dropping the editor on failure). `Molecule::apply` and `tracked_apply` include
+`finish`. `Transaction::apply` and `TrackedTransaction::apply` likewise permit intermediate
+overlay and stereo integrity violations until a later batch repairs them, while rejecting
+self-loop or parallel localized bonds immediately with rollback and abort; `commit` checks full
+integrity and restores transaction-entry state on failure. `Molecule::transact` and
+`tracked_transact` include `commit`. A failed transaction probe leaves the transaction active.
 
 Exact topology removal has an earlier, narrower boundary: stored overlay references must be in
 the current atom or bond domain, and every retained stored reference must survive the removal.

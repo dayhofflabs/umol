@@ -207,7 +207,7 @@ impl HmoAromaticity {
                 regions.push(atoms);
                 continue;
             }
-            let edges: Vec<[u32; 2]> = rings
+            let mut edges: Vec<[u32; 2]> = rings
                 .iter()
                 .filter(|ring| {
                     ring.atoms().iter().all(|atom| atoms.contains(atom))
@@ -217,12 +217,15 @@ impl HmoAromaticity {
                 })
                 .flat_map(|ring| {
                     ring.bonds().iter().map(|&bond| {
-                        molecule.bond(bond).atom_ids().map(|atom| {
+                        let [first, second] = molecule.bond(bond).atom_ids().map(|atom| {
                             positions[atom.index()].expect("ring is inside the pi component")
-                        })
+                        });
+                        [first.min(second), first.max(second)]
                     })
                 })
                 .collect();
+            edges.sort_unstable();
+            edges.dedup();
             regions.extend(
                 Graph::new(pi_atoms.len(), &edges)
                     .enumerate_connected_components(connected_components_algorithm)

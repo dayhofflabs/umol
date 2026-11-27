@@ -278,7 +278,7 @@ fn test_molecule_apply_atom_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut atoms = vec![AtomForm::default(); if created { 2 } else { 1 }];
     if !journaled {
         if constraint {
@@ -369,7 +369,7 @@ fn test_molecule_apply_bond_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.bonds.pop();
@@ -486,7 +486,7 @@ fn test_molecule_apply_dative_bond_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.dative.remove(0);
@@ -611,7 +611,7 @@ fn test_molecule_apply_aromatic_system_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.aromatic.remove(0);
@@ -736,7 +736,7 @@ fn test_molecule_apply_multicenter_bond_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.multicenter.remove(0);
@@ -843,7 +843,7 @@ fn test_molecule_apply_noncovalent_bond_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.noncovalent.remove(0);
@@ -949,7 +949,7 @@ fn test_molecule_apply_stereo_atom_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.stereo_atoms.remove(0);
@@ -1070,7 +1070,7 @@ fn test_molecule_apply_stereo_bond_batches_removed(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     let mut expected = entries;
     if !created {
         expected.stereo_bonds.remove(0);

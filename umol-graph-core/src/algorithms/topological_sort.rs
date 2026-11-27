@@ -75,7 +75,7 @@ mod tests {
     )]
     #[case::independent(3, vec![], Some(vec![NodeId(0), NodeId(1), NodeId(2)]))]
     #[case::cycle(3, vec![[0, 1], [1, 2], [2, 0]], None)]
-    #[case::self_loop(1, vec![[0, 0]], None)]
+    #[case::two_cycle(2, vec![[0, 1], [1, 0]], None)]
     fn test_digraph_topological_order(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,

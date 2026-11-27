@@ -2268,12 +2268,13 @@ fn test_molecule_apply_error(source: Molecule) {
 #[rstest]
 fn test_molecule_editor_finish_error(source: Molecule) {
     let mut editor = source.edit();
-    editor.add_bond(AtomId(0), AtomId(1), BondForm::default());
+    editor.add_noncovalent_bond([AtomId(0), AtomId(0)], NoncovalentBondForm::default());
 
     assert_eq!(
         editor.finish(),
-        Err(MoleculeIntegrityError::ParallelBonds {
-            atoms: [AtomId(0), AtomId(1)],
+        Err(MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
+            atom: AtomId(0),
         })
     );
 }

@@ -56,7 +56,7 @@ pub use correspondence::{
     GraphCorrespondenceComposeError,
 };
 pub use digraph::DiGraph;
-pub use graph::{Graph, Neighbor};
+pub use graph::{Graph, GraphError, Neighbor};
 pub use id::{EdgeId, IdRange, NodeId, RelationId};
 pub use relation::{
     FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,

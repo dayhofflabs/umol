@@ -153,22 +153,6 @@ impl Molecule {
             Entity::StereoBond(id) => id.index() < self.stereo_bonds.count(),
         };
 
-        for view in self.bonds().iter() {
-            let entity = Entity::Bond(view.id());
-            let atoms = view.atom_ids();
-            check_unique_pair(entity, atoms)?;
-            let pair = unordered_pair(atoms);
-            let upper = NodeId::from(pair[1]);
-            let neighbors = self.graph.neighbors(NodeId::from(pair[0]));
-            let position = neighbors.partition_point(|neighbor| neighbor.node < upper);
-            if neighbors
-                .get(position + 1)
-                .is_some_and(|neighbor| neighbor.node == upper)
-            {
-                return Err(MoleculeIntegrityError::ParallelBonds { atoms: pair });
-            }
-        }
-
         check_dative_bonds(self, &contains)?;
 
         check_aromatic_systems(self, &contains)?;

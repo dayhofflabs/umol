@@ -641,12 +641,6 @@ mod tests {
         vec![EdgeId(0), EdgeId(5)],
         true,
     )]
-    #[case::parallel_edges(
-        2,
-        vec![[0, 1], [0, 1]],
-        vec![EdgeId(0)],
-        true,
-    )]
     #[case::petersen(
         10,
         vec![
@@ -840,7 +834,6 @@ mod tests {
     #[case::c6(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 2)]
     #[case::k4(4, vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], 3)]
     #[case::greedy_counterexample(4, vec![[1, 2], [0, 1], [2, 3]], 1)]
-    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 2)]
     fn test_graph_enumerate_perfect_matchings(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
@@ -902,7 +895,6 @@ mod tests {
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], 3)]
     #[case::path_3(3, vec![[0, 1], [1, 2]], 2)]
     #[case::single_edge(2, vec![[0, 1]], 1)]
-    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 2)]
     fn test_graph_enumerate_maximum_matchings(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,

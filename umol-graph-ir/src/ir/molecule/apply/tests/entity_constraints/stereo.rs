@@ -147,7 +147,7 @@ fn test_molecule_apply_stereo_atom_constraints_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     if !journaled {
         for entry in &mut removal_entries.stereo_atoms[..failure] {
             entry.2.constraints = vec![form.clone()].into();
@@ -286,7 +286,7 @@ fn test_molecule_apply_edit_modify_stereo_atom_constraint(
         } else {
             molecule.apply_edit(edit, &mut state)
         };
-        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
         assert_eq!(molecule, expected);
     }
     if let Some(undo) = undo {
@@ -453,7 +453,7 @@ fn test_molecule_apply_stereo_bond_constraints_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     if !journaled {
         for entry in &mut stereo_bond_entries.stereo_bonds[..failure] {
             entry.2.constraints = vec![form.clone()].into();
@@ -592,7 +592,7 @@ fn test_molecule_apply_edit_modify_stereo_bond_constraint(
         } else {
             molecule.apply_edit(edit, &mut state)
         };
-        assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+        assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
         assert_eq!(molecule, expected);
     }
     if let Some(undo) = undo {
