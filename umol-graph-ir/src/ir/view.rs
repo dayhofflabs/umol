@@ -41,7 +41,7 @@ pub use dative::{
     DativeBondEditorView, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut,
     DativeBondViews,
 };
-pub use graph::{AtomAutomorphism, GraphView};
+pub use graph::{AtomAutomorphismGroup, AtomCanonicalLabeling, GraphView};
 pub use ligand::StereoLigandView;
 pub use multicenter::{
     MulticenterBondEditorView, MulticenterBondEditorViewMut, MulticenterBondView,

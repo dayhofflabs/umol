@@ -5,9 +5,7 @@ use std::collections::BTreeMap;
 use std::ops::ControlFlow;
 use std::{iter, mem};
 
-use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, UnionFind,
-};
+use umol_graph_core::{AutomorphismAlgorithm, CanonicalLabeling, EdgeId, Graph, NodeId, UnionFind};
 
 use super::incidence::{Incidence, IncidenceGraph};
 
@@ -135,18 +133,20 @@ impl AutomorphismAdapter {
         let cell_indices = partition.cell_indices(self.graph().node_count());
         // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
         // exact adapter color here keeps orbit pruning restricted to true automorphisms.
-        let output = self.graph().automorphisms(
+        let labeling = self.graph().canonical_labeling(
             |node| (self.color(node), cell_indices[node.index()]),
+            |_| 0u8,
             algorithm,
         );
 
-        self.project_automorphisms(&output)
+        self.project_automorphisms(&labeling)
     }
 
     pub(crate) fn project_automorphisms(
         &self,
-        output: &AutomorphismOutput,
+        labeling: &CanonicalLabeling,
     ) -> AutomorphismAdapterOutput {
+        let automorphisms = labeling.automorphisms();
         let source_node = |node| match self.node_source(node) {
             AdapterNodeSource::Node(source) if source.index() < self.source_node_count => source,
             AdapterNodeSource::Node(_) => {
@@ -157,10 +157,10 @@ impl AutomorphismAdapter {
             }
         };
         let source_orbits = (0..self.source_node_count)
-            .map(|index| source_node(output.orbit_of(NodeId(index as u32))))
+            .map(|index| source_node(automorphisms.orbit_of(NodeId(index as u32))))
             .collect();
-        let source_canonical_labels = output
-            .canonical_labels()
+        let source_canonical_labels = labeling
+            .labels()
             .iter()
             .filter_map(|&node| match self.node_source(node) {
                 AdapterNodeSource::Node(source) if source.index() < self.source_node_count => {
@@ -170,7 +170,7 @@ impl AutomorphismAdapter {
                 AdapterNodeSource::Edge(_) => None,
             })
             .collect();
-        let source_generators = output
+        let source_generators = automorphisms
             .generators()
             .iter()
             .map(|generator| {

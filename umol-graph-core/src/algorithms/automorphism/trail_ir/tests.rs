@@ -12,7 +12,7 @@ use super::partition::{EdgeColoredView, Partition};
 use super::refine::{refine, RefineWorkspace};
 use super::search::NUCR_MIN_CELLS;
 use super::TrailIrWorkspace;
-use crate::algorithms::automorphism::{AutomorphismGroupOrder, AutomorphismOutput};
+use crate::algorithms::automorphism::{AutomorphismGroup, AutomorphismGroupOrder};
 use crate::graph::Graph;
 use crate::id::NodeId;
 use crate::union_find::UnionFind;
@@ -62,7 +62,7 @@ fn solve_weighted_nauty(
     node_colors: &[u32],
     edge_colors: &[u32],
     get_canon: bool,
-) -> AutomorphismOutput {
+) -> (AutomorphismGroup, Vec<NodeId>) {
     let node_count = graph.node_count();
     let mut indexed: Vec<(usize, u32)> = graph
         .node_ids()
@@ -98,21 +98,23 @@ fn solve_weighted_nauty(
     let output = run_weighted(&input, get_canon).expect("weighted nauty succeeds");
     let orbits: Vec<NodeId> = output.orbits.into_iter().map(NodeId).collect();
     let orbit_count = orbits.iter().copied().collect::<HashSet<_>>().len();
-    AutomorphismOutput {
-        orbits,
-        canonical_labels: output.canonical_labels.into_iter().map(NodeId).collect(),
-        node_count,
-        orbit_count,
-        group_order: AutomorphismGroupOrder::from_scientific(
-            output.group_order.mantissa,
-            output.group_order.exponent,
-        ),
-        generators: output
-            .generators
-            .into_iter()
-            .map(|generator| generator.into_iter().map(NodeId).collect())
-            .collect(),
-    }
+    (
+        AutomorphismGroup {
+            orbits,
+            node_count,
+            orbit_count,
+            group_order: AutomorphismGroupOrder::from_scientific(
+                output.group_order.mantissa,
+                output.group_order.exponent,
+            ),
+            generators: output
+                .generators
+                .into_iter()
+                .map(|generator| generator.into_iter().map(NodeId).collect())
+                .collect(),
+        },
+        output.canonical_labels.into_iter().map(NodeId).collect(),
+    )
 }
 
 fn edge_colored_canonical_key(
@@ -211,13 +213,14 @@ fn assert_output_semantics(
     node_colors: &[u32],
     edge_colors: &[u32],
     get_canon: bool,
-    output: &AutomorphismOutput,
+    output: &(AutomorphismGroup, Vec<NodeId>),
 ) {
+    let (group, canonical_labels) = output;
     let n = graph.node_count();
-    assert_eq!(output.node_count(), n, "node_count mismatch on {label}");
+    assert_eq!(group.node_count(), n, "node_count mismatch on {label}");
     if get_canon {
         let expected_nodes: Vec<NodeId> = (0..n as u32).map(NodeId).collect();
-        let mut sorted_labels = output.canonical_labels().to_vec();
+        let mut sorted_labels = canonical_labels.clone();
         sorted_labels.sort_unstable();
         assert_eq!(
             sorted_labels, expected_nodes,
@@ -225,7 +228,7 @@ fn assert_output_semantics(
         );
     } else {
         assert!(
-            output.canonical_labels().is_empty(),
+            canonical_labels.is_empty(),
             "canonical_labels must be empty when get_canon = false on {label}"
         );
     }
@@ -243,7 +246,7 @@ fn assert_output_semantics(
         .collect();
 
     let mut generated_orbits = UnionFind::new(n);
-    for generator in output.generators() {
+    for generator in group.generators() {
         assert_eq!(generator.len(), n);
         let mut sorted = generator.clone();
         sorted.sort_unstable();
@@ -279,7 +282,7 @@ fn assert_output_semantics(
 
     let mut reps = HashSet::new();
     for a in 0..n {
-        let rep = output.orbit_of(NodeId(a as u32));
+        let rep = group.orbit_of(NodeId(a as u32));
         reps.insert(rep);
         assert_eq!(
             rep.index(),
@@ -289,13 +292,13 @@ fn assert_output_semantics(
         for b in a..n {
             assert_eq!(
                 generated_orbits.find(a) == generated_orbits.find(b),
-                output.same_orbit(NodeId(a as u32), NodeId(b as u32)),
+                group.same_orbit(NodeId(a as u32), NodeId(b as u32)),
                 "orbit membership mismatch on {label}"
             );
         }
     }
     assert_eq!(
-        output.orbit_count(),
+        group.orbit_count(),
         reps.len(),
         "orbit_count mismatch on {label}"
     );
@@ -349,36 +352,38 @@ fn assert_outputs_agree(
     node_colors: &[u32],
     edge_colors: &[u32],
     get_canon: bool,
-    nauty: &AutomorphismOutput,
-    trail_ir: &AutomorphismOutput,
+    nauty: &(AutomorphismGroup, Vec<NodeId>),
+    trail_ir: &(AutomorphismGroup, Vec<NodeId>),
 ) {
     assert_output_semantics(label, graph, node_colors, edge_colors, get_canon, nauty);
     assert_output_semantics(label, graph, node_colors, edge_colors, get_canon, trail_ir);
+    let nauty_group = &nauty.0;
+    let trail_group = &trail_ir.0;
     assert_eq!(
-        trail_ir.orbit_count(),
-        nauty.orbit_count(),
+        trail_group.orbit_count(),
+        nauty_group.orbit_count(),
         "orbit_count differs on {label}"
     );
     for v in 0..graph.node_count() {
         assert_eq!(
-            trail_ir.orbit_of(NodeId(v as u32)),
-            nauty.orbit_of(NodeId(v as u32)),
+            trail_group.orbit_of(NodeId(v as u32)),
+            nauty_group.orbit_of(NodeId(v as u32)),
             "orbit_of({v}) differs on {label}"
         );
     }
-    assert_group_orders_agree(label, nauty.group_order(), trail_ir.group_order());
+    assert_group_orders_agree(label, nauty_group.group_order(), trail_group.group_order());
 
-    if let Some(exact) = nauty.group_order().exact_value() {
+    if let Some(exact) = nauty_group.group_order().exact_value() {
         if exact <= SUBGROUP_CLOSURE_LIMIT {
-            let nauty_group = generated_subgroup(graph.node_count(), nauty.generators());
-            let trail_group = generated_subgroup(graph.node_count(), trail_ir.generators());
+            let nauty_closure = generated_subgroup(graph.node_count(), nauty_group.generators());
+            let trail_closure = generated_subgroup(graph.node_count(), trail_group.generators());
             assert_eq!(
-                trail_group.len() as u128,
+                trail_closure.len() as u128,
                 exact,
                 "generated subgroup order differs from group_order on {label}"
             );
             assert_eq!(
-                trail_group, nauty_group,
+                trail_closure, nauty_closure,
                 "generated subgroup differs from weighted nauty on {label}"
             );
         }
@@ -1032,26 +1037,25 @@ fn test_trail_ir_full_u32_edge_colors(
     #[case] expected_order: AutomorphismGroupOrder,
     #[case] expected_orbits: usize,
 ) {
-    let mut workspace = TrailIrWorkspace::new();
+    let mut workspace = TrailIrWorkspace::default();
     let canon = workspace.solve(&graph, &node_colors, &edge_colors, true);
-    assert_eq!(canon.group_order(), expected_order);
-    assert_eq!(canon.orbit_count(), expected_orbits);
+    assert_eq!(canon.0.group_order(), expected_order);
+    assert_eq!(canon.0.orbit_count(), expected_orbits);
     assert_output_semantics("u32_max", &graph, &node_colors, &edge_colors, true, &canon);
 
     let auto = workspace.solve(&graph, &node_colors, &edge_colors, false);
-    assert_eq!(auto.group_order(), expected_order);
-    assert_eq!(auto.orbit_count(), expected_orbits);
+    assert_eq!(auto.0.group_order(), expected_order);
+    assert_eq!(auto.0.orbit_count(), expected_orbits);
     assert_output_semantics("u32_max", &graph, &node_colors, &edge_colors, false, &auto);
 
-    let key =
-        edge_colored_canonical_key(&graph, &node_colors, &edge_colors, canon.canonical_labels());
+    let key = edge_colored_canonical_key(&graph, &node_colors, &edge_colors, &canon.1);
     let mut rng = ChaCha8Rng::seed_from_u64(0x2540_000b_0000_0001);
     for _ in 0..6 {
         let (pgraph, pnodes, pedges) =
             permute_colored_graph(&graph, &node_colors, &edge_colors, &mut rng);
         let pcanon = workspace.solve(&pgraph, &pnodes, &pedges, true);
         assert_eq!(
-            edge_colored_canonical_key(&pgraph, &pnodes, &pedges, pcanon.canonical_labels()),
+            edge_colored_canonical_key(&pgraph, &pnodes, &pedges, &pcanon.1),
             key
         );
     }
@@ -1060,7 +1064,7 @@ fn test_trail_ir_full_u32_edge_colors(
 #[rstest]
 fn test_trail_ir_fixtures_parity() {
     let mut rng = ChaCha8Rng::seed_from_u64(0x2540_0006_0000_0001);
-    let mut workspace = TrailIrWorkspace::new();
+    let mut workspace = TrailIrWorkspace::default();
 
     for case in representative_fixtures() {
         let nauty_canon =
@@ -1093,7 +1097,7 @@ fn test_trail_ir_fixtures_parity() {
             &case.graph,
             &case.node_colors,
             &case.edge_colors,
-            trail_canon.canonical_labels(),
+            &trail_canon.1,
         );
         for _ in 0..6 {
             let (pgraph, pnodes, pedges) =
@@ -1110,12 +1114,7 @@ fn test_trail_ir_fixtures_parity() {
                 &perm_trail,
             );
             assert_eq!(
-                edge_colored_canonical_key(
-                    &pgraph,
-                    &pnodes,
-                    &pedges,
-                    perm_trail.canonical_labels()
-                ),
+                edge_colored_canonical_key(&pgraph, &pnodes, &pedges, &perm_trail.1),
                 trail_key,
                 "canonical key not relabeling-invariant on {}",
                 case.name
@@ -1137,7 +1136,7 @@ fn test_trail_ir_fixtures_parity() {
                 &stab_nauty,
                 &stab_trail,
             );
-            assert!(stab_trail.generators().iter().all(|g| g[0].index() == 0));
+            assert!(stab_trail.0.generators().iter().all(|g| g[0].index() == 0));
         }
     }
 }
@@ -1145,7 +1144,7 @@ fn test_trail_ir_fixtures_parity() {
 #[rstest]
 fn test_trail_ir_nucr_complex_parity() {
     let mut rng = ChaCha8Rng::seed_from_u64(0x2540_000a_0000_0001);
-    let mut workspace = TrailIrWorkspace::new();
+    let mut workspace = TrailIrWorkspace::default();
     let mut part = Partition::default();
     let mut refine_ws = RefineWorkspace::default();
     let mut nuc_ws = NucWorkspace::default();
@@ -1199,19 +1198,14 @@ fn test_trail_ir_nucr_complex_parity() {
             &case.graph,
             &case.node_colors,
             &case.edge_colors,
-            trail_canon.canonical_labels(),
+            &trail_canon.1,
         );
         for _ in 0..4 {
             let (pgraph, pnodes, pedges) =
                 permute_colored_graph(&case.graph, &case.node_colors, &case.edge_colors, &mut rng);
             let perm_trail = workspace.solve(&pgraph, &pnodes, &pedges, true);
             assert_eq!(
-                edge_colored_canonical_key(
-                    &pgraph,
-                    &pnodes,
-                    &pedges,
-                    perm_trail.canonical_labels()
-                ),
+                edge_colored_canonical_key(&pgraph, &pnodes, &pedges, &perm_trail.1),
                 key,
                 "NUCR canonical key not relabeling-invariant on {}",
                 case.name
@@ -1223,7 +1217,7 @@ fn test_trail_ir_nucr_complex_parity() {
 #[rstest]
 fn test_trail_ir_simple_through_8_parity() {
     let mut rng = ChaCha8Rng::seed_from_u64(0x2540_0007_0000_0001);
-    let mut workspace = TrailIrWorkspace::new();
+    let mut workspace = TrailIrWorkspace::default();
     let mut checked = 0usize;
 
     for (idx, graph) in simple_graphs().enumerate() {
@@ -1261,22 +1255,13 @@ fn test_trail_ir_simple_through_8_parity() {
         );
 
         if idx % 10 == 0 && graph.node_count() > 1 {
-            let key = edge_colored_canonical_key(
-                &graph,
-                &node_colors,
-                &edge_colors,
-                trail_canon.canonical_labels(),
-            );
+            let key =
+                edge_colored_canonical_key(&graph, &node_colors, &edge_colors, &trail_canon.1);
             let (pgraph, pnodes, pedges) =
                 permute_colored_graph(&graph, &node_colors, &edge_colors, &mut rng);
             let perm_trail = workspace.solve(&pgraph, &pnodes, &pedges, true);
             assert_eq!(
-                edge_colored_canonical_key(
-                    &pgraph,
-                    &pnodes,
-                    &pedges,
-                    perm_trail.canonical_labels()
-                ),
+                edge_colored_canonical_key(&pgraph, &pnodes, &pedges, &perm_trail.1),
                 key,
                 "canonical key not relabeling-invariant on simple_g6_{idx}"
             );

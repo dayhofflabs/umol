@@ -102,6 +102,7 @@ approximate.
 | `*Error` | operational or setup failure, the `Err` side | 58 | all |
 | `*Validator` | validates a tier-2 invariant or tier-3 conformance property | 12 | graph after the integrity-check migration |
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
+| `*Scratch` | opaque reusable buffer carrier for repeated-call hot loops | 1 | graph-core |
 | `*Form` / `*Dsl` | lattice-shaped graph-IR value / boundary surface | 69 / 38 | graph-ir, py |
 
 `*Failure` has no member yet, but is named in settled vocabulary and expected to gain one.
@@ -1743,6 +1744,25 @@ relevant-cycle enumeration algorithm is operational configuration.
 
 **Not:** incidence constraint.
 **In code:** the ring-constraint component of tier-2 invariants validation in `umol-graph`.
+
+### Scratch
+
+A **`*Scratch`** type is an opaque, algorithm-independent reusable buffer carrier paired with a
+`*_with_scratch` method counterpart.
+
+Admission policy:
+
+- Add a `*Scratch` type and `*_with_scratch` counterpart only when benchmarks establish that
+  per-call buffer allocation is a measurable share of runtime in repeated-call loops (search trees,
+  stabilizers, batch calls).
+- Keep the no-scratch operation as the primary entry point on the same receiver (`Graph`).
+- Keep `*Scratch` opaque and problem-scoped rather than backend-specific, reusable across arbitrary
+  inputs with output identical to the no-scratch method (prior calls never affect subsequent
+  results), and Rust-only unless binding benchmarks justify exposing it to Python.
+
+**Not:** a config, an algorithm parameter, a stateful solver handle, or an observable cache.
+**In code:** `AutomorphismScratch`, `Graph::automorphisms_with_scratch`,
+`Graph::canonical_labeling_with_scratch`.
 
 ### Solution
 

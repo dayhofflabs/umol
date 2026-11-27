@@ -227,8 +227,8 @@ def test_fingerprint_workflow():
         15,
     ]
     assert structural.keys == (
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 06 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 08 00 00 00 00 00 00 00"),
     )
     assert combined.features.entries == (
         (864662311, -1),
@@ -252,8 +252,8 @@ def test_fingerprint_workflow():
     assert hashed.ids == (864662311, 2246728737)
     assert counted.entries == ((864662311, 1), (2246728737, 1))
     assert structural.keys == (
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 06 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 08 00 00 00 00 00 00 00"),
     )
     assert combined.features.entries == (
         (864662311, -1),

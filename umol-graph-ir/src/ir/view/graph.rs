@@ -3,7 +3,7 @@
 use std::ops::ControlFlow;
 
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
+    AutomorphismAlgorithm, AutomorphismGroup, AutomorphismGroupOrder,
     BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
     ConnectedComponentsAlgorithm, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
     MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId, NonBipartiteGraphError,
@@ -229,15 +229,59 @@ impl<'a> GraphView<'a> {
         matchings
     }
 
-    pub fn automorphisms<C: Ord + Copy>(
+    /// Compute the atom automorphism group of this graph under `atom_color` and
+    /// `bond_color` using `alg`.
+    ///
+    /// Skips canonical-labeling construction when only symmetry orbits, group
+    /// order, and generators are needed.
+    ///
+    /// # Semantic properties
+    ///
+    /// Orbits, orbit count, group order, and the generated subgroup depend only
+    /// on the graph and the equivalence classes induced by `atom_color` and
+    /// `bond_color`, and agree across [`AutomorphismAlgorithm`] variants.
+    pub fn automorphisms<AC: Ord, BC: Ord>(
         &self,
-        atom_color: impl Fn(AtomId) -> C,
+        atom_color: impl Fn(AtomId) -> AC,
+        bond_color: impl Fn(BondId) -> BC,
         alg: AutomorphismAlgorithm,
-    ) -> AtomAutomorphism {
-        AtomAutomorphism(
-            self.graph
-                .automorphisms(|n| atom_color(AtomId::from(n)), alg),
-        )
+    ) -> AtomAutomorphismGroup {
+        AtomAutomorphismGroup(self.graph.automorphisms(
+            |node| atom_color(AtomId::from(node)),
+            |edge| bond_color(BondId::from(edge)),
+            alg,
+        ))
+    }
+
+    /// Compute a canonical atom ordering and automorphism group of this graph
+    /// under `atom_color` and `bond_color` using `alg`.
+    ///
+    /// # Semantic properties
+    ///
+    /// For a fixed [`AutomorphismAlgorithm`] and color ordering, the returned
+    /// labeling induces an identical canonical colored adjacency matrix across
+    /// all atom renumberings of isomorphic graphs.
+    pub fn canonical_labeling<AC: Ord, BC: Ord>(
+        &self,
+        atom_color: impl Fn(AtomId) -> AC,
+        bond_color: impl Fn(BondId) -> BC,
+        alg: AutomorphismAlgorithm,
+    ) -> AtomCanonicalLabeling {
+        let labeling = self.graph.canonical_labeling(
+            |node| atom_color(AtomId::from(node)),
+            |edge| bond_color(BondId::from(edge)),
+            alg,
+        );
+        let labels = labeling
+            .labels()
+            .iter()
+            .copied()
+            .map(AtomId::from)
+            .collect();
+        AtomCanonicalLabeling {
+            labels,
+            automorphisms: AtomAutomorphismGroup(labeling.into_automorphisms()),
+        }
     }
 
     /// Visits each occurrence of `query` within `self` (the host) as a
@@ -348,39 +392,108 @@ impl<'a> GraphView<'a> {
     }
 }
 
-/// Atom-level wrapper over `umol_graph_core::AutomorphismOutput` — the result of
-/// a graph automorphism query. Indexes the permutation in terms of `AtomId`
-/// rather than raw `NodeId`.
-#[derive(Clone, Debug)]
-pub struct AtomAutomorphism(AutomorphismOutput);
+/// Atom-level symmetry group wrapping [`AutomorphismGroup`], issued by
+/// `GraphView::automorphisms` or [`AtomCanonicalLabeling`].
+///
+/// Every instance preserves the invariants of [`AutomorphismGroup`] in the
+/// molecule's [`AtomId`] space: each orbit representative is the minimum
+/// [`AtomId`] in its orbit, [`Self::orbit_count`] equals the number of distinct
+/// orbits, and every permutation in [`Self::generators`] is an atom bijection
+/// preserving adjacency, atom colors, and bond colors.
+///
+/// Queries taking an [`AtomId`] assume the identifier belongs to the molecule
+/// that produced this value.
+///
+/// # Semantic properties
+///
+/// - Orbits, [`Self::orbit_count`], [`Self::group_order`], and the generated
+///   subgroup are invariant across [`AutomorphismAlgorithm`] variants.
+/// - The specific generating basis returned by [`Self::generators`] is
+///   algorithm-dependent.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AtomAutomorphismGroup(AutomorphismGroup);
 
-impl AtomAutomorphism {
+impl AtomAutomorphismGroup {
+    /// Number of atoms in the graph that produced this group.
     pub fn atom_count(&self) -> usize {
         self.0.node_count()
     }
 
+    /// Number of distinct atom orbits.
     pub fn orbit_count(&self) -> usize {
         self.0.orbit_count()
     }
 
+    /// Minimum [`AtomId`] in the orbit containing `atom`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `atom.0 as usize >= self.atom_count()`.
     pub fn orbit_of(&self, atom: AtomId) -> AtomId {
         AtomId::from(self.0.orbit_of(NodeId::from(atom)))
     }
 
-    pub fn same_orbit(&self, a: AtomId, b: AtomId) -> bool {
-        self.0.same_orbit(NodeId::from(a), NodeId::from(b))
+    /// Whether `first` and `second` lie in the same automorphism orbit.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `first.0 as usize >= self.atom_count()` or
+    /// `second.0 as usize >= self.atom_count()`.
+    pub fn same_orbit(&self, first: AtomId, second: AtomId) -> bool {
+        self.0.same_orbit(NodeId::from(first), NodeId::from(second))
     }
 
-    pub fn canonical_labels(&self) -> Vec<AtomId> {
-        self.0
-            .canonical_labels()
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect()
-    }
-
+    /// Order of the automorphism group.
     pub fn group_order(&self) -> AutomorphismGroupOrder {
         self.0.group_order()
+    }
+
+    /// A generating set of the automorphism group, each generator stored as a
+    /// permutation image over `0..atom_count`.
+    pub fn generators(&self) -> Vec<Vec<AtomId>> {
+        self.0
+            .generators()
+            .iter()
+            .map(|generator| generator.iter().copied().map(AtomId::from).collect())
+            .collect()
+    }
+}
+
+/// Canonical atom ordering paired with [`AtomAutomorphismGroup`], issued by
+/// `GraphView::canonical_labeling`.
+///
+/// [`Self::labels`] has length `self.automorphisms().atom_count()` and is a
+/// bijection over `0..atom_count`, where `labels()[rank]` is the source
+/// [`AtomId`] assigned canonical position `rank`.
+///
+/// # Semantic properties
+///
+/// - For a fixed [`AutomorphismAlgorithm`] and color ordering, [`Self::labels`]
+///   induces an identical canonical colored adjacency matrix across all atom
+///   renumberings of isomorphic graphs.
+/// - Tie-breaking between equivalent canonical orderings is
+///   algorithm-dependent.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AtomCanonicalLabeling {
+    labels: Vec<AtomId>,
+    automorphisms: AtomAutomorphismGroup,
+}
+
+impl AtomCanonicalLabeling {
+    /// Canonical atom order: `labels()[rank]` is the source [`AtomId`] assigned
+    /// canonical position `rank`.
+    pub fn labels(&self) -> &[AtomId] {
+        &self.labels
+    }
+
+    /// Atom automorphism group computed alongside this canonical labeling.
+    pub fn automorphisms(&self) -> &AtomAutomorphismGroup {
+        &self.automorphisms
+    }
+
+    /// Consume this labeling and return its [`AtomAutomorphismGroup`].
+    pub fn into_automorphisms(self) -> AtomAutomorphismGroup {
+        self.automorphisms
     }
 }
 
@@ -389,6 +502,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
+    use AutomorphismAlgorithm::{Nauty, TrailIr};
 
     use super::*;
     use crate::ir::atom::AtomForm;
@@ -397,7 +511,7 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
 
     #[fixture]
-    fn hexagon() -> AtomAutomorphism {
+    fn hexagon() -> Molecule {
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             bonds: vec![
@@ -410,12 +524,26 @@ mod tests {
             ],
             ..Default::default()
         })
-        .graph()
-        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[fixture]
-    fn chain_3() -> AtomAutomorphism {
+    fn cyclohexene() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        })
+    }
+
+    #[fixture]
+    fn chain_3() -> Molecule {
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 3],
             bonds: vec![
@@ -424,73 +552,167 @@ mod tests {
             ],
             ..Default::default()
         })
-        .graph()
-        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+    }
+
+    fn bond_order_key(molecule: &Molecule, bond: BondId) -> u8 {
+        if molecule.bond(bond).attributes().order == BondForm::from_order(2).order {
+            2
+        } else {
+            1
+        }
     }
 
     #[rstest]
     #[case::hexagon(hexagon(), 6)]
+    #[case::cyclohexene(cyclohexene(), 6)]
     #[case::chain_3(chain_3(), 3)]
-    fn test_atom_automorphism_atom_count(
-        #[case] automorphism: AtomAutomorphism,
+    fn test_atom_automorphism_group_atom_count(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
         #[case] expected: usize,
     ) {
-        assert_eq!(automorphism.atom_count(), expected);
+        let group =
+            molecule
+                .graph()
+                .automorphisms(|_| 0u8, |bond| bond_order_key(&molecule, bond), alg);
+        assert_eq!(group.atom_count(), expected);
     }
 
     #[rstest]
     #[case::hexagon(hexagon(), 1)]
+    #[case::cyclohexene(cyclohexene(), 3)]
     #[case::chain_3(chain_3(), 2)]
-    fn test_atom_automorphism_orbit_count(
-        #[case] automorphism: AtomAutomorphism,
+    fn test_atom_automorphism_group_orbit_count(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
         #[case] expected: usize,
     ) {
-        assert_eq!(automorphism.orbit_count(), expected);
+        let group =
+            molecule
+                .graph()
+                .automorphisms(|_| 0u8, |bond| bond_order_key(&molecule, bond), alg);
+        assert_eq!(group.orbit_count(), expected);
     }
 
     #[rstest]
     #[case::hexagon(hexagon(), AtomId(3), AtomId(0))]
+    #[case::cyclohexene_alkene(cyclohexene(), AtomId(1), AtomId(0))]
+    #[case::cyclohexene_allylic(cyclohexene(), AtomId(5), AtomId(2))]
+    #[case::cyclohexene_homoallylic(cyclohexene(), AtomId(4), AtomId(3))]
     #[case::chain_endpoint(chain_3(), AtomId(2), AtomId(0))]
     #[case::chain_center(chain_3(), AtomId(1), AtomId(1))]
-    fn test_atom_automorphism_orbit_of(
-        #[case] automorphism: AtomAutomorphism,
+    fn test_atom_automorphism_group_orbit_of(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
         #[case] atom: AtomId,
         #[case] expected: AtomId,
     ) {
-        assert_eq!(automorphism.orbit_of(atom), expected);
+        let group =
+            molecule
+                .graph()
+                .automorphisms(|_| 0u8, |bond| bond_order_key(&molecule, bond), alg);
+        assert_eq!(group.orbit_of(atom), expected);
     }
 
     #[rstest]
     #[case::hexagon_equivalent(hexagon(), AtomId(0), AtomId(3), true)]
+    #[case::cyclohexene_alkene_equivalent(cyclohexene(), AtomId(0), AtomId(1), true)]
+    #[case::cyclohexene_alkene_vs_allylic(cyclohexene(), AtomId(0), AtomId(2), false)]
     #[case::chain_endpoints_equivalent(chain_3(), AtomId(0), AtomId(2), true)]
     #[case::chain_endpoint_vs_middle(chain_3(), AtomId(0), AtomId(1), false)]
-    fn test_atom_automorphism_same_orbit(
-        #[case] automorphism: AtomAutomorphism,
+    fn test_atom_automorphism_group_same_orbit(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
         #[case] first: AtomId,
         #[case] second: AtomId,
         #[case] expected: bool,
     ) {
-        assert_eq!(automorphism.same_orbit(first, second), expected);
-    }
-
-    #[rstest]
-    #[case::hexagon(hexagon(), (0..6).map(|index| AtomId(index as u32)).collect::<Vec<_>>())]
-    fn test_atom_automorphism_canonical_labels(
-        #[case] automorphism: AtomAutomorphism,
-        #[case] expected: Vec<AtomId>,
-    ) {
-        let mut sorted = automorphism.canonical_labels();
-        sorted.sort_unstable();
-        assert_eq!(sorted, expected);
+        let group =
+            molecule
+                .graph()
+                .automorphisms(|_| 0u8, |bond| bond_order_key(&molecule, bond), alg);
+        assert_eq!(group.same_orbit(first, second), expected);
     }
 
     #[rstest]
     #[case::hexagon(hexagon(), AutomorphismGroupOrder::Exact(12))]
+    #[case::cyclohexene(cyclohexene(), AutomorphismGroupOrder::Exact(2))]
     #[case::chain_3(chain_3(), AutomorphismGroupOrder::Exact(2))]
-    fn test_atom_automorphism_group_order(
-        #[case] automorphism: AtomAutomorphism,
+    fn test_atom_automorphism_group_group_order(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
         #[case] expected: AutomorphismGroupOrder,
     ) {
-        assert_eq!(automorphism.group_order(), expected);
+        let group =
+            molecule
+                .graph()
+                .automorphisms(|_| 0u8, |bond| bond_order_key(&molecule, bond), alg);
+        assert_eq!(group.group_order(), expected);
+    }
+
+    #[rstest]
+    #[case::chain_3(chain_3(), vec![vec![AtomId(2), AtomId(1), AtomId(0)]])]
+    #[case::cyclohexene(
+        cyclohexene(),
+        vec![vec![AtomId(1), AtomId(0), AtomId(5), AtomId(4), AtomId(3), AtomId(2)]]
+    )]
+    fn test_atom_automorphism_group_generators(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        let group =
+            molecule
+                .graph()
+                .automorphisms(|_| 0u8, |bond| bond_order_key(&molecule, bond), alg);
+        assert_eq!(group.generators(), expected);
+    }
+
+    #[rstest]
+    #[should_panic]
+    #[case::orbit_of_oob(AtomId(3), None)]
+    #[should_panic]
+    #[case::same_orbit_first_oob(AtomId(3), Some(AtomId(0)))]
+    #[should_panic]
+    #[case::same_orbit_second_oob(AtomId(0), Some(AtomId(3)))]
+    fn test_atom_automorphism_group_out_of_bounds_panic(
+        #[case] first: AtomId,
+        #[case] second: Option<AtomId>,
+    ) {
+        let group = chain_3().graph().automorphisms(|_| 0u8, |_| 0u8, TrailIr);
+        match second {
+            None => {
+                let _ = group.orbit_of(first);
+            }
+            Some(second) => {
+                let _ = group.same_orbit(first, second);
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::hexagon(hexagon(), 1, AutomorphismGroupOrder::Exact(12))]
+    #[case::cyclohexene(cyclohexene(), 3, AutomorphismGroupOrder::Exact(2))]
+    #[case::chain_3(chain_3(), 2, AutomorphismGroupOrder::Exact(2))]
+    fn test_atom_canonical_labeling(
+        #[values(Nauty, TrailIr)] alg: AutomorphismAlgorithm,
+        #[case] molecule: Molecule,
+        #[case] expected_orbits: usize,
+        #[case] expected_order: AutomorphismGroupOrder,
+    ) {
+        let labeling = molecule.graph().canonical_labeling(
+            |_| 0u8,
+            |bond| bond_order_key(&molecule, bond),
+            alg,
+        );
+        let mut sorted = labeling.labels().to_vec();
+        sorted.sort_unstable();
+        let expected_atoms: Vec<AtomId> = molecule.atoms().ids().collect();
+        assert_eq!(sorted, expected_atoms);
+        assert_eq!(labeling.automorphisms().orbit_count(), expected_orbits);
+        assert_eq!(labeling.automorphisms().group_order(), expected_order);
+
+        let expected_group = labeling.automorphisms().clone();
+        assert_eq!(labeling.into_automorphisms(), expected_group);
     }
 }

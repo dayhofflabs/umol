@@ -3,7 +3,7 @@
 //! collision-free canonical key.
 //!
 //! The key is the configured canonical form of the (edge-induced) subgraph, with
-//! bond orders carried as label-colored vertices through edge subdivision. It
+//! bond orders encoded as edge colors. It
 //! uses only embedding-monotone labels — element, charge, bond order — so
 //! `query.is_subset(target)` is a sound substructure prescreen (no false
 //! negatives). Degree, ring membership, and aromaticity are excluded: they change
@@ -68,7 +68,7 @@ impl SubstructureFeaturizer {
 }
 
 /// Exact canonical key of the subgraph correspondence `sub`, with bond orders
-/// carried as label-colored vertices. Two subgraphs collide iff they are
+/// encoded as edge colors. Two subgraphs collide iff they are
 /// isomorphic as element/charge/bond-order-labeled graphs.
 fn canonical_key(
     mol: &Molecule,

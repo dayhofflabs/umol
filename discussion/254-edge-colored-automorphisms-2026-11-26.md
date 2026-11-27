@@ -690,10 +690,10 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
 
 ### S4 — Public edge-colored automorphism API (`umol-graph-core` & `GraphView`)
 
-#### S4a — `AutomorphismAlgorithm::TrailIr`, `AutomorphismGroup`, `CanonicalLabeling`, `AutomorphismScratch`, and `Graph` methods
+#### S4a — `AutomorphismAlgorithm::TrailIr`, `AutomorphismGroup`, `CanonicalLabeling`, `AutomorphismScratch`, and `Graph` methods [Done]
 
-**Module:** `umol-graph-core/src/{algorithms/automorphism.rs, lib.rs}`,
-`docs/development/nomenclature.md`; **breaking (red→green)**. `[dep: S3a]`
+**Module:** `umol-graph-core/src/{algorithms/automorphism.rs, algorithms/automorphism/trail_ir/{search.rs, tests.rs}, algorithms/refinement.rs, lib.rs}`,
+`umol-graph-core/benches/algorithms.rs`, `docs/development/nomenclature.md`; **breaking (red→green)**. `[dep: S3a]`
 
 - Add `AutomorphismAlgorithm::TrailIr`.
 - Replace `AutomorphismOutput` with closed operation-issued `AutomorphismGroup` and
@@ -709,16 +709,52 @@ reaction_span.rs, incidence.rs, symmetry.rs, molecule/, reaction_span/}`,
 - Add `rstest` tables covering both `Nauty` and `TrailIr`, scratch reuse across differing graph
   sizes/colorings/algorithms, non-`Copy` color types, `canonical_key` isomorphism/discrimination,
   and concurrency.
+- **Findings:**
+  - Removed the temporary `#[cfg_attr(not(test), allow(dead_code, unused_imports))]` on
+    `mod trail_ir;` and dropped the redundant `TrailIrWorkspace::new()` in favor of `Default`.
+  - Added an $O(m)$ uniform-edge fast path in `Graph::solve_automorphisms` (skipping edge sorting
+    when all edge colors are equal) and replaced the `HashSet` orbit count on the `Nauty` path with
+    an $O(n)$ self-representative scan (`vertex == rep`).
+  - Also aligned `umol-graph-core/src/algorithms/refinement.rs` rustdoc and
+    `umol-graph-core/benches/algorithms.rs` callers so `umol-graph-core` passes
+    `clippy --all-targets --features proptest -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps`.
+  - Downstream audit note for `S4b`: `umol-py/src/algorithm.rs` matches exhaustively on
+    `umol_graph_core::AutomorphismAlgorithm` in `from_rust`; restoring full workspace compilation in
+    `S4b` will require deciding whether to expose `AutomorphismAlgorithm.TrailIr()` in `umol-py`
+    during `S4b` (leaving defaults on `Nauty` until `S6b`) or leave `umol-py` for `S6b`.
 
-#### S4b — `GraphView` alignment and caller migration
+#### S4b — `GraphView` alignment and caller migration [Done]
 
-**Module:** `umol-graph-ir/src/ir/{view/graph.rs, symmetry.rs, molecule/symmetry.rs,
-molecule/tests.rs}`; **breaking (red→green)** (restores workspace green after `S4a`). `[dep: S4a]`
+**Module:** `umol-graph-ir/src/ir/{view/graph.rs, view.rs, ir.rs, symmetry.rs, molecule/symmetry.rs,
+molecule/tests.rs, molecule/canonicalize/tests.rs}`, `umol-graph/{src/fingerprint/substructure.rs,
+tests/fingerprint.rs}`, `umol-py/{src/algorithm.rs, src/molecule.rs, tests/{test_algorithm.py,
+test_fingerprint.py, test_workflow.py}}`; **breaking (red→green)** (restores workspace green after
+`S4a`). `[dep: S4a]`
 
 - Replace `AtomAutomorphism` with `AtomAutomorphismGroup` (adding `bond_color` and `generators`)
   and `AtomCanonicalLabeling` (`labels`, `automorphisms`) on `GraphView::{automorphisms,
   canonical_labeling}`.
 - Migrate all existing `umol-graph-ir` internal call sites and tests to the new signatures.
+- **Findings:**
+  - `AtomCanonicalLabeling` stores `labels: Vec<AtomId>` and `automorphisms: AtomAutomorphismGroup`
+    directly so `labels(&self) -> &[AtomId]`, `automorphisms(&self) -> &AtomAutomorphismGroup`, and
+    `into_automorphisms(self) -> AtomAutomorphismGroup` mirror `CanonicalLabeling` in safe Rust
+    without re-allocating on repeated `labels()` calls. `AtomAutomorphismGroup::generators(&self)`
+    returns `Vec<Vec<AtomId>>` lazily from the wrapped `AutomorphismGroup`.
+  - `Molecule::graph_symmetry` already switched from `AutomorphismOutput` to `AutomorphismGroup`
+    (`Graph::automorphisms`, skipping unneeded canonical labels), while `AutomorphismAdapter` in
+    `symmetry.rs` continues calling `Graph::canonical_labeling` on the subdivided adapter until
+    `S5a` removes subdivision and separates `automorphisms_with_scratch` in
+    `visit_remapping_candidates`.
+  - Per user approval, exposed `AutomorphismAlgorithm.TrailIr()` in `umol-py/src/algorithm.rs` and
+    `umol-py/tests/test_algorithm.py` during `S4b` (leaving all Python config defaults on `Nauty`
+    until `S6b`) so the entire workspace compiles and passes `cargo test --workspace`, `clippy`,
+    `maturin develop`, and `pytest`. Confirmed no `.pyi` stub files exist in `umol-py`.
+  - Updating `Graph::canonical_key` in `S4a` to native edge-colored encoding (zero subdivision)
+    shortened structural fingerprint byte keys; updated stale edge-subdivision doc comments in
+    `umol-graph/src/fingerprint/substructure.rs` and exact-byte structural-fingerprint test
+    expectations in `umol-graph/tests/fingerprint.rs`, `umol-py/src/molecule.rs`,
+    `umol-py/tests/test_fingerprint.py`, and `umol-py/tests/test_workflow.py`.
 
 ### S5 — Native edge-colored `umol-graph-ir` search and stereo symmetry
 
@@ -766,17 +802,16 @@ tests updated together). `[dep: S5b]`
   `AutomorphismAlgorithm::TrailIr` across all higher-layer configs and update
   [operations.md](../docs/development/operations.md).
 
-#### S6b — Python bindings and stub parity (`umol-py`)
+#### S6b — Python config defaults and test parity (`umol-py`)
 
-**Module:** `umol-py/src/{algorithm.rs, canonicalize.rs, symmetry.rs, transform.rs,
-fingerprint/config.rs}`, `umol-py/python/umol/_umol.pyi`, `umol-py/tests/`; **breaking
-(red→green)**. `[dep: S6a]`
+**Module:** `umol-py/src/{canonicalize.rs, symmetry.rs, transform.rs, fingerprint/config.rs}`,
+`umol-py/tests/`, `docs/development/python-api.md`; **breaking (red→green)**. `[dep: S6a]`
 
-- Expose `AutomorphismAlgorithm.TrailIr()` alongside `AutomorphismAlgorithm.Nauty()`, update all
-  Python config defaults to `AutomorphismAlgorithm.TrailIr()` in lockstep with Rust (per
-  [python-api.md](../docs/development/python-api.md)), update `.pyi` stubs and `pytest` / Rust
-  binding tests, and verify in `umol-py/.venv` (Python 3.13) with `maturin develop` and
-  `pytest -q umol-py/tests`.
+- Update all Python config defaults to `AutomorphismAlgorithm.TrailIr()` in lockstep with Rust (per
+  [python-api.md](../docs/development/python-api.md); `AutomorphismAlgorithm.TrailIr()` itself was
+  exposed in `S4b`), update `pytest` / Rust binding tests and
+  [python-api.md](../docs/development/python-api.md), and verify in `umol-py/.venv` (Python 3.13)
+  with `maturin develop` and `pytest -q umol-py/tests`.
 
 ### S7 — Final verification gate and deferrable benchmark retention
 

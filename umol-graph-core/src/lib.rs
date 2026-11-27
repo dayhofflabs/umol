@@ -17,7 +17,8 @@ pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
 pub use algorithms::automorphism::{
-    AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
+    AutomorphismAlgorithm, AutomorphismGroup, AutomorphismGroupOrder, AutomorphismScratch,
+    CanonicalLabeling,
 };
 pub use algorithms::bipartite::{BipartitionAlgorithm, NonBipartiteGraphError};
 pub use algorithms::common_subgraph::{

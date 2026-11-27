@@ -18,12 +18,6 @@ from umol import (
     "algorithm,equal,expected_repr",
     [
         pytest.param(
-            AutomorphismAlgorithm.Nauty(),
-            AutomorphismAlgorithm.Nauty(),
-            "AutomorphismAlgorithm.Nauty()",
-            id="automorphism-nauty",
-        ),
-        pytest.param(
             ConnectedComponentsAlgorithm.Bfs(),
             ConnectedComponentsAlgorithm.Bfs(),
             "ConnectedComponentsAlgorithm.Bfs()",
@@ -57,6 +51,31 @@ from umol import (
 )
 def test_algorithm_value(algorithm, equal, expected_repr):
     assert algorithm == equal
+    assert repr(algorithm) == expected_repr
+
+
+@pytest.mark.parametrize(
+    "algorithm,equal,unequal,expected_repr",
+    [
+        pytest.param(
+            AutomorphismAlgorithm.Nauty(),
+            AutomorphismAlgorithm.Nauty(),
+            AutomorphismAlgorithm.TrailIr(),
+            "AutomorphismAlgorithm.Nauty()",
+            id="nauty",
+        ),
+        pytest.param(
+            AutomorphismAlgorithm.TrailIr(),
+            AutomorphismAlgorithm.TrailIr(),
+            AutomorphismAlgorithm.Nauty(),
+            "AutomorphismAlgorithm.TrailIr()",
+            id="trail-ir",
+        ),
+    ],
+)
+def test_automorphism_algorithm_value(algorithm, equal, unequal, expected_repr):
+    assert algorithm == equal
+    assert algorithm != unequal
     assert repr(algorithm) == expected_repr
 
 

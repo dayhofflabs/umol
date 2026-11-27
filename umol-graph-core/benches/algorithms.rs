@@ -612,24 +612,36 @@ fn automorphism(c: &mut Criterion) {
     let mut group = c.benchmark_group("automorphism");
     for (name, graph) in molecular.iter().chain(&stress) {
         group.bench_function(format!("ordinary/{name}/uniform"), |b| {
-            b.iter(|| graph.automorphisms(|_: NodeId| 0u32, AutomorphismAlgorithm::Nauty));
+            b.iter(|| graph.automorphisms(|_: NodeId| 0u32, |_| 0u8, AutomorphismAlgorithm::Nauty));
         });
         let colors = degree_colors(graph);
         group.bench_function(format!("ordinary/{name}/degree"), |b| {
             b.iter(|| {
-                graph.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty)
+                graph.automorphisms(
+                    |node| colors[node.index()],
+                    |_| 0u8,
+                    AutomorphismAlgorithm::Nauty,
+                )
             });
         });
         group.bench_function(format!("ordinary/{name}/unique"), |b| {
             b.iter(|| {
-                graph.automorphisms(|node| node.index() as u32, AutomorphismAlgorithm::Nauty)
+                graph.automorphisms(
+                    |node| node.index() as u32,
+                    |_| 0u8,
+                    AutomorphismAlgorithm::Nauty,
+                )
             });
         });
     }
     for (name, graph, colors) in &incidence {
         group.bench_function(format!("incidence/{name}/class"), |b| {
             b.iter(|| {
-                graph.automorphisms(|node| colors[node.index()], AutomorphismAlgorithm::Nauty)
+                graph.automorphisms(
+                    |node| colors[node.index()],
+                    |_| 0u8,
+                    AutomorphismAlgorithm::Nauty,
+                )
             });
         });
     }
@@ -663,6 +675,7 @@ fn automorphism_stabilizer(c: &mut Criterion) {
                     .map(|&site| {
                         graph.automorphisms(
                             |node| (node == site, colors[node.index()]),
+                            |_| 0u8,
                             AutomorphismAlgorithm::Nauty,
                         )
                     })

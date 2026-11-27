@@ -19,6 +19,7 @@ use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlg
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomorphismAlgorithm {
     Nauty(),
+    TrailIr(),
 }
 
 #[pymethods]
@@ -36,6 +37,7 @@ impl AutomorphismAlgorithm {
     pub(crate) fn repr(self) -> &'static str {
         match self {
             Self::Nauty() => "AutomorphismAlgorithm.Nauty()",
+            Self::TrailIr() => "AutomorphismAlgorithm.TrailIr()",
         }
     }
 
@@ -46,12 +48,14 @@ impl AutomorphismAlgorithm {
     pub(crate) fn from_rust(algorithm: GraphCoreAutomorphismAlgorithm) -> Self {
         match algorithm {
             GraphCoreAutomorphismAlgorithm::Nauty => Self::Nauty(),
+            GraphCoreAutomorphismAlgorithm::TrailIr => Self::TrailIr(),
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphCoreAutomorphismAlgorithm {
         match self {
             Self::Nauty() => GraphCoreAutomorphismAlgorithm::Nauty,
+            Self::TrailIr() => GraphCoreAutomorphismAlgorithm::TrailIr,
         }
     }
 }
@@ -481,18 +485,28 @@ mod tests {
     #[case::nauty(
         GraphCoreAutomorphismAlgorithm::Nauty,
         AutomorphismAlgorithm::Nauty(),
+        AutomorphismAlgorithm::TrailIr(),
         "AutomorphismAlgorithm.Nauty()"
+    )]
+    #[case::trail_ir(
+        GraphCoreAutomorphismAlgorithm::TrailIr,
+        AutomorphismAlgorithm::TrailIr(),
+        AutomorphismAlgorithm::Nauty(),
+        "AutomorphismAlgorithm.TrailIr()"
     )]
     fn test_automorphism_algorithm_value(
         #[case] rust: GraphCoreAutomorphismAlgorithm,
         #[case] python: AutomorphismAlgorithm,
+        #[case] unequal: AutomorphismAlgorithm,
         #[case] expected_repr: &str,
     ) {
         assert_eq!(AutomorphismAlgorithm::from_rust(rust), python);
         assert_eq!(python.to_rust(), rust);
+        assert_ne!(python, unequal);
         Python::attach(|py| {
             let expected = into_py_variant(py, AutomorphismAlgorithm::from_rust(rust)).unwrap();
             let value = into_py_variant(py, python).unwrap();
+            let unequal = into_py_variant(py, unequal).unwrap();
 
             assert_eq!(
                 value
@@ -505,6 +519,7 @@ mod tests {
                 expected_repr
             );
             assert!(value.bind(py).as_any().eq(expected.bind(py)).unwrap());
+            assert!(!value.bind(py).as_any().eq(unequal.bind(py)).unwrap());
         });
     }
 

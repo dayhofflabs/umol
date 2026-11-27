@@ -3918,18 +3918,23 @@ fn test_molecule_enumerate_perfect_matchings(#[case] molecule: Molecule, #[case]
 fn test_molecule_automorphisms(#[case] molecule: Molecule, #[case] expected_orbits: usize) {
     let auto = molecule
         .graph()
-        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
+        .automorphisms(|_| 0u8, |_| 0u8, AutomorphismAlgorithm::Nauty);
     assert_eq!(auto.orbit_count(), expected_orbits);
     assert_eq!(auto.atom_count(), molecule.atoms().count());
 }
 
-#[test]
-fn test_atom_automorphism_same_orbit() {
-    let molecule = ring(6);
+#[rstest]
+#[case::ring_6_opposite(ring(6), AtomId(0), AtomId(3), true)]
+fn test_atom_automorphism_group_same_orbit(
+    #[case] molecule: Molecule,
+    #[case] first: AtomId,
+    #[case] second: AtomId,
+    #[case] expected: bool,
+) {
     let auto = molecule
         .graph()
-        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
-    assert!(auto.same_orbit(AtomId(0), AtomId(3)));
+        .automorphisms(|_| 0u8, |_| 0u8, AutomorphismAlgorithm::Nauty);
+    assert_eq!(auto.same_orbit(first, second), expected);
 }
 
 #[rstest]

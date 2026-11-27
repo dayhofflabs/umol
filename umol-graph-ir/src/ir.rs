@@ -142,10 +142,10 @@ pub use traits::{
 };
 pub use view::{
     AromaticSystemConstraintsView, AromaticSystemEditorViewMut, AromaticSystemView,
-    AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomConstraintsView,
-    AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondConstraintsView, BondEditorViewMut,
-    BondView, BondViewMut, BondViews, DativeBondConstraintsView, DativeBondEditorViewMut,
-    DativeBondView, DativeBondViewMut, DativeBondViews, GraphSymmetryView,
+    AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphismGroup, AtomCanonicalLabeling,
+    AtomConstraintsView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondConstraintsView,
+    BondEditorViewMut, BondView, BondViewMut, BondViews, DativeBondConstraintsView,
+    DativeBondEditorViewMut, DativeBondView, DativeBondViewMut, DativeBondViews, GraphSymmetryView,
     MulticenterBondConstraintsView, MulticenterBondEditorViewMut, MulticenterBondView,
     MulticenterBondViewMut, MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView,
     NoncovalentBondEditorViewMut, NoncovalentBondView, NoncovalentBondViewMut,

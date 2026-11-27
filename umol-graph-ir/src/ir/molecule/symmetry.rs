@@ -2,7 +2,7 @@
 
 use std::ops::ControlFlow;
 
-use umol_graph_core::{AutomorphismAlgorithm, AutomorphismOutput, EdgeId, NodeId};
+use umol_graph_core::{AutomorphismAlgorithm, AutomorphismGroup, EdgeId, NodeId};
 use umol_perm::{Orientation, Permutation};
 
 use super::super::electrons::ElectronCountsForm;
@@ -41,7 +41,7 @@ pub struct GraphSymmetry {
     adapter: AutomorphismAdapter,
     partition: OrderedPartition,
     cell_indices: Vec<u32>,
-    automorphisms: Option<Box<AutomorphismOutput>>,
+    automorphisms: Option<Box<AutomorphismGroup>>,
     config: GraphSymmetryConfig,
 }
 
@@ -132,9 +132,11 @@ impl Molecule {
         {
             (partition, None)
         } else {
-            let automorphisms = adapter
-                .graph()
-                .automorphisms(|node| adapter.color(node), config.automorphism_algorithm);
+            let automorphisms = adapter.graph().automorphisms(
+                |node| adapter.color(node),
+                |_| 0u8,
+                config.automorphism_algorithm,
+            );
             let descriptors = adapter
                 .graph()
                 .node_ids()

@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::mem;
 
-use super::super::{AutomorphismGroupOrder, AutomorphismOutput};
+use super::super::{AutomorphismGroup, AutomorphismGroupOrder};
 use super::components::{find_non_uniform_components, ComponentSolver, NucWorkspace};
 use super::partition::{common_prefix_len, EdgeColoredView, Partition};
 use super::preprocess::{collapse_twin_cells, TwinCell};
@@ -107,27 +107,25 @@ pub(in super::super) struct TrailIrWorkspace {
 }
 
 impl TrailIrWorkspace {
-    pub(in super::super) fn new() -> Self {
-        Self::default()
-    }
-
     pub(in super::super) fn solve(
         &mut self,
         graph: &Graph,
         node_colors: &[u32],
         edge_colors: &[u32],
         get_canon: bool,
-    ) -> AutomorphismOutput {
+    ) -> (AutomorphismGroup, Vec<NodeId>) {
         let n = graph.node_count();
         if n == 0 {
-            return AutomorphismOutput {
-                orbits: Vec::new(),
-                canonical_labels: Vec::new(),
-                node_count: 0,
-                orbit_count: 0,
-                group_order: AutomorphismGroupOrder::Exact(1),
-                generators: Vec::new(),
-            };
+            return (
+                AutomorphismGroup {
+                    orbits: Vec::new(),
+                    node_count: 0,
+                    orbit_count: 0,
+                    group_order: AutomorphismGroupOrder::Exact(1),
+                    generators: Vec::new(),
+                },
+                Vec::new(),
+            );
         }
 
         let view = EdgeColoredView::new(graph, edge_colors);
@@ -141,18 +139,21 @@ impl TrailIrWorkspace {
         );
 
         if self.partition.is_discrete() {
-            return AutomorphismOutput {
-                orbits: (0..n as u32).map(NodeId).collect(),
-                canonical_labels: if get_canon {
-                    self.partition.lab.iter().copied().map(NodeId).collect()
-                } else {
-                    Vec::new()
-                },
-                node_count: n,
-                orbit_count: n,
-                group_order: AutomorphismGroupOrder::Exact(1),
-                generators: Vec::new(),
+            let labels = if get_canon {
+                self.partition.lab.iter().copied().map(NodeId).collect()
+            } else {
+                Vec::new()
             };
+            return (
+                AutomorphismGroup {
+                    orbits: (0..n as u32).map(NodeId).collect(),
+                    node_count: n,
+                    orbit_count: n,
+                    group_order: AutomorphismGroupOrder::Exact(1),
+                    generators: Vec::new(),
+                },
+                labels,
+            );
         }
 
         self.has_first = false;
@@ -194,22 +195,25 @@ impl TrailIrWorkspace {
                     self.group_exponent,
                 ),
             };
-            return AutomorphismOutput {
-                orbits: self.orbits.iter().copied().map(NodeId).collect(),
-                canonical_labels: if get_canon {
-                    self.partition.lab.iter().copied().map(NodeId).collect()
-                } else {
-                    Vec::new()
-                },
-                node_count: n,
-                orbit_count: self.orbit_count,
-                group_order,
-                generators: self
-                    .generators
-                    .iter()
-                    .map(|g| g.iter().copied().map(NodeId).collect())
-                    .collect(),
+            let labels = if get_canon {
+                self.partition.lab.iter().copied().map(NodeId).collect()
+            } else {
+                Vec::new()
             };
+            return (
+                AutomorphismGroup {
+                    orbits: self.orbits.iter().copied().map(NodeId).collect(),
+                    node_count: n,
+                    orbit_count: self.orbit_count,
+                    group_order,
+                    generators: self
+                        .generators
+                        .iter()
+                        .map(|g| g.iter().copied().map(NodeId).collect())
+                        .collect(),
+                },
+                labels,
+            );
         }
 
         self.perm_buf.resize(n, 0);
@@ -231,23 +235,26 @@ impl TrailIrWorkspace {
                 AutomorphismGroupOrder::from_scientific(self.group_mantissa, self.group_exponent)
             }
         };
+        let labels = if get_canon {
+            self.best_leaf.iter().copied().map(NodeId).collect()
+        } else {
+            Vec::new()
+        };
 
-        AutomorphismOutput {
-            orbits: self.orbits.iter().copied().map(NodeId).collect(),
-            canonical_labels: if get_canon {
-                self.best_leaf.iter().copied().map(NodeId).collect()
-            } else {
-                Vec::new()
+        (
+            AutomorphismGroup {
+                orbits: self.orbits.iter().copied().map(NodeId).collect(),
+                node_count: n,
+                orbit_count: self.orbit_count,
+                group_order,
+                generators: self
+                    .generators
+                    .iter()
+                    .map(|g| g.iter().copied().map(NodeId).collect())
+                    .collect(),
             },
-            node_count: n,
-            orbit_count: self.orbit_count,
-            group_order,
-            generators: self
-                .generators
-                .iter()
-                .map(|g| g.iter().copied().map(NodeId).collect())
-                .collect(),
-        }
+            labels,
+        )
     }
 
     fn multiply_group_order(&mut self, factor: u64) {

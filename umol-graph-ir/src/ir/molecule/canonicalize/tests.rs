@@ -402,10 +402,10 @@ impl AutomorphismAdapter {
         &self,
         algorithm: AutomorphismAlgorithm,
     ) -> AutomorphismAdapterOutput {
-        let output = self
+        let labeling = self
             .graph()
-            .automorphisms(|node| self.color(node), algorithm);
-        self.project_automorphisms(&output)
+            .canonical_labeling(|node| self.color(node), |_| 0u8, algorithm);
+        self.project_automorphisms(&labeling)
     }
 }
 
