@@ -371,6 +371,7 @@ pub enum SubgraphIsomorphismAlgorithm {
     Vf2Rdkit(),
     RayKirsch(),
     BitsetRi(),
+    Glasgow(),
 }
 
 #[pymethods]
@@ -396,6 +397,7 @@ impl SubgraphIsomorphismAlgorithm {
             Self::Vf2Rdkit() => "SubgraphIsomorphismAlgorithm.Vf2Rdkit()".to_owned(),
             Self::RayKirsch() => "SubgraphIsomorphismAlgorithm.RayKirsch()".to_owned(),
             Self::BitsetRi() => "SubgraphIsomorphismAlgorithm.BitsetRi()".to_owned(),
+            Self::Glasgow() => "SubgraphIsomorphismAlgorithm.Glasgow()".to_owned(),
         }
     }
 
@@ -414,6 +416,7 @@ impl SubgraphIsomorphismAlgorithm {
             GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit => Self::Vf2Rdkit(),
             GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch => Self::RayKirsch(),
             GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi => Self::BitsetRi(),
+            GraphCoreSubgraphIsomorphismAlgorithm::Glasgow => Self::Glasgow(),
         }
     }
 
@@ -428,6 +431,7 @@ impl SubgraphIsomorphismAlgorithm {
             Self::Vf2Rdkit() => GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
             Self::RayKirsch() => GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch,
             Self::BitsetRi() => GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
+            Self::Glasgow() => GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
         }
     }
 }
@@ -791,6 +795,10 @@ mod tests {
         GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
         SubgraphIsomorphismAlgorithm::BitsetRi()
     )]
+    #[case::glasgow(
+        GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
+        SubgraphIsomorphismAlgorithm::Glasgow()
+    )]
     fn test_subgraph_isomorphism_algorithm_from_rust(
         #[case] algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
         #[case] expected: SubgraphIsomorphismAlgorithm,
@@ -826,6 +834,10 @@ mod tests {
     #[case::bitset_ri(
         SubgraphIsomorphismAlgorithm::BitsetRi(),
         GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi
+    )]
+    #[case::glasgow(
+        SubgraphIsomorphismAlgorithm::Glasgow(),
+        GraphCoreSubgraphIsomorphismAlgorithm::Glasgow
     )]
     fn test_subgraph_isomorphism_algorithm_to_rust(
         #[case] algorithm: SubgraphIsomorphismAlgorithm,
@@ -868,6 +880,11 @@ mod tests {
     #[case::bitset_ri(
         SubgraphIsomorphismAlgorithm::BitsetRi(),
         "SubgraphIsomorphismAlgorithm.BitsetRi()",
+        None
+    )]
+    #[case::glasgow(
+        SubgraphIsomorphismAlgorithm::Glasgow(),
+        "SubgraphIsomorphismAlgorithm.Glasgow()",
         None
     )]
     fn test_subgraph_isomorphism_algorithm_value(

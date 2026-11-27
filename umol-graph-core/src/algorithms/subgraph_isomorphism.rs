@@ -2,14 +2,16 @@
 //!
 //! Query edges must map to target edges; no induced-subgraph reverse check is
 //! applied. Current selectors provide VF2, Ullmann, RI, ArcMatch, an
-//! RDKit-compatible VF2 variant, Ray--Kirsch bond search, and bit-parallel
-//! RI-DS (`BitsetRi`). Both ordinary and anchored operations return the same
-//! correspondence set for every selector.
+//! RDKit-compatible VF2 variant, Ray--Kirsch bond search, bit-parallel RI-DS
+//! (`BitsetRi`), and a Glasgow-style constraint-programming solver (`Glasgow`).
+//! Both ordinary and anchored operations return the same correspondence set for
+//! every selector.
 //! See [Cordella et al. (2004)](https://doi.org/10.1109/TPAMI.2004.75),
 //! [Ullmann (1976)](https://doi.org/10.1145/321921.321925),
 //! [Bonnici et al. (2013)](https://doi.org/10.1186/1471-2105-14-S7-S13),
 //! Bonnici and Giugno (2017),
 //! [Bonnici et al. (2024)](https://doi.org/10.1007/s10618-024-01061-8),
+//! McCreesh, Prosser, and Trimble (2020),
 //! [RDKit PR #2500](https://github.com/rdkit/rdkit/pull/2500), and
 //! [Ray and Kirsch (1957)](https://doi.org/10.1126/science.126.3278.814).
 
@@ -21,7 +23,9 @@ use crate::correspondence::Correspondence;
 use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
+mod bitset;
 mod bitset_ri;
+mod glasgow;
 mod predicate;
 mod prepared;
 mod symmetry;
@@ -60,6 +64,10 @@ pub enum SubgraphIsomorphismAlgorithm {
     /// target adjacency, direct sparse neighbor scanning for selective single-parent
     /// steps, and bit-parallel monomorphism lookahead on cyclic queries.
     BitsetRi,
+    /// Glasgow-style constraint-programming solver (McCreesh, Prosser, & Trimble
+    /// 2020): compact bit-parallel forward checking, dynamic minimum-remaining-values
+    /// branching, unit propagation, and bit-parallel Hall/AllDifferent pruning.
+    Glasgow,
 }
 
 /// Paper's recommended ArcMatch path-length trade-off (Bonnici 2024 §3.1).
@@ -83,9 +91,16 @@ impl Graph {
     where
         F: FnMut(&[NodeId]) -> ControlFlow<B>,
     {
-        if matches!(alg, SubgraphIsomorphismAlgorithm::BitsetRi) {
-            let mut pred = ClosureSubgraphIsomorphismPredicate::new(node_match, edge_match);
-            return bitset_ri::visit_direct(self, query, None, &mut pred, &mut visitor);
+        match alg {
+            SubgraphIsomorphismAlgorithm::BitsetRi => {
+                let mut pred = ClosureSubgraphIsomorphismPredicate::new(node_match, edge_match);
+                return bitset_ri::visit_direct(self, query, None, &mut pred, &mut visitor);
+            }
+            SubgraphIsomorphismAlgorithm::Glasgow => {
+                let mut pred = ClosureSubgraphIsomorphismPredicate::new(node_match, edge_match);
+                return glasgow::visit_direct(self, query, None, &mut pred, &mut visitor);
+            }
+            _ => {}
         }
         let mut scratch: Vec<NodeId> = Vec::with_capacity(query.node_count());
         let mut emit = |embedding: &[usize]| {
@@ -117,7 +132,9 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::RayKirsch => {
                 self.visit_subgraph_isomorphisms_rk(query, node_match, edge_match, &mut emit)
             }
-            SubgraphIsomorphismAlgorithm::BitsetRi => unreachable!(),
+            SubgraphIsomorphismAlgorithm::BitsetRi | SubgraphIsomorphismAlgorithm::Glasgow => {
+                unreachable!()
+            }
         }
     }
 
@@ -153,9 +170,16 @@ impl Graph {
     where
         F: FnMut(&[NodeId]) -> ControlFlow<B>,
     {
-        if matches!(alg, SubgraphIsomorphismAlgorithm::BitsetRi) {
-            let mut pred = ClosureSubgraphIsomorphismPredicate::new(node_match, edge_match);
-            return bitset_ri::visit_direct(self, query, Some(anchor), &mut pred, &mut visitor);
+        match alg {
+            SubgraphIsomorphismAlgorithm::BitsetRi => {
+                let mut pred = ClosureSubgraphIsomorphismPredicate::new(node_match, edge_match);
+                return bitset_ri::visit_direct(self, query, Some(anchor), &mut pred, &mut visitor);
+            }
+            SubgraphIsomorphismAlgorithm::Glasgow => {
+                let mut pred = ClosureSubgraphIsomorphismPredicate::new(node_match, edge_match);
+                return glasgow::visit_direct(self, query, Some(anchor), &mut pred, &mut visitor);
+            }
+            _ => {}
         }
         let mut scratch: Vec<NodeId> = Vec::with_capacity(query.node_count());
         let mut emit = |embedding: &[usize]| {
@@ -188,7 +212,9 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::RayKirsch => self.visit_subgraph_isomorphisms_at_rk(
                 query, anchor, node_match, edge_match, &mut emit,
             ),
-            SubgraphIsomorphismAlgorithm::BitsetRi => unreachable!(),
+            SubgraphIsomorphismAlgorithm::BitsetRi | SubgraphIsomorphismAlgorithm::Glasgow => {
+                unreachable!()
+            }
         }
     }
 
@@ -2044,7 +2070,7 @@ mod tests {
     use rstest::*;
 
     use super::SubgraphIsomorphismAlgorithm::{
-        ArcMatch, BitsetRi, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
+        ArcMatch, BitsetRi, Glasgow, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
     };
     use super::{ARCMATCH_DEFAULT_PATH_LENGTH, *};
 
@@ -2101,6 +2127,7 @@ mod tests {
             Vf2Rdkit,
             RayKirsch,
             BitsetRi,
+            Glasgow,
         ] {
             let mut r: Vec<Vec<usize>> = Vec::new();
             let flow: ControlFlow<()> = target.visit_subgraph_isomorphisms(
@@ -2129,6 +2156,7 @@ mod tests {
     #[case::vf2rdkit(Vf2Rdkit, true)]
     #[case::raykirsch(RayKirsch, true)]
     #[case::bitset_ri(BitsetRi, true)]
+    #[case::glasgow(Glasgow, true)]
     fn test_graph_visit_subgraph_isomorphisms_termination(
         #[case] alg: SubgraphIsomorphismAlgorithm,
         #[case] search_consults_predicates: bool,
@@ -2256,6 +2284,7 @@ mod tests {
             Vf2Rdkit,
             RayKirsch,
             BitsetRi,
+            Glasgow,
         ] {
             let mut r: Vec<Vec<usize>> = target
                 .enumerate_subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg)
@@ -2295,6 +2324,7 @@ mod tests {
             Vf2Rdkit,
             RayKirsch,
             BitsetRi,
+            Glasgow,
         ] {
             let mut r: Vec<Vec<usize>> = Vec::new();
             let flow: ControlFlow<()> = target.visit_subgraph_isomorphisms_at(
@@ -2343,6 +2373,7 @@ mod tests {
             Vf2Rdkit,
             RayKirsch,
             BitsetRi,
+            Glasgow,
         ] {
             let mut r: Vec<Vec<usize>> = target
                 .enumerate_subgraph_isomorphisms_at(
