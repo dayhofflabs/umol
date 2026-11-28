@@ -845,7 +845,7 @@ mod tests {
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
@@ -875,7 +875,7 @@ mod tests {
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         GraphPatternFingerprinter::new()
