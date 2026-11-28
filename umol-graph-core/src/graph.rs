@@ -1,4 +1,4 @@
-//! CSR graph with Arc-based structural sharing.
+//! CSR simple graph with Arc-based structural sharing.
 //!
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
@@ -6,12 +6,41 @@
 //! [`GraphCompaction`] for reindexing external data and restoring original node/edge positions.
 
 use std::collections::HashSet;
+use std::error::Error;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::compact::{Compaction, GraphCompaction};
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 use crate::id::{EdgeId, IdRange, NodeId};
+
+/// Error returned when constructing or extending a simple [`Graph`] or [`crate::DiGraph`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GraphError {
+    /// An edge endpoint is outside `0..node_count`.
+    NodeOutOfBounds { node: u32, node_count: usize },
+    /// An edge connects a node to itself.
+    SelfLoop { node: u32 },
+    /// Two edges share the same endpoint pair (`[lo, hi]` for [`Graph`], `[from, to]` for [`crate::DiGraph`]).
+    ParallelEdge { endpoints: [u32; 2] },
+}
+
+impl fmt::Display for GraphError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::NodeOutOfBounds { node, node_count } => {
+                write!(f, "node {node} out of bounds for {node_count} nodes")
+            }
+            Self::SelfLoop { node } => write!(f, "self-loop on node {node}"),
+            Self::ParallelEdge {
+                endpoints: [first, second],
+            } => write!(f, "parallel edge on nodes [{first}, {second}]"),
+        }
+    }
+}
+
+impl Error for GraphError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Neighbor {
@@ -26,15 +55,16 @@ struct Csr {
     endpoints: Vec<[NodeId; 2]>,
     node_count: usize,
     edge_count: usize,
+    max_degree: u32,
 }
 
-/// Undirected graph stored as compressed sparse row (CSR).
+/// Undirected simple graph stored as compressed sparse row (CSR).
 ///
 /// Stores only adjacency structure — node and edge data live externally,
 /// indexed by `NodeId` and `EdgeId` positions. The CSR is shared via
 /// `Arc`; mutations trigger copy-on-write. Each undirected edge endpoint pair
 /// is stored in ascending `NodeId` order, while edge order and `EdgeId`
-/// identity are preserved. Self-loops and parallel edges are retained.
+/// identity are preserved. Self-loops and parallel edges are rejected.
 #[derive(Clone, Debug)]
 pub struct Graph {
     csr: Arc<Csr>,
@@ -55,10 +85,27 @@ impl Hash for Graph {
 }
 
 impl Graph {
+    /// Construct a simple undirected graph from `node_count` nodes and undirected `edges`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside `0..node_count`, if an edge is a self-loop, or if two
+    /// edges connect the same unordered endpoint pair. Use [`Self::try_new`] for untrusted input.
     pub fn new(node_count: usize, edges: &[[u32; 2]]) -> Self {
-        Self {
-            csr: Arc::new(Self::build_csr(node_count, edges)),
-        }
+        Self::try_new(node_count, edges).unwrap_or_else(|error| panic!("invalid graph: {error}"))
+    }
+
+    /// Checked form of [`Self::new`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GraphError::NodeOutOfBounds`] when an endpoint is `>= node_count`,
+    /// [`GraphError::SelfLoop`] when `first == second`, or [`GraphError::ParallelEdge`] with
+    /// canonical ascending endpoints `[lo, hi]` when two edges connect the same pair of nodes.
+    pub fn try_new(node_count: usize, edges: &[[u32; 2]]) -> Result<Self, GraphError> {
+        Ok(Self {
+            csr: Arc::new(Self::try_build_csr(node_count, edges)?),
+        })
     }
 
     pub fn node_count(&self) -> usize {
@@ -66,14 +113,6 @@ impl Graph {
     }
 
     pub fn edge_count(&self) -> usize {
-        self.csr.edge_count
-    }
-
-    pub fn node_bound(&self) -> usize {
-        self.csr.node_count
-    }
-
-    pub fn edge_bound(&self) -> usize {
         self.csr.edge_count
     }
 
@@ -90,6 +129,11 @@ impl Graph {
         end - start
     }
 
+    /// Maximum vertex degree across the graph (`0` for empty or edgeless graphs).
+    pub fn max_degree(&self) -> usize {
+        self.csr.max_degree as usize
+    }
+
     pub fn edge_endpoints(&self, id: EdgeId) -> [NodeId; 2] {
         self.csr.endpoints[id.index()]
     }
@@ -104,7 +148,7 @@ impl Graph {
     /// Edges whose both endpoints belong to the node subset given by `nodes`.
     ///
     /// Node order and repetitions do not affect the selected edges. Yields each edge ID
-    /// exactly once, retaining self-loops and parallel edges; iteration order is unspecified.
+    /// exactly once; iteration order is unspecified.
     /// Builds a subset-sized membership set and scans the graph's edges once.
     pub fn induced_edges<'a>(&'a self, nodes: &'a [NodeId]) -> impl Iterator<Item = EdgeId> + 'a {
         let nodes: HashSet<NodeId> = nodes.iter().copied().collect();
@@ -114,16 +158,11 @@ impl Graph {
         })
     }
 
-    /// Adjacency lists: for each node, its neighbor nodes, sorted by id and
-    /// deduped (parallel edges collapse). Indexed by `NodeId::index`.
+    /// Adjacency lists: for each node, its neighbor nodes, strictly sorted by id.
+    /// Indexed by `NodeId::index`.
     pub fn adjacency(&self) -> Vec<Vec<NodeId>> {
         self.node_ids()
-            .map(|node| {
-                // `neighbors` is already sorted by `NodeId`, so dedup suffices.
-                let mut nodes: Vec<NodeId> = self.neighbors(node).iter().map(|n| n.node).collect();
-                nodes.dedup();
-                nodes
-            })
+            .map(|node| self.neighbors(node).iter().map(|n| n.node).collect())
             .collect()
     }
 
@@ -164,31 +203,32 @@ impl Graph {
         (0..self.csr.edge_count as u32).map(EdgeId)
     }
 
-    pub fn is_dense(&self) -> bool {
-        true
-    }
-
-    /// Returns whether this graph has neither self-loops nor parallel edges.
-    pub fn is_simple(&self) -> bool {
-        let mut endpoints = HashSet::with_capacity(self.edge_count());
-        self.csr
-            .endpoints
-            .iter()
-            .all(|&[first, second]| first != second && endpoints.insert([first, second]))
-    }
-
     /// Append one isolated node and return its id.
     pub fn add_node(&mut self) -> NodeId {
         self.extend_nodes(1).next().unwrap()
     }
 
-    /// Append one edge and return its id, retaining loops and parallel edges.
+    /// Append one simple edge and return its id.
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside this graph.
+    /// Panics if an endpoint is outside this graph, if `first == second`, or if an edge between
+    /// `first` and `second` already exists. Use [`Self::try_add_edge`] for untrusted input.
     pub fn add_edge(&mut self, first: NodeId, second: NodeId) -> EdgeId {
-        self.extend_edges(&[[first, second]]).next().unwrap()
+        self.try_add_edge(first, second)
+            .unwrap_or_else(|error| panic!("invalid edge: {error}"))
+    }
+
+    /// Checked form of [`Self::add_edge`].
+    ///
+    /// Leaves the graph unchanged on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GraphError::NodeOutOfBounds`], [`GraphError::SelfLoop`], or
+    /// [`GraphError::ParallelEdge`].
+    pub fn try_add_edge(&mut self, first: NodeId, second: NodeId) -> Result<EdgeId, GraphError> {
+        Ok(self.try_extend_edges(&[[first, second]])?.next().unwrap())
     }
 
     /// Append isolated nodes and return their ids in ascending order.
@@ -215,7 +255,7 @@ impl Graph {
         IdRange::new(start, end)
     }
 
-    /// Append edges between existing nodes and return their ids in input order.
+    /// Append simple edges between existing nodes and return their ids in input order.
     ///
     /// Adjacency is rebuilt once for a nonempty batch. Mutation completes before
     /// return; the allocation-free exact-size iterator borrows neither the graph
@@ -224,18 +264,36 @@ impl Graph {
     /// # Semantic properties
     ///
     /// Existing ids remain unchanged. New edge ids start at the original edge count;
-    /// endpoint order is canonicalized while loops and parallel edges are retained.
-    /// An empty batch leaves storage unchanged; other clones retain their original
-    /// graph. Properties in `tests/property/graph.rs` compare the complete edge list.
+    /// endpoint order is canonicalized. An empty batch leaves storage unchanged; other clones
+    /// retain their original graph. Properties in `tests/property/graph.rs` compare the complete
+    /// edge list.
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside this graph.
+    /// Panics if an endpoint is outside this graph, if an edge is a self-loop, or if an edge
+    /// duplicates an existing edge or an earlier edge in `edges`. Use [`Self::try_extend_edges`]
+    /// for untrusted input.
     pub fn extend_edges(&mut self, edges: &[[NodeId; 2]]) -> IdRange<EdgeId> {
-        self.extend(0, edges).1
+        self.try_extend_edges(edges)
+            .unwrap_or_else(|error| panic!("invalid edges: {error}"))
     }
 
-    /// Append nodes and edges, returning their respective contiguous id ranges.
+    /// Checked form of [`Self::extend_edges`].
+    ///
+    /// Leaves the graph unchanged on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GraphError::NodeOutOfBounds`], [`GraphError::SelfLoop`], or
+    /// [`GraphError::ParallelEdge`].
+    pub fn try_extend_edges(
+        &mut self,
+        edges: &[[NodeId; 2]],
+    ) -> Result<IdRange<EdgeId>, GraphError> {
+        Ok(self.try_extend(0, edges)?.1)
+    }
+
+    /// Append nodes and simple edges, returning their respective contiguous id ranges.
     ///
     /// Endpoints refer to the resulting node space, including appended nodes.
     /// Adjacency is rebuilt once when adding edges; node-only batches use
@@ -246,18 +304,37 @@ impl Graph {
     ///
     /// Existing ids and edge order are preserved. New ids start at the original
     /// count of their kind; new edge order follows the input. Endpoint order is
-    /// canonicalized, retaining loops and parallel edges. Empty input leaves storage
-    /// unchanged and other clones keep their original graph. Public properties in
-    /// `tests/property/graph.rs` derive adjacency directly from the final edge list.
+    /// canonicalized. Empty input leaves storage unchanged and other clones keep their original
+    /// graph. Public properties in `tests/property/graph.rs` derive adjacency directly from the
+    /// final edge list.
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside the resulting node space.
+    /// Panics if an endpoint is outside the resulting node space, if an edge is a self-loop, or
+    /// if an edge duplicates an existing edge or an earlier edge in `edges`. Use
+    /// [`Self::try_extend`] for untrusted input.
     pub fn extend(
         &mut self,
         node_count: usize,
         edges: &[[NodeId; 2]],
     ) -> (IdRange<NodeId>, IdRange<EdgeId>) {
+        self.try_extend(node_count, edges)
+            .unwrap_or_else(|error| panic!("invalid graph extension: {error}"))
+    }
+
+    /// Checked form of [`Self::extend`].
+    ///
+    /// Leaves the graph unchanged on error, including when `node_count > 0`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GraphError::NodeOutOfBounds`], [`GraphError::SelfLoop`], or
+    /// [`GraphError::ParallelEdge`].
+    pub fn try_extend(
+        &mut self,
+        node_count: usize,
+        edges: &[[NodeId; 2]],
+    ) -> Result<(IdRange<NodeId>, IdRange<EdgeId>), GraphError> {
         let node_start = self.csr.node_count;
         let edge_start = self.csr.edge_count;
         if edges.is_empty() {
@@ -271,12 +348,13 @@ impl Graph {
                 .chain(edges)
                 .map(|&[a, b]| [a.0, b.0])
                 .collect();
-            self.csr = Arc::new(Self::build_csr(node_end, &endpoints));
+            let csr = Self::try_build_csr(node_end, &endpoints)?;
+            self.csr = Arc::new(csr);
         }
-        (
+        Ok((
             IdRange::new(node_start, self.csr.node_count),
             IdRange::new(edge_start, self.csr.edge_count),
-        )
+        ))
     }
 
     /// Remove exactly the supplied nodes and edges, compacting the surviving ids.
@@ -303,12 +381,12 @@ impl Graph {
     ///
     /// # Semantic properties
     ///
-    /// Survivor node and edge order is preserved, including loops and parallel edges.
+    /// Survivor node and edge order is preserved.
     /// The compaction maps each surviving source id to its result id and retains both
     /// source counts. Other graphs sharing the original CSR are unchanged. Empty removal
     /// leaves storage unchanged and returns identity on the graph's node and edge domains.
     /// Public-API properties in `tests/property/graph.rs` compare against independently
-    /// selected survivors on multigraphs.
+    /// selected survivors on simple graphs.
     ///
     /// # Panics
     ///
@@ -374,8 +452,7 @@ impl Graph {
     ///
     /// Saved entries use original edge and node ids and may arrive in any order. The
     /// compaction supplies the original node count; no saved node entries are needed.
-    /// Surviving endpoints are expanded to their original ids, and adjacency is rebuilt
-    /// with loops and parallel edges retained.
+    /// Surviving endpoints are expanded to their original ids, and adjacency is rebuilt.
     ///
     /// The compaction and saved entries must come from the removal being undone. Manipulated
     /// or mismatched inputs do not panic, but the resulting graph is unspecified.
@@ -428,7 +505,9 @@ impl Graph {
             }
             *pair = [a.0, b.0];
         }
-        self.csr = Arc::new(Self::build_csr(node_count, &endpoints));
+        if let Ok(csr) = Self::try_build_csr(node_count, &endpoints) {
+            self.csr = Arc::new(csr);
+        }
     }
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an
@@ -566,29 +645,6 @@ impl Graph {
         Graph::new(sub.nodes().matched_pair_count(), &sub_edges)
     }
 
-    /// Subdivide every edge exactly once.
-    ///
-    /// Source nodes retain their ids. Each source edge receives one inserted
-    /// node, and its two incident subdivision edges are consecutive.
-    pub fn subdivide_edges(&self) -> SubdividedGraph {
-        let source_node_count = self.node_count();
-        let source_edge_count = self.edge_count();
-        let edges: Vec<[u32; 2]> = self
-            .edge_ids()
-            .flat_map(|edge| {
-                let [first, second] = self.edge_endpoints(edge);
-                let inserted = NodeId((source_node_count + edge.index()) as u32);
-                [[first.0, inserted.0], [inserted.0, second.0]]
-            })
-            .collect();
-
-        SubdividedGraph {
-            graph: Graph::new(source_node_count + source_edge_count, &edges),
-            source_node_count,
-            source_edge_count,
-        }
-    }
-
     /// Apply a compaction constructed from this graph's counts and complete removal lists.
     fn remove_with_compaction(&mut self, compaction: &GraphCompaction) {
         if compaction.nodes().removed().is_empty() && compaction.edges().removed().is_empty() {
@@ -615,24 +671,43 @@ impl Graph {
                 })
             })
             .collect();
-        self.csr = Arc::new(Self::build_csr(
-            compaction.nodes().result_count(),
-            &kept_edges,
-        ));
+        self.csr = Arc::new(
+            Self::try_build_csr(compaction.nodes().result_count(), &kept_edges)
+                .expect("removing nodes and edges from a simple graph preserves simplicity"),
+        );
     }
 
-    fn build_csr(node_count: usize, edges: &[[u32; 2]]) -> Csr {
+    fn try_build_csr(node_count: usize, edges: &[[u32; 2]]) -> Result<Csr, GraphError> {
         let edge_count = edges.len();
 
         let mut degree = vec![0u32; node_count];
         for &[a, b] in edges {
+            if a as usize >= node_count {
+                return Err(GraphError::NodeOutOfBounds {
+                    node: a,
+                    node_count,
+                });
+            }
+            if b as usize >= node_count {
+                return Err(GraphError::NodeOutOfBounds {
+                    node: b,
+                    node_count,
+                });
+            }
+            if a == b {
+                return Err(GraphError::SelfLoop { node: a });
+            }
             degree[a as usize] += 1;
             degree[b as usize] += 1;
         }
 
+        let mut max_degree = 0u32;
         let mut offsets = Vec::with_capacity(node_count + 1);
         offsets.push(0);
         for &d in &degree {
+            if d > max_degree {
+                max_degree = d;
+            }
             offsets.push(offsets.last().unwrap() + d);
         }
 
@@ -668,6 +743,13 @@ impl Graph {
             let start = offsets[i] as usize;
             let end = offsets[i + 1] as usize;
             neighbors[start..end].sort_unstable_by_key(|n| n.node);
+            for pair in neighbors[start..end].windows(2) {
+                if pair[0].node == pair[1].node {
+                    return Err(GraphError::ParallelEdge {
+                        endpoints: [i as u32, pair[0].node.0],
+                    });
+                }
+            }
         }
 
         let endpoints: Vec<[NodeId; 2]> = edges
@@ -678,109 +760,14 @@ impl Graph {
             })
             .collect();
 
-        Csr {
+        Ok(Csr {
             offsets,
             neighbors,
             endpoints,
             node_count,
             edge_count,
-        }
-    }
-}
-
-/// The source represented by a node in a [`SubdividedGraph`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SubdivisionNodeSource {
-    Node(NodeId),
-    Edge(EdgeId),
-}
-
-/// A graph in which every source edge has been replaced by a two-edge path.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubdividedGraph {
-    graph: Graph,
-    source_node_count: usize,
-    source_edge_count: usize,
-}
-
-impl SubdividedGraph {
-    pub fn graph(&self) -> &Graph {
-        &self.graph
-    }
-
-    /// Return the source node or edge represented by a subdivision node.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `node` is not in the subdivided graph.
-    pub fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
-        assert!(
-            self.graph.contains_node(node),
-            "subdivision node {} out of range",
-            node.0
-        );
-        if node.index() < self.source_node_count {
-            SubdivisionNodeSource::Node(node)
-        } else {
-            SubdivisionNodeSource::Edge(EdgeId((node.index() - self.source_node_count) as u32))
-        }
-    }
-
-    /// Return the subdivision node representing a source node or edge.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the source id is not in the source graph.
-    pub fn node_of(&self, source: SubdivisionNodeSource) -> NodeId {
-        match source {
-            SubdivisionNodeSource::Node(node) => {
-                assert!(
-                    node.index() < self.source_node_count,
-                    "source node {} out of range",
-                    node.0
-                );
-                node
-            }
-            SubdivisionNodeSource::Edge(edge) => {
-                assert!(
-                    edge.index() < self.source_edge_count,
-                    "source edge {} out of range",
-                    edge.0
-                );
-                NodeId((self.source_node_count + edge.index()) as u32)
-            }
-        }
-    }
-
-    /// Return the source edge represented by a subdivision incidence edge.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `incidence` is not in the subdivided graph.
-    pub fn edge_source(&self, incidence: EdgeId) -> EdgeId {
-        assert!(
-            self.graph.contains_edge(incidence),
-            "subdivision edge {} out of range",
-            incidence.0
-        );
-        EdgeId((incidence.index() / 2) as u32)
-    }
-
-    /// Return the two subdivision incidence edges created from a source edge.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `edge` is not in the source graph.
-    pub fn incidence_edges_of(&self, edge: EdgeId) -> [EdgeId; 2] {
-        assert!(
-            edge.index() < self.source_edge_count,
-            "source edge {} out of range",
-            edge.0
-        );
-        [
-            EdgeId((2 * edge.index()) as u32),
-            EdgeId((2 * edge.index() + 1) as u32),
-        ]
+            max_degree,
+        })
     }
 }
 
@@ -829,7 +816,6 @@ mod tests {
         let g = Graph::default();
         assert_eq!(g.node_count(), 0);
         assert_eq!(g.edge_count(), 0);
-        assert!(g.is_dense());
     }
 
     #[rstest]
@@ -846,12 +832,11 @@ mod tests {
         let g = Graph::new(node_count, &edges);
         assert_eq!(g.node_count(), expected_nodes);
         assert_eq!(g.edge_count(), expected_edges);
-        assert!(g.is_dense());
     }
 
     #[rstest]
     #[case::empty(0, vec![])]
-    #[case::parallel_edges(3, vec![[0, 1], [1, 2], [0, 1]])]
+    #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]])]
     fn test_graph_hash(#[case] node_count: usize, #[case] edges: Vec<[u32; 2]>) {
         let left = Graph::new(node_count, &edges);
         let right = Graph::new(node_count, &edges);
@@ -860,19 +845,27 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(0, &[], true)]
-    #[case::isolated(3, &[], true)]
-    #[case::simple(3, &[[0, 1], [1, 2]], true)]
-    #[case::looped(1, &[[0, 0]], false)]
-    #[case::parallel(2, &[[0, 1], [0, 1]], false)]
-    #[case::reverse_parallel(2, &[[0, 1], [1, 0]], false)]
-    #[case::mixed(4, &[[0, 1], [1, 2], [2, 2], [1, 3], [3, 1]], false)]
-    fn test_graph_is_simple(
+    #[case::first_out_of_bounds(2, &[[2, 0]], GraphError::NodeOutOfBounds { node: 2, node_count: 2 })]
+    #[case::second_out_of_bounds(2, &[[0, 2]], GraphError::NodeOutOfBounds { node: 2, node_count: 2 })]
+    #[case::out_of_bounds_loop(2, &[[2, 2]], GraphError::NodeOutOfBounds { node: 2, node_count: 2 })]
+    #[case::self_loop(2, &[[1, 1]], GraphError::SelfLoop { node: 1 })]
+    #[case::parallel(3, &[[0, 1], [1, 2], [0, 1]], GraphError::ParallelEdge { endpoints: [0, 1] })]
+    #[case::reverse_parallel(3, &[[2, 0], [0, 2]], GraphError::ParallelEdge { endpoints: [0, 2] })]
+    fn test_graph_try_new_error(
         #[case] node_count: usize,
         #[case] edges: &[[u32; 2]],
-        #[case] expected: bool,
+        #[case] expected: GraphError,
     ) {
-        assert_eq!(Graph::new(node_count, edges).is_simple(), expected);
+        assert_eq!(Graph::try_new(node_count, edges), Err(expected));
+    }
+
+    #[rstest]
+    #[case::out_of_bounds(2, &[[2, 0]])]
+    #[case::self_loop(1, &[[0, 0]])]
+    #[case::parallel(2, &[[0, 1], [1, 0]])]
+    #[should_panic]
+    fn test_graph_new_error(#[case] node_count: usize, #[case] edges: &[[u32; 2]]) {
+        Graph::new(node_count, edges);
     }
 
     #[test]
@@ -884,6 +877,47 @@ mod tests {
         assert_eq!(g.neighbors(NodeId(0)).len(), 2);
         assert_eq!(g.neighbors(NodeId(1))[0].node, NodeId(0));
         assert_eq!(g.neighbors(NodeId(2))[0].node, NodeId(0));
+    }
+
+    #[rstest]
+    #[case::empty(0, &[], 0)]
+    #[case::isolated_nodes(3, &[], 0)]
+    #[case::single_edge(2, &[[0, 1]], 1)]
+    #[case::path(4, &[[0, 1], [1, 2], [2, 3]], 2)]
+    #[case::star(5, &[[0, 1], [0, 2], [0, 3], [0, 4]], 4)]
+    fn test_graph_max_degree(
+        #[case] node_count: usize,
+        #[case] edges: &[[u32; 2]],
+        #[case] expected: usize,
+    ) {
+        assert_eq!(Graph::new(node_count, edges).max_degree(), expected);
+    }
+
+    #[rstest]
+    fn test_graph_max_degree_mutation() {
+        let mut graph = Graph::new(3, &[[0, 1], [0, 2]]);
+        assert_eq!(graph.max_degree(), 2);
+
+        graph.add_node();
+        assert_eq!(graph.max_degree(), 2);
+
+        graph.add_edge(NodeId(0), NodeId(3));
+        assert_eq!(graph.max_degree(), 3);
+
+        let before_remove = graph.clone();
+        let compaction = graph.tracked_remove_cascading(vec![NodeId(0)], vec![]);
+        assert_eq!(graph.max_degree(), 0);
+        assert_eq!(before_remove.max_degree(), 3);
+
+        graph.restore(
+            &compaction,
+            &[
+                (EdgeId(0), [NodeId(0), NodeId(1)]),
+                (EdgeId(1), [NodeId(0), NodeId(2)]),
+                (EdgeId(2), [NodeId(0), NodeId(3)]),
+            ],
+        );
+        assert_eq!(graph.max_degree(), 3);
     }
 
     #[rstest]
@@ -915,8 +949,6 @@ mod tests {
     #[case::rotated_ring(&[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], &[1, 2, 3, 4, 5, 0], vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5)])]
     #[case::unordered_subset(&[[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]], &[2, 0, 3], vec![EdgeId(2), EdgeId(3), EdgeId(4)])]
     #[case::repeated_nodes(&[[0, 1], [1, 2], [0, 2]], &[2, 0, 2, 1, 0], vec![EdgeId(0), EdgeId(1), EdgeId(2)])]
-    #[case::self_loops(&[[0, 0], [0, 1], [1, 1], [0, 0]], &[0, 0], vec![EdgeId(0), EdgeId(3)])]
-    #[case::parallel_edges(&[[0, 1], [1, 0], [1, 2]], &[1, 0, 1], vec![EdgeId(0), EdgeId(1)])]
     fn test_graph_induced_edges(
         #[case] edges: &[[u32; 2]],
         #[case] nodes: &[u32],
@@ -1008,88 +1040,6 @@ mod tests {
         assert_eq!(extracted.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
     }
 
-    #[rstest]
-    #[case::empty(0, &[], 0, &[])]
-    #[case::isolated(3, &[], 3, &[])]
-    #[case::path(
-        3,
-        &[[0, 1], [1, 2]],
-        5,
-        &[[0, 3], [3, 1], [1, 4], [4, 2]],
-    )]
-    #[case::cycle(
-        3,
-        &[[0, 1], [1, 2], [2, 0]],
-        6,
-        &[[0, 3], [3, 1], [1, 4], [4, 2], [0, 5], [5, 2]],
-    )]
-    #[case::parallel(
-        2,
-        &[[0, 1], [0, 1]],
-        4,
-        &[[0, 2], [2, 1], [0, 3], [3, 1]],
-    )]
-    #[case::self_loop(1, &[[0, 0]], 2, &[[0, 1], [1, 0]])]
-    fn test_graph_subdivide_edges(
-        #[case] node_count: usize,
-        #[case] edges: &[[u32; 2]],
-        #[case] expected_node_count: usize,
-        #[case] expected_edges: &[[u32; 2]],
-    ) {
-        let subdivision = Graph::new(node_count, edges).subdivide_edges();
-        assert_eq!(
-            subdivision.graph(),
-            &Graph::new(expected_node_count, expected_edges)
-        );
-    }
-
-    #[rstest]
-    #[case::first_node(NodeId(0), SubdivisionNodeSource::Node(NodeId(0)))]
-    #[case::last_node(NodeId(2), SubdivisionNodeSource::Node(NodeId(2)))]
-    #[case::first_edge(NodeId(3), SubdivisionNodeSource::Edge(EdgeId(0)))]
-    #[case::last_edge(NodeId(4), SubdivisionNodeSource::Edge(EdgeId(1)))]
-    fn test_subdivided_graph_node_source(
-        #[case] node: NodeId,
-        #[case] expected: SubdivisionNodeSource,
-    ) {
-        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
-        assert_eq!(subdivision.node_source(node), expected);
-    }
-
-    #[rstest]
-    #[case::first_node(SubdivisionNodeSource::Node(NodeId(0)), NodeId(0))]
-    #[case::last_node(SubdivisionNodeSource::Node(NodeId(2)), NodeId(2))]
-    #[case::first_edge(SubdivisionNodeSource::Edge(EdgeId(0)), NodeId(3))]
-    #[case::last_edge(SubdivisionNodeSource::Edge(EdgeId(1)), NodeId(4))]
-    fn test_subdivided_graph_node_of(
-        #[case] source: SubdivisionNodeSource,
-        #[case] expected: NodeId,
-    ) {
-        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
-        assert_eq!(subdivision.node_of(source), expected);
-    }
-
-    #[rstest]
-    #[case::first_first(EdgeId(0), EdgeId(0))]
-    #[case::first_second(EdgeId(1), EdgeId(0))]
-    #[case::second_first(EdgeId(2), EdgeId(1))]
-    #[case::second_second(EdgeId(3), EdgeId(1))]
-    fn test_subdivided_graph_edge_source(#[case] incidence: EdgeId, #[case] expected: EdgeId) {
-        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
-        assert_eq!(subdivision.edge_source(incidence), expected);
-    }
-
-    #[rstest]
-    #[case::first(EdgeId(0), [EdgeId(0), EdgeId(1)])]
-    #[case::second(EdgeId(1), [EdgeId(2), EdgeId(3)])]
-    fn test_subdivided_graph_incidence_edges_of(
-        #[case] edge: EdgeId,
-        #[case] expected: [EdgeId; 2],
-    ) {
-        let subdivision = Graph::new(3, &[[0, 1], [1, 2]]).subdivide_edges();
-        assert_eq!(subdivision.incidence_edges_of(edge), expected);
-    }
-
     #[test]
     fn test_graph_edge_endpoints() {
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
@@ -1104,20 +1054,6 @@ mod tests {
         assert_eq!(e, Some(EdgeId(0)));
         assert_eq!(g.find_edge(NodeId(1), NodeId(0)), Some(EdgeId(0)));
         assert_eq!(g.find_edge(NodeId(0), NodeId(2)), None);
-    }
-
-    #[test]
-    fn test_graph_self_loop() {
-        let g = Graph::new(1, &[[0, 0]]);
-        assert_eq!(g.degree(NodeId(0)), 2);
-        assert_eq!(g.edge_count(), 1);
-    }
-
-    #[test]
-    fn test_graph_parallel_edges() {
-        let g = Graph::new(2, &[[0, 1], [0, 1]]);
-        assert_eq!(g.edge_count(), 2);
-        assert_eq!(g.degree(NodeId(0)), 2);
     }
 
     #[rstest]
@@ -1179,9 +1115,40 @@ mod tests {
     }
 
     #[rstest]
+    #[case::out_of_bounds(NodeId(3), NodeId(0), GraphError::NodeOutOfBounds { node: 3, node_count: 3 })]
+    #[case::self_loop(NodeId(1), NodeId(1), GraphError::SelfLoop { node: 1 })]
+    #[case::parallel(NodeId(1), NodeId(0), GraphError::ParallelEdge { endpoints: [0, 1] })]
+    fn test_graph_try_add_edge_error(
+        #[case] first: NodeId,
+        #[case] second: NodeId,
+        #[case] expected: GraphError,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(3, &[[0, 1]]);
+        let before = graph.clone();
+        let retained = shared.then(|| graph.clone());
+        assert_eq!(graph.try_add_edge(first, second), Err(expected));
+        assert_eq!(graph, before);
+        assert!(Arc::ptr_eq(&graph.csr, &before.csr));
+        if let Some(retained) = retained {
+            assert_eq!(retained, before);
+        }
+    }
+
+    #[rstest]
+    #[case::out_of_bounds(NodeId(3), NodeId(0))]
+    #[case::self_loop(NodeId(1), NodeId(1))]
+    #[case::parallel(NodeId(1), NodeId(0))]
+    #[should_panic]
+    fn test_graph_add_edge_error(#[case] first: NodeId, #[case] second: NodeId) {
+        let mut graph = Graph::new(3, &[[0, 1]]);
+        graph.add_edge(first, second);
+    }
+
+    #[rstest]
     #[case::empty(0, &[], 3)]
     #[case::connected(3, &[[0, 1], [1, 2]], 2)]
-    #[case::loops_and_parallel_edges(2, &[[1, 1], [1, 0], [0, 1]], 1)]
+    #[case::reversed_edge(2, &[[1, 0]], 1)]
     fn test_graph_extend_nodes(
         #[case] node_count: usize,
         #[case] edges: &[[u32; 2]],
@@ -1215,7 +1182,7 @@ mod tests {
 
     #[rstest]
     #[case::isolated(3, &[], &[[2, 0], [1, 2]], &[[0, 2], [1, 2]])]
-    #[case::loops_and_parallel_edges(3, &[[0, 1]], &[[2, 2], [1, 0], [1, 2]], &[[0, 1], [2, 2], [0, 1], [1, 2]])]
+    #[case::triangle(3, &[[0, 1]], &[[2, 0], [1, 2]], &[[0, 1], [0, 2], [1, 2]])]
     fn test_graph_extend_edges(
         #[case] node_count: usize,
         #[case] edges: &[[u32; 2]],
@@ -1252,10 +1219,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(0, &[], 3, &[[2, 1], [0, 0]], &[[1, 2], [0, 0]])]
+    #[case::empty(0, &[], 3, &[[2, 1], [0, 2]], &[[1, 2], [0, 2]])]
     #[case::connected(3, &[[0, 1]], 2, &[[4, 2], [3, 4]], &[[0, 1], [2, 4], [3, 4]])]
     #[case::nodes_only(2, &[[1, 0]], 2, &[], &[[0, 1]])]
-    #[case::edges_only(2, &[[0, 1]], 0, &[[1, 0], [1, 1]], &[[0, 1], [0, 1], [1, 1]])]
+    #[case::edges_only(3, &[[0, 1]], 0, &[[2, 0], [1, 2]], &[[0, 1], [0, 2], [1, 2]])]
     fn test_graph_extend(
         #[case] node_count: usize,
         #[case] edges: &[[u32; 2]],
@@ -1299,21 +1266,72 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first([NodeId(2), NodeId(0)])]
-    #[case::second([NodeId(0), NodeId(2)])]
-    #[should_panic]
-    fn test_graph_extend_edges_error(#[case] edge: [NodeId; 2]) {
-        let mut graph = Graph::new(2, &[]);
-        graph.extend_edges(&[edge]);
+    #[case::first_out_of_bounds(&[[NodeId(3), NodeId(0)]], GraphError::NodeOutOfBounds { node: 3, node_count: 3 })]
+    #[case::second_out_of_bounds(&[[NodeId(0), NodeId(3)]], GraphError::NodeOutOfBounds { node: 3, node_count: 3 })]
+    #[case::self_loop(&[[NodeId(1), NodeId(2)], [NodeId(2), NodeId(2)]], GraphError::SelfLoop { node: 2 })]
+    #[case::parallel_existing(&[[NodeId(1), NodeId(0)]], GraphError::ParallelEdge { endpoints: [0, 1] })]
+    #[case::parallel_in_batch(&[[NodeId(1), NodeId(2)], [NodeId(2), NodeId(1)]], GraphError::ParallelEdge { endpoints: [1, 2] })]
+    fn test_graph_try_extend_edges_error(
+        #[case] edges: &[[NodeId; 2]],
+        #[case] expected: GraphError,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(3, &[[0, 1]]);
+        let before = graph.clone();
+        let retained = shared.then(|| graph.clone());
+        assert_eq!(graph.try_extend_edges(edges), Err(expected));
+        assert_eq!(graph, before);
+        assert!(Arc::ptr_eq(&graph.csr, &before.csr));
+        if let Some(retained) = retained {
+            assert_eq!(retained, before);
+        }
     }
 
     #[rstest]
-    #[case::first([NodeId(3), NodeId(0)])]
-    #[case::second([NodeId(0), NodeId(3)])]
+    #[case::first(&[[NodeId(2), NodeId(0)]])]
+    #[case::second(&[[NodeId(0), NodeId(2)]])]
+    #[case::self_loop(&[[NodeId(1), NodeId(1)]])]
+    #[case::parallel_existing(&[[NodeId(1), NodeId(0)]])]
+    #[case::parallel_in_batch(&[[NodeId(0), NodeId(1)], [NodeId(0), NodeId(1)]])]
     #[should_panic]
-    fn test_graph_extend_error(#[case] edge: [NodeId; 2]) {
-        let mut graph = Graph::new(2, &[]);
-        graph.extend(1, &[edge]);
+    fn test_graph_extend_edges_error(#[case] edges: &[[NodeId; 2]]) {
+        let mut graph = Graph::new(2, &[[0, 1]]);
+        graph.extend_edges(edges);
+    }
+
+    #[rstest]
+    #[case::first_out_of_bounds(1, &[[NodeId(3), NodeId(0)]], GraphError::NodeOutOfBounds { node: 3, node_count: 3 })]
+    #[case::second_out_of_bounds(1, &[[NodeId(0), NodeId(3)]], GraphError::NodeOutOfBounds { node: 3, node_count: 3 })]
+    #[case::self_loop_new_node(1, &[[NodeId(2), NodeId(2)]], GraphError::SelfLoop { node: 2 })]
+    #[case::parallel_existing(1, &[[NodeId(0), NodeId(2)], [NodeId(1), NodeId(0)]], GraphError::ParallelEdge { endpoints: [0, 1] })]
+    #[case::parallel_in_batch(1, &[[NodeId(0), NodeId(2)], [NodeId(2), NodeId(0)]], GraphError::ParallelEdge { endpoints: [0, 2] })]
+    fn test_graph_try_extend_error(
+        #[case] node_count: usize,
+        #[case] edges: &[[NodeId; 2]],
+        #[case] expected: GraphError,
+        #[values(false, true)] shared: bool,
+    ) {
+        let mut graph = Graph::new(2, &[[0, 1]]);
+        let before = graph.clone();
+        let retained = shared.then(|| graph.clone());
+        assert_eq!(graph.try_extend(node_count, edges), Err(expected));
+        assert_eq!(graph, before);
+        assert!(Arc::ptr_eq(&graph.csr, &before.csr));
+        if let Some(retained) = retained {
+            assert_eq!(retained, before);
+        }
+    }
+
+    #[rstest]
+    #[case::first(1, &[[NodeId(3), NodeId(0)]])]
+    #[case::second(1, &[[NodeId(0), NodeId(3)]])]
+    #[case::self_loop(1, &[[NodeId(2), NodeId(2)]])]
+    #[case::parallel_existing(1, &[[NodeId(1), NodeId(0)]])]
+    #[case::parallel_in_batch(1, &[[NodeId(0), NodeId(2)], [NodeId(2), NodeId(0)]])]
+    #[should_panic]
+    fn test_graph_extend_error(#[case] node_count: usize, #[case] edges: &[[NodeId; 2]]) {
+        let mut graph = Graph::new(2, &[[0, 1]]);
+        graph.extend(node_count, edges);
     }
 
     #[rstest]
@@ -1346,11 +1364,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::isolated(vec![NodeId(6)], vec![], Graph::new(6, &[[0, 1], [1, 2], [2, 2], [2, 3], [2, 3], [3, 4]]))]
-    #[case::middle(vec![NodeId(2)], vec![EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4)], Graph::new(6, &[[0, 1], [2, 3]]))]
-    #[case::parallel_edge(vec![], vec![EdgeId(3)], Graph::new(7, &[[0, 1], [1, 2], [2, 2], [2, 3], [3, 4]]))]
-    #[case::self_loop(vec![], vec![EdgeId(2)], Graph::new(7, &[[0, 1], [1, 2], [2, 3], [2, 3], [3, 4]]))]
-    #[case::unordered_duplicates(vec![NodeId(6), NodeId(2), NodeId(2)], vec![EdgeId(4), EdgeId(1), EdgeId(3), EdgeId(2), EdgeId(4)], Graph::new(5, &[[0, 1], [2, 3]]))]
+    #[case::isolated(vec![NodeId(6)], vec![], Graph::new(6, &[[0, 1], [1, 2], [2, 4], [2, 3], [0, 3], [3, 4]]))]
+    #[case::middle(vec![NodeId(2)], vec![EdgeId(1), EdgeId(2), EdgeId(3)], Graph::new(6, &[[0, 1], [0, 2], [2, 3]]))]
+    #[case::edge(vec![], vec![EdgeId(3)], Graph::new(7, &[[0, 1], [1, 2], [2, 4], [0, 3], [3, 4]]))]
+    #[case::chord(vec![], vec![EdgeId(2)], Graph::new(7, &[[0, 1], [1, 2], [2, 3], [0, 3], [3, 4]]))]
+    #[case::unordered_duplicates(vec![NodeId(6), NodeId(2), NodeId(2)], vec![EdgeId(3), EdgeId(1), EdgeId(2), EdgeId(3)], Graph::new(5, &[[0, 1], [0, 2], [2, 3]]))]
     #[case::all(vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5), NodeId(6)], vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3), EdgeId(4), EdgeId(5)], Graph::default())]
     fn test_graph_tracked_remove(
         #[case] nodes: Vec<NodeId>,
@@ -1358,7 +1376,7 @@ mod tests {
         #[case] expected: Graph,
         #[values(false, true)] shared: bool,
     ) {
-        let endpoints = [[0, 1], [1, 2], [2, 2], [2, 3], [3, 2], [3, 4]];
+        let endpoints = [[0, 1], [1, 2], [2, 4], [2, 3], [0, 3], [3, 4]];
         let mut plain = Graph::new(7, &endpoints);
         let mut witnessed = Graph::new(7, &endpoints);
         let retained = shared.then(|| (plain.clone(), witnessed.clone()));
@@ -1380,7 +1398,7 @@ mod tests {
     #[rstest]
     #[case::empty(Graph::default())]
     #[case::isolates(Graph::new(3, &[]))]
-    #[case::multigraph(Graph::new(4, &[[0, 1], [1, 0], [2, 2]]))]
+    #[case::connected(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]))]
     fn test_graph_tracked_remove_identity(#[case] mut graph: Graph) {
         let original = graph.clone();
         let expected = GraphCompaction::new(
@@ -1399,8 +1417,6 @@ mod tests {
     #[case::node(Graph::new(2, &[[0, 1]]), vec![NodeId(2)], vec![])]
     #[case::edge(Graph::new(2, &[[0, 1]]), vec![], vec![EdgeId(1)])]
     #[case::dangling(Graph::new(3, &[[0, 1], [1, 2]]), vec![NodeId(1)], vec![EdgeId(0)])]
-    #[case::self_loop(Graph::new(2, &[[1, 1]]), vec![NodeId(1)], vec![])]
-    #[case::parallel_edge(Graph::new(2, &[[0, 1], [1, 0]]), vec![NodeId(0)], vec![EdgeId(0)])]
     #[should_panic]
     fn test_graph_remove_error(
         #[case] mut graph: Graph,
@@ -1521,9 +1537,9 @@ mod tests {
     #[rstest]
     #[case::isolated_nodes(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![], vec![], Graph::new(3, &[]))]
     #[case::node_only(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![], vec![], Graph::new(4, &[[1, 3]]))]
-    #[case::edge_only(Graph::new(3, &[[1, 2]]), vec![], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(0), NodeId(0)]), (EdgeId(2), [NodeId(2), NodeId(1)]), (EdgeId(0), [NodeId(1), NodeId(1)])], Graph::new(3, &[[1, 1], [1, 2], [1, 2], [0, 0]]))]
-    #[case::mixed(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(2), NodeId(1)]), (EdgeId(2), [NodeId(3), NodeId(3)]), (EdgeId(0), [NodeId(1), NodeId(2)])], Graph::new(4, &[[1, 2], [1, 3], [3, 3], [1, 2]]))]
-    #[case::all(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1), EdgeId(2)], vec![(EdgeId(2), [NodeId(2), NodeId(0)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(1), [NodeId(1), NodeId(1)])], Graph::new(3, &[[0, 2], [1, 1], [0, 2]]))]
+    #[case::edge_only(Graph::new(3, &[[1, 2]]), vec![], vec![EdgeId(0), EdgeId(2)], vec![(EdgeId(2), [NodeId(2), NodeId(0)]), (EdgeId(0), [NodeId(1), NodeId(0)])], Graph::new(3, &[[0, 1], [1, 2], [0, 2]]))]
+    #[case::mixed(Graph::new(2, &[[0, 1]]), vec![NodeId(0), NodeId(2)], vec![EdgeId(0), EdgeId(2), EdgeId(3)], vec![(EdgeId(3), [NodeId(3), NodeId(0)]), (EdgeId(2), [NodeId(2), NodeId(3)]), (EdgeId(0), [NodeId(1), NodeId(2)])], Graph::new(4, &[[1, 2], [1, 3], [2, 3], [0, 3]]))]
+    #[case::all(Graph::new(0, &[]), vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0), EdgeId(1), EdgeId(2)], vec![(EdgeId(2), [NodeId(2), NodeId(1)]), (EdgeId(0), [NodeId(0), NodeId(2)]), (EdgeId(1), [NodeId(1), NodeId(0)])], Graph::new(3, &[[0, 2], [0, 1], [1, 2]]))]
     fn test_graph_restore(
         #[case] mut graph: Graph,
         #[case] nodes: Vec<NodeId>,
@@ -1554,7 +1570,7 @@ mod tests {
     #[rstest]
     #[case::empty(Graph::new(0, &[]))]
     #[case::isolates(Graph::new(3, &[]))]
-    #[case::multigraph(Graph::new(4, &[[0, 1], [1, 0], [2, 2]]))]
+    #[case::connected(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]))]
     fn test_graph_restore_identity(#[case] mut graph: Graph) {
         let original = graph.clone();
         let compaction = GraphCompaction::new(
@@ -1643,9 +1659,19 @@ mod tests {
         vec![],
     )]
     #[case::survivor_edge_domain(
-        Graph::new(1, &[[0, 0]]),
-        GraphCompaction::new(Compaction::identity(1), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::identity(2), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
+        vec![(EdgeId(0), [NodeId(0), NodeId(1)])],
+    )]
+    #[case::saved_self_loop(
+        Graph::new(2, &[]),
+        GraphCompaction::new(Compaction::identity(2), Compaction::new(1, vec![EdgeId(0)]).unwrap()),
         vec![(EdgeId(0), [NodeId(0), NodeId(0)])],
+    )]
+    #[case::saved_parallel_edge(
+        Graph::new(2, &[[0, 1]]),
+        GraphCompaction::new(Compaction::identity(2), Compaction::new(2, vec![EdgeId(1)]).unwrap()),
+        vec![(EdgeId(1), [NodeId(1), NodeId(0)])],
     )]
     fn test_graph_restore_malformed(
         #[case] mut graph: Graph,

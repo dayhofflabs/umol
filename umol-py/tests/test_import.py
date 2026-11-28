@@ -152,6 +152,9 @@ PUBLIC_EXPORTS = frozenset(
     ParseError
     PatternFingerprintConfig
     Permutation
+    PreparedReaction
+    PreparedSubstructureHost
+    PreparedSubstructurePattern
     ReactionApplicationConfig
     Reaction
     ReactionCombinedFingerprint
@@ -404,7 +407,9 @@ def test_deferred_member(owner, name):
         (umol.Molecule.combine_from, "(self, /, other)"),
         (umol.Molecule.combine_all, "(molecules)"),
         (umol.Molecule.react, "(self, /, reaction, *, config=None)"),
+        (umol.Molecule.react_prepared, "(self, /, reaction)"),
         (umol.Molecule.react_all, "(reactants, reaction, *, config=None)"),
+        (umol.Molecule.react_all_prepared, "(reactants, reaction)"),
         (umol.Molecule.enumerate_stereo, "(self, /, model, sites, *, config=None)"),
         (umol.Molecule.split, "(self, /)"),
         (umol.Molecule.tracked_split, "(self, /)"),
@@ -426,6 +431,34 @@ def test_deferred_member(owner, name):
             umol.Molecule.substructure_matches,
             "(self, /, host, *, config=None)",
         ),
+        (
+            umol.Molecule.has_substructure_match,
+            "(self, /, host, *, config=None)",
+        ),
+        (
+            umol.Molecule.first_substructure_match,
+            "(self, /, host, *, config=None)",
+        ),
+        (
+            umol.Molecule.count_substructure_matches,
+            "(self, /, host, *, config=None)",
+        ),
+        (umol.PreparedSubstructureHost.molecule, "(self, /)"),
+        (
+            umol.PreparedSubstructureHost.react,
+            "(self, /, reaction, *, config=None)",
+        ),
+        (umol.PreparedSubstructureHost.react_prepared, "(self, /, reaction)"),
+        (umol.PreparedSubstructurePattern.pattern, "(self, /)"),
+        (umol.PreparedSubstructurePattern.matches, "(self, /, host)"),
+        (umol.PreparedSubstructurePattern.has_match, "(self, /, host)"),
+        (umol.PreparedSubstructurePattern.first_match, "(self, /, host)"),
+        (umol.PreparedSubstructurePattern.count_matches, "(self, /, host)"),
+        (umol.PreparedReaction.reaction, "(self, /)"),
+        (umol.PreparedReaction.apply, "(self, /, host)"),
+        (umol.PreparedReaction.tracked_apply, "(self, /, host)"),
+        (umol.PreparedReaction.apply_to_reaction, "(self, /, host)"),
+        (umol.PreparedReaction.apply_to_reaction_span, "(self, /, host)"),
         (umol.Molecule.hashed_fingerprint, "(self, /, *, config)"),
         (umol.Molecule.counted_hashed_fingerprint, "(self, /, *, config)"),
         (umol.Molecule.pattern_fingerprint, "(self, /, *, config=None)"),

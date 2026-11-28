@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "Vendored native foundation for umol's nauty integration."
 license = "Apache-2.0"
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 keywords = ["graph", "isomorphism", "canonicalization", "nauty", "ffi"]
 links = "umol_nauty"
 

@@ -112,11 +112,16 @@ import umol
         (
             umol.ReactionApplicationConfig,
             "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis, "
-            "relevant_cycle_algorithm=Ellipsis)",
+            "relevant_cycle_algorithm=Ellipsis, automorphism_algorithm=Ellipsis, "
+            "reduce_pattern_symmetry=False, reduce_host_symmetry=False)",
         ),
         (
             umol.ReactionCompositionConfig,
             "(*, common_subgraph_enumeration_algorithm=Ellipsis)",
+        ),
+        (
+            umol.PreparedReaction,
+            "(reaction, *, config=None)",
         ),
         (
             umol.CanonicalizeConfig,
@@ -125,7 +130,16 @@ import umol
         (
             umol.SubstructureSearchConfig,
             "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis, "
-            "relevant_cycle_algorithm=Ellipsis)",
+            "relevant_cycle_algorithm=Ellipsis, automorphism_algorithm=Ellipsis, "
+            "reduce_pattern_symmetry=False, reduce_host_symmetry=False)",
+        ),
+        (
+            umol.PreparedSubstructureHost,
+            "(molecule)",
+        ),
+        (
+            umol.PreparedSubstructurePattern,
+            "(pattern, *, config=None)",
         ),
     ],
 )

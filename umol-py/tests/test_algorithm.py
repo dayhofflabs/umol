@@ -18,12 +18,6 @@ from umol import (
     "algorithm,equal,expected_repr",
     [
         pytest.param(
-            AutomorphismAlgorithm.Nauty(),
-            AutomorphismAlgorithm.Nauty(),
-            "AutomorphismAlgorithm.Nauty()",
-            id="automorphism-nauty",
-        ),
-        pytest.param(
             ConnectedComponentsAlgorithm.Bfs(),
             ConnectedComponentsAlgorithm.Bfs(),
             "ConnectedComponentsAlgorithm.Bfs()",
@@ -57,6 +51,31 @@ from umol import (
 )
 def test_algorithm_value(algorithm, equal, expected_repr):
     assert algorithm == equal
+    assert repr(algorithm) == expected_repr
+
+
+@pytest.mark.parametrize(
+    "algorithm,equal,unequal,expected_repr",
+    [
+        pytest.param(
+            AutomorphismAlgorithm.Nauty(),
+            AutomorphismAlgorithm.Nauty(),
+            AutomorphismAlgorithm.TrailIr(),
+            "AutomorphismAlgorithm.Nauty()",
+            id="nauty",
+        ),
+        pytest.param(
+            AutomorphismAlgorithm.TrailIr(),
+            AutomorphismAlgorithm.TrailIr(),
+            AutomorphismAlgorithm.Nauty(),
+            "AutomorphismAlgorithm.TrailIr()",
+            id="trail-ir",
+        ),
+    ],
+)
+def test_automorphism_algorithm_value(algorithm, equal, unequal, expected_repr):
+    assert algorithm == equal
+    assert algorithm != unequal
     assert repr(algorithm) == expected_repr
 
 
@@ -141,30 +160,6 @@ def test_substructure_match_algorithm_value(algorithm, equal, unequal, expected_
     "algorithm,equal,expected_repr",
     [
         pytest.param(
-            SubgraphIsomorphismAlgorithm.Vf2(),
-            SubgraphIsomorphismAlgorithm.Vf2(),
-            "SubgraphIsomorphismAlgorithm.Vf2()",
-            id="vf2",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.Ullmann(),
-            SubgraphIsomorphismAlgorithm.Ullmann(),
-            "SubgraphIsomorphismAlgorithm.Ullmann()",
-            id="ullmann",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.Ri(),
-            SubgraphIsomorphismAlgorithm.Ri(),
-            "SubgraphIsomorphismAlgorithm.Ri()",
-            id="ri",
-        ),
-        pytest.param(
-            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
-            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
-            "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
-            id="arc-match",
-        ),
-        pytest.param(
             SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
             SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
             "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
@@ -175,6 +170,18 @@ def test_substructure_match_algorithm_value(algorithm, equal, unequal, expected_
             SubgraphIsomorphismAlgorithm.RayKirsch(),
             "SubgraphIsomorphismAlgorithm.RayKirsch()",
             id="ray-kirsch",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.BitsetRi(),
+            SubgraphIsomorphismAlgorithm.BitsetRi(),
+            "SubgraphIsomorphismAlgorithm.BitsetRi()",
+            id="bitset-ri",
+        ),
+        pytest.param(
+            SubgraphIsomorphismAlgorithm.Glasgow(),
+            SubgraphIsomorphismAlgorithm.Glasgow(),
+            "SubgraphIsomorphismAlgorithm.Glasgow()",
+            id="glasgow",
         ),
     ],
 )

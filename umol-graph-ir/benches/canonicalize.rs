@@ -14,19 +14,18 @@ use umol_graph_ir::ir::{
     AromaticSystemConstraintForm, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
     AtomDelta, AtomFieldChange, AtomForm, AtomId, BondConstraintForm, BondForm, BondId,
     BooleanForm, Canonicalize, CanonicalizeContext, Constraint, DativeBondConstraintForm,
-    DativeBondForm, DativeBondId, Delta, Deltas, ElementForm, FrameTransport, IncidenceLevel,
-    Molecule, MoleculeConstraint, MoleculeEntries, MoleculeRemapping,
-    MulticenterBondConstraintForm, MulticenterBondForm, MulticenterBondId,
-    NoncovalentBondConstraintForm, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind,
-    NumForm, Reaction, Reframe, StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange,
-    StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta, StereoBondFieldChange,
-    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandKind, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity,
-    TopicityForm, TopicityRelationForm,
+    DativeBondForm, DativeBondId, Delta, Deltas, ElementForm, FrameTransport, Molecule,
+    MoleculeConstraint, MoleculeEntries, MoleculeRemapping, MulticenterBondConstraintForm,
+    MulticenterBondForm, MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondForm,
+    NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, Reframe, StereoAtomConstraintForm,
+    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondDelta, StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, StereoTerm,
+    Stereogenicity, StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 use umol_perm::Permutation;
 
-const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
+const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::TrailIr;
 
 struct CorpusCase {
     name: &'static str,
@@ -873,24 +872,6 @@ fn inline_constraint_corpus() -> Vec<CorpusCase> {
         .into()
 }
 
-const LEVELS: [IncidenceLevel; 3] = [
-    IncidenceLevel::Topology,
-    IncidenceLevel::Constitution,
-    IncidenceLevel::Full,
-];
-
-fn level_name(level: IncidenceLevel) -> &'static str {
-    match level {
-        IncidenceLevel::Topology => "topology",
-        IncidenceLevel::Constitution => "constitution",
-        IncidenceLevel::Full => "full",
-    }
-}
-
-fn graph_size(nodes: usize, edges: usize) -> String {
-    format!("n{nodes}_e{edges}")
-}
-
 fn reverse_remapping(molecule: &Molecule) -> MoleculeRemapping {
     fn reverse<Id>(count: usize) -> Remapping<Id>
     where
@@ -959,28 +940,6 @@ fn modification(lhs: Molecule) -> Reaction {
         }));
     }
     Reaction::new(lhs, Deltas::from_iter(deltas))
-}
-
-fn bench_incidence_construction(c: &mut Criterion) {
-    let corpus = corpus();
-
-    for level in LEVELS {
-        let mut group = c.benchmark_group(format!(
-            "canonicalize/incidence_construction/{}",
-            level_name(level)
-        ));
-        for case in &corpus {
-            let incidence = case.molecule.incidence_graph(level);
-            let size = graph_size(
-                incidence.graph().node_count(),
-                incidence.graph().edge_count(),
-            );
-            group.bench_function(BenchmarkId::new(case.name, size), |b| {
-                b.iter(|| black_box(&case.molecule).incidence_graph(level))
-            });
-        }
-        group.finish();
-    }
 }
 
 fn bench_remapping(c: &mut Criterion) {
@@ -1798,7 +1757,6 @@ fn bench_canonical_eq_unequal(c: &mut Criterion) {
 
 criterion_group!(
     canonicalize,
-    bench_incidence_construction,
     bench_remapping,
     bench_canonicalize,
     bench_retained_scaling_cases,

@@ -6,6 +6,7 @@ Relates: [184](184-deltas-and-edits-2026-08-04.md),
 [213](213-editor-overlay-storage-2026-08-27.md),
 [181](181-python-boundary-ownership-2026-08-03.md),
 [239](239-kindless-stereo-removal-2026-10-17.md),
+[254](254-edge-colored-automorphisms-2026-11-26.md),
 [data-type guide](../docs/development/data-types.md),
 [integrity guide](../docs/development/integrity.md),
 [nomenclature guide](../docs/development/nomenclature.md),
@@ -2297,3 +2298,14 @@ S2d and its dependent surface/consumer changes. The stage order preserves the
 requested separation: primitives first, known duplicate work next, then two
 explicit cost decisions. No implementation choice is justified solely by a
 microbenchmark improvement or by uniformity of the interface.
+
+## Addendum (2026-11-26)
+
+Under [254](254-edge-colored-automorphisms-2026-11-26.md) (`S0b`), `ReactionSpan` enforces
+`ReactionSpanIntegrityError::ParallelBonds` on union-frame localized bond endpoints, and reaction
+application rejects rules containing both `BondDelta::Remove` and `BondDelta::Add` on the same
+unordered atom pair (`ApplyError::Inconsistent` / `ApplyPreconditionError::InconsistentReaction`).
+This supersedes the same-endpoint localized-bond `Remove + Add` replacement case recorded above;
+DPO internal-bond dangling checks and explicit overlay replacement identity (`AromaticSystem`,
+`StereoAtom`, `StereoBond`) remain intact. Follow-up delta normalization of bond `Remove + Add` is
+tracked in [255](255-reaction-span-bond-normalization-2026-11-26.md).

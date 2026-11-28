@@ -31,7 +31,7 @@ use crate::ops::validate::constraint::ConstraintInvariantsError;
 /// Site selection and algorithms for stereo addition.
 ///
 /// Default selects tetrahedral and cis/trans geometries, Constitutional and
-/// Configurational sites, and all topology sites. It uses Nauty,
+/// Configurational sites, and all topology sites. It uses TrailIr,
 /// RingConfig::default(), and up to 4096 assignment trials per site classification.
 ///
 /// Construction preserves the supplied selection without checking ids against
@@ -59,7 +59,7 @@ impl Default for AddStereoConfig {
                     StereogenicSiteKind::Configurational,
                 ])),
             },
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             ring_config: RingConfig::default(),
             max_classification_trials: GraphSymmetryConfig::default().max_classification_trials,
         }
@@ -212,7 +212,7 @@ impl RemoveStereoMode {
 /// Site selection, removal mode, and algorithm for stereo removal.
 ///
 /// Default accepts all configurations and leaves sites, kinds, and
-/// stereogenic_site_kinds unrestricted. It uses Nauty. One mode applies uniformly
+/// stereogenic_site_kinds unrestricted. It uses TrailIr. One mode applies uniformly
 /// to every selected site and kind.
 ///
 /// Construction preserves the supplied selection without checking ids against
@@ -232,7 +232,7 @@ impl Default for RemoveStereoConfig {
         Self {
             selection: StereoSelection::default(),
             mode: RemoveStereoMode::All,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             max_classification_trials: GraphSymmetryConfig::default().max_classification_trials,
         }
     }
@@ -462,7 +462,7 @@ impl Transformer for StereoRemover {
 /// Site selection and algorithm for stereo enumeration.
 ///
 /// Default selects tetrahedral and cis/trans kinds, all topology sites, and
-/// all stereogenic site kinds. It uses Nauty. Processing order is supplied
+/// all stereogenic site kinds. It uses TrailIr. Processing order is supplied
 /// separately from this configuration.
 ///
 /// Construction preserves the supplied selection without checking ids against
@@ -486,7 +486,7 @@ impl Default for EnumerateStereoConfig {
                 ])),
                 stereogenic_site_kinds: None,
             },
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
             max_classification_trials: GraphSymmetryConfig::default().max_classification_trials,
         }
     }
@@ -866,7 +866,7 @@ mod tests {
                         StereogenicSiteKind::Configurational
                     ])),
                 },
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
                 ring_config: RingConfig::default(),
                 max_classification_trials: 4096,
             },
@@ -1084,7 +1084,7 @@ mod tests {
                     stereogenic_site_kinds: None,
                 },
                 mode: RemoveStereoMode::All,
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
                 max_classification_trials: 4096,
             },
         );
@@ -1241,7 +1241,7 @@ mod tests {
                     ])),
                     stereogenic_site_kinds: None,
                 },
-                automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
                 max_classification_trials: 4096,
             },
         );

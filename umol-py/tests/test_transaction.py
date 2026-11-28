@@ -191,18 +191,22 @@ def test_molecule_editor_finish():
 
 @pytest.mark.parametrize("method", ["apply", "tracked_apply"])
 def test_molecule_editor_finish_error(method):
-    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
-    bond = molecule.bonds[0]
-    constraints = bond.constraints
+    molecule = Molecule.parse(
+        '{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}'
+    )
+    noncovalent = molecule.noncovalent_bonds[0]
+    constraints = noncovalent.constraints
     editor = molecule.edit()
     alias = editor
     edits = Edits()
-    edits.add_bond(0, 1, BondForm(1))
+    edits.add_noncovalent_bond(
+        (0, 1), NoncovalentBondForm(NoncovalentBondKind.Ionic)
+    )
     getattr(editor, method)(edits)
 
     with pytest.raises(
         InvalidStructureError,
-        match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
+        match=r"^noncovalent bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
     ):
         editor.finish()
     with pytest.raises(ConsumedError, match="^MoleculeEditor has been consumed$"):
@@ -210,9 +214,33 @@ def test_molecule_editor_finish_error(method):
     with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
         len(edits)
 
-    assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
-    assert bond.order == NumForm.Lit(1)
+    assert molecule == Molecule.parse(
+        '{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}'
+    )
     assert list(constraints) == []
+
+
+@pytest.mark.parametrize("method", ["apply", "tracked_apply"])
+@pytest.mark.parametrize(
+    ("endpoints", "message"),
+    [
+        ((0, 0), r"^bond 1: participant atom AtomId\(0\) is duplicated$"),
+        ((1, 0), r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$"),
+    ],
+    ids=["self_loop", "parallel_bond"],
+)
+def test_molecule_editor_apply_bond_integrity_error(method, endpoints, message):
+    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    editor = molecule.edit()
+    edits = Edits()
+    edits.add_bond(endpoints[0], endpoints[1], BondForm(2))
+
+    with pytest.raises(InvalidStructureError, match=message):
+        getattr(editor, method)(edits)
+    with pytest.raises(ConsumedError, match="^Edits has been consumed$"):
+        len(edits)
+
+    assert editor.finish() == molecule
 
 
 @pytest.mark.parametrize("method", ["finish", "apply", "tracked_apply"])
@@ -445,17 +473,26 @@ def test_molecule_transact_error(method, rollback_kwargs):
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])
 def test_molecule_transact_integrity(method, rollback_kwargs):
-    molecule = Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "1"]]}')
+    molecule = Molecule.parse(
+        '{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}'
+    )
     first = Edits()
-    first.add_bond(0, 1, BondForm(2))
-    second = Edits([Edit.RemoveTopology(atoms=[], bonds=[0])])
+    first.add_noncovalent_bond(
+        (0, 1), NoncovalentBondForm(NoncovalentBondKind.Ionic)
+    )
+    second = Edits()
+    second.remove_noncovalent_bonds([
+        (0, (0, 1), NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))
+    ])
 
     result = getattr(molecule, method)([first, second], **rollback_kwargs)
 
-    assert molecule == Molecule.parse('{:atoms ["C" "N"] :bonds [[0 1 "2"]]}')
+    assert molecule == Molecule.parse(
+        '{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Ion"}]}'
+    )
     if method == "tracked_transact":
         assert result.atoms == Correspondence([(0, 0), (1, 1)], 2, 2)
-        assert result.bonds == Correspondence([], 1, 1)
+        assert result.noncovalent_bonds == Correspondence([], 1, 1)
 
 
 @pytest.mark.parametrize("method", ["transact", "tracked_transact"])

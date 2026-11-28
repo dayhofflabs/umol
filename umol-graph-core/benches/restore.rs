@@ -29,7 +29,7 @@
 //! All non-identity native relation operations rebuild incidence.
 //!
 //! Combined fixtures undo graph removal and all five relation shapes in sequence. They include
-//! empty storage, loops, parallel edges, isolates, empty factors, full cascades, and two removals
+//! empty storage, isolates, empty factors, full cascades, and two removals
 //! undone in reverse order. Each undo restores the graph, survivor references, then saved rows.
 //! The native path includes every separate CSR/incidence rebuild. Correctness checks run in test
 //! mode; these fixtures do not introduce a weaker-contract reconstruction comparison.
@@ -142,18 +142,11 @@ fn graph(c: &mut Criterion) {
             let endpoints: Vec<_> = (0..count as u32)
                 .map(|row| {
                     if shared_references {
-                        if row % 4 == 0 {
-                            [0, 0]
-                        } else {
-                            [0, 1]
-                        }
+                        [0, row + 1]
+                    } else if row % 2 == 0 {
+                        [row, row + 1]
                     } else {
-                        match row % 4 {
-                            0 => [row, row],
-                            1 => [row - 1, row],
-                            2 => [row - 2, row - 1],
-                            _ => [row, row + 1],
-                        }
+                        [row, row + 2]
                     }
                 })
                 .collect();
@@ -1402,12 +1395,11 @@ fn sequence(c: &mut Criterion) {
         let node_count = if count == 0 { 0 } else { count + 1 };
         let endpoints: Vec<_> = (0..count as u32)
             .flat_map(|id| {
-                let next = (id + 1) % count as u32;
-                [
-                    [id, id],
-                    [id.min(next), id.max(next)],
-                    [id.min(next), id.max(next)],
-                ]
+                let n = count as u32;
+                [1, 2, 3].map(|step| {
+                    let other = (id + step) % n;
+                    [id.min(other), id.max(other)]
+                })
             })
             .collect();
         let fixed_entries: Vec<_> = (0..count)

@@ -1,7 +1,7 @@
 //! Storage restoration laws through the public API.
 //!
 //! [`Graph::restore`] is compared with an independently enumerated endpoint/adjacency model
-//! over multigraphs with up to 16 nodes and 40 edges. A separate producer roundtrip checks
+//! over simple graphs with up to 16 nodes and 40 edges. A separate producer roundtrip checks
 //! compatibility with cascading removal, including retained shared graphs. Generated malformed
 //! inputs independently vary compactions and saved entries to check freedom from panics.
 //!
@@ -34,12 +34,36 @@
 //! subsets, all nodes, all edges, and identity; participants retain labels and may reference either,
 //! both, or neither graph domain. Variable factors independently contain zero to four participants.
 
+use std::collections::HashSet;
+
 use proptest::prelude::*;
 use umol_graph_core::{
     Compaction, EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Graph,
     GraphCompaction, GraphCorrespondence, GraphRemapping, Neighbor, NodeId, ParticipantRefs,
     RelationId, RelationParticipant, VarRelationSet, VarVarBirelationSet,
 };
+
+fn simple_edges(node_count: usize, raw: Vec<(u32, u32)>) -> Vec<[u32; 2]> {
+    if node_count < 2 {
+        return Vec::new();
+    }
+    let mut seen = HashSet::new();
+    raw.into_iter()
+        .map(|(a, b)| [a % node_count as u32, b % node_count as u32])
+        .filter(|&[a, b]| a != b && seen.insert([a.min(b), a.max(b)]))
+        .collect()
+}
+
+fn simple_edge_flags(node_count: usize, raw: Vec<(u32, u32, bool)>) -> Vec<([u32; 2], bool)> {
+    if node_count < 2 {
+        return Vec::new();
+    }
+    let mut seen = HashSet::new();
+    raw.into_iter()
+        .map(|(a, b, remove)| ([a % node_count as u32, b % node_count as u32], remove))
+        .filter(|&([a, b], _)| a != b && seen.insert([a.min(b), a.max(b)]))
+        .collect()
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct References {
@@ -109,9 +133,7 @@ proptest! {
         node_removals in prop::collection::vec(any::<bool>(), 16),
         rotation in any::<usize>(),
     ) {
-        let edges: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b, remove)| ([a % node_count as u32, b % node_count as u32], remove))
-            .collect();
+        let edges = simple_edge_flags(node_count, raw_edges);
         let surviving_nodes: Vec<_> = (0..node_count)
             .filter(|&id| !node_removals[id]).map(NodeId::from).collect();
         let mut removed = Vec::new();
@@ -160,9 +182,7 @@ proptest! {
         raw_edges in prop::collection::vec((0u32..16, 0u32..16, any::<bool>()), 0..41),
         node_removals in prop::collection::vec(any::<bool>(), 16),
     ) {
-        let edges: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b, remove)| ([a % node_count as u32, b % node_count as u32], remove))
-            .collect();
+        let edges = simple_edge_flags(node_count, raw_edges);
         let endpoints: Vec<_> = edges.iter().map(|&(nodes, _)| nodes).collect();
         let original = Graph::new(node_count, &endpoints);
         let nodes: Vec<_> = (0..node_count).filter(|&id| node_removals[id])
@@ -193,8 +213,7 @@ proptest! {
         saved in prop::collection::vec((0u32..56, 0u32..32, 0u32..32), 0..57),
         shared in any::<bool>(),
     ) {
-        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let endpoints = simple_edges(node_count, raw_edges);
         let mut graph = Graph::new(node_count, &endpoints);
         let retained = shared.then(|| graph.clone());
         let compaction = GraphCompaction::new(
@@ -376,8 +395,7 @@ proptest! {
         raw_rows in prop::collection::vec(prop::array::uniform2((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>())), 0..17),
         removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
     ) {
-        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let endpoints = simple_edges(node_count, raw_edges);
         let mut graph = Graph::new(node_count, &endpoints);
         let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
             node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
@@ -612,8 +630,7 @@ proptest! {
         raw_rows in prop::collection::vec(prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5), 0..17),
         removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
     ) {
-        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let endpoints = simple_edges(node_count, raw_edges);
         let mut graph = Graph::new(node_count, &endpoints);
         let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
             node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
@@ -843,8 +860,7 @@ proptest! {
         raw_rows in prop::collection::vec((prop::array::uniform2((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>())), prop::array::uniform3((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()))), 0..17),
         removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
     ) {
-        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let endpoints = simple_edges(node_count, raw_edges);
         let mut graph = Graph::new(node_count, &endpoints);
         let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
             node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
@@ -1080,8 +1096,7 @@ proptest! {
         raw_rows in prop::collection::vec((prop::array::uniform2((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>())), prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5)), 0..17),
         removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
     ) {
-        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let endpoints = simple_edges(node_count, raw_edges);
         let mut graph = Graph::new(node_count, &endpoints);
         let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
             node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),
@@ -1317,8 +1332,7 @@ proptest! {
         raw_rows in prop::collection::vec((prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5), prop::collection::vec((prop::option::of(0usize..8), prop::option::of(0usize..16), any::<u8>()), 0..5)), 0..17),
         removals in prop::collection::vec((prop::collection::vec(any::<bool>(), 8), prop::collection::vec(any::<bool>(), 16), 0u8..4), 1..4),
     ) {
-        let endpoints: Vec<_> = raw_edges.into_iter().filter(|_| node_count > 0)
-            .map(|(a, b)| [a % node_count as u32, b % node_count as u32]).collect();
+        let endpoints = simple_edges(node_count, raw_edges);
         let mut graph = Graph::new(node_count, &endpoints);
         let participant = |(node, edge, label): (Option<usize>, Option<usize>, u8)| References {
             node: node.filter(|_| node_count > 0).map(|id| NodeId::from(id % node_count)),

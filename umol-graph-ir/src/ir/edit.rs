@@ -2482,7 +2482,10 @@ fn map_molecule_constraint_entities(
     }
 }
 
-fn collect_constraint_entities(constraint: &Constraint, entities: &mut BTreeSet<Entity>) {
+pub(crate) fn collect_constraint_entities(
+    constraint: &Constraint,
+    entities: &mut BTreeSet<Entity>,
+) {
     match constraint {
         Constraint::Atom(id, _) => {
             entities.insert(Entity::Atom(*id));

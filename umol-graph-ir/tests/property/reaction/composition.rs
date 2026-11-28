@@ -3,7 +3,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{
-    CommonSubgraphEnumerationAlgorithm, RelevantCycleEnumerationAlgorithm,
+    AutomorphismAlgorithm, CommonSubgraphEnumerationAlgorithm, RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
@@ -11,13 +11,16 @@ use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 use crate::strategies::*;
 
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
-const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
+const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::BitsetRi;
 const RELEVANT_CYCLE_ALGORITHM: RelevantCycleEnumerationAlgorithm =
     RelevantCycleEnumerationAlgorithm::Vismara;
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: MATCH_ALGORITHM,
     subgraph_isomorphism_algorithm: SUBISO_ALGORITHM,
     relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
+    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+    reduce_pattern_symmetry: false,
+    reduce_host_symmetry: false,
 };
 const COMPOSITION_ALGORITHM: CommonSubgraphEnumerationAlgorithm =
     CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking;

@@ -68,8 +68,9 @@ impl MoleculeEditor {
 
     /// Apply an edit batch to this editor, checking each edit's preconditions.
     ///
-    /// Returns None without checking molecule integrity or recording undo. Failure retains
-    /// completed edits and leaves the editor available; a transferred batch stays consumed.
+    /// Localized-bond simplicity is enforced when adding bonds (raising InvalidStructureError on
+    /// self-loops or parallel bonds); overlay and stereo integrity is checked at finish. Failure
+    /// retains completed edits and leaves the editor available; a transferred batch stays consumed.
     fn apply(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<()> {
         self.inner
             .as_mut()
@@ -295,10 +296,12 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
         AtomConstraintForm as GraphIrAtomConstraintForm, AtomForm as GraphIrAtomForm,
-        AtomId as GraphIrAtomId, BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
+        AtomId as GraphIrAtomId, Constraint as GraphIrConstraint,
         DativeBondForm as GraphIrDativeBondForm, Edits as GraphIrEdits, Entity as GraphIrEntity,
         Molecule as GraphIrMolecule, MoleculeEntries as GraphIrMoleculeEntries,
         MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
+        NoncovalentBondForm as GraphIrNoncovalentBondForm,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind,
         StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
         StereoAtomId as GraphIrStereoAtomId, StereoKind as GraphIrStereoKind,
         StereogenicityForm as GraphIrStereogenicityForm,
@@ -346,19 +349,19 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_finish_error() {
-        let molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+        let molecule =
+            mol_dsl!(r#"{:atoms ["C" "C"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#);
         let mut editor = MoleculeEditor::from_rust(molecule.edit());
-        editor.inner.as_mut().unwrap().add_bond(
-            GraphIrAtomId(0),
-            GraphIrAtomId(1),
-            GraphIrBondForm::from_order(1),
+        editor.inner.as_mut().unwrap().add_noncovalent_bond(
+            [GraphIrAtomId(0), GraphIrAtomId(1)],
+            GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::Ionic),
         );
         Python::attach(|py| {
             let error = editor.finish().unwrap_err();
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
+                "noncovalent bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
             assert!(editor
                 .finish()

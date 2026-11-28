@@ -17,7 +17,8 @@ pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
 pub use algorithms::automorphism::{
-    AutomorphismAlgorithm, AutomorphismGroupOrder, AutomorphismOutput,
+    AutomorphismAlgorithm, AutomorphismGroup, AutomorphismGroupOrder, AutomorphismScratch,
+    CanonicalLabeling,
 };
 pub use algorithms::bipartite::{BipartitionAlgorithm, NonBipartiteGraphError};
 pub use algorithms::common_subgraph::{
@@ -27,7 +28,7 @@ pub use algorithms::common_subgraph::{
 pub use algorithms::connected_subgraphs::SubgraphEnumerationAlgorithm;
 pub use algorithms::connectivity::{BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm};
 pub use algorithms::cycles::{
-    Cycle, MinimumCycleBasis, MinimumCycleBasisAlgorithm, NonSimpleGraphError, RelevantCycleCount,
+    Cycle, MinimumCycleBasis, MinimumCycleBasisAlgorithm, RelevantCycleCount,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     UniqueRingFamilies, UniqueRingFamily, UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
 };
@@ -43,7 +44,9 @@ pub use algorithms::refinement::{
     RefinementHash, RefinementRounds,
 };
 pub use algorithms::subgraph_isomorphism::{
-    SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
+    PreparedSubgraphQuery, PreparedSubgraphTarget, QuerySymmetryConstraints,
+    SubgraphIsomorphismAlgorithm, SubgraphIsomorphismPredicate, SubgraphIsomorphismScratch,
+    SymmetryGeneratorError, TargetSymmetry,
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::{
@@ -56,7 +59,7 @@ pub use correspondence::{
     GraphCorrespondenceComposeError,
 };
 pub use digraph::DiGraph;
-pub use graph::{Graph, Neighbor, SubdividedGraph, SubdivisionNodeSource};
+pub use graph::{Graph, GraphError, Neighbor};
 pub use id::{EdgeId, IdRange, NodeId, RelationId};
 pub use relation::{
     FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,

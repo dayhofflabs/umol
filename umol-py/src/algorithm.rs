@@ -19,6 +19,7 @@ use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlg
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomorphismAlgorithm {
     Nauty(),
+    TrailIr(),
 }
 
 #[pymethods]
@@ -36,6 +37,7 @@ impl AutomorphismAlgorithm {
     pub(crate) fn repr(self) -> &'static str {
         match self {
             Self::Nauty() => "AutomorphismAlgorithm.Nauty()",
+            Self::TrailIr() => "AutomorphismAlgorithm.TrailIr()",
         }
     }
 
@@ -46,12 +48,14 @@ impl AutomorphismAlgorithm {
     pub(crate) fn from_rust(algorithm: GraphCoreAutomorphismAlgorithm) -> Self {
         match algorithm {
             GraphCoreAutomorphismAlgorithm::Nauty => Self::Nauty(),
+            GraphCoreAutomorphismAlgorithm::TrailIr => Self::TrailIr(),
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphCoreAutomorphismAlgorithm {
         match self {
             Self::Nauty() => GraphCoreAutomorphismAlgorithm::Nauty,
+            Self::TrailIr() => GraphCoreAutomorphismAlgorithm::TrailIr,
         }
     }
 }
@@ -360,12 +364,10 @@ impl SubgraphEnumerationAlgorithm {
 #[pyclass(from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubgraphIsomorphismAlgorithm {
-    Vf2(),
-    Ullmann(),
-    Ri(),
-    ArcMatch { path_length: usize },
     Vf2Rdkit(),
     RayKirsch(),
+    BitsetRi(),
+    Glasgow(),
 }
 
 #[pymethods]
@@ -382,14 +384,10 @@ impl SubgraphIsomorphismAlgorithm {
 impl SubgraphIsomorphismAlgorithm {
     pub(crate) fn repr(self) -> String {
         match self {
-            Self::Vf2() => "SubgraphIsomorphismAlgorithm.Vf2()".to_owned(),
-            Self::Ullmann() => "SubgraphIsomorphismAlgorithm.Ullmann()".to_owned(),
-            Self::Ri() => "SubgraphIsomorphismAlgorithm.Ri()".to_owned(),
-            Self::ArcMatch { path_length } => {
-                format!("SubgraphIsomorphismAlgorithm.ArcMatch(path_length={path_length})")
-            }
             Self::Vf2Rdkit() => "SubgraphIsomorphismAlgorithm.Vf2Rdkit()".to_owned(),
             Self::RayKirsch() => "SubgraphIsomorphismAlgorithm.RayKirsch()".to_owned(),
+            Self::BitsetRi() => "SubgraphIsomorphismAlgorithm.BitsetRi()".to_owned(),
+            Self::Glasgow() => "SubgraphIsomorphismAlgorithm.Glasgow()".to_owned(),
         }
     }
 
@@ -399,27 +397,19 @@ impl SubgraphIsomorphismAlgorithm {
     )]
     pub(crate) fn from_rust(algorithm: GraphCoreSubgraphIsomorphismAlgorithm) -> Self {
         match algorithm {
-            GraphCoreSubgraphIsomorphismAlgorithm::Vf2 => Self::Vf2(),
-            GraphCoreSubgraphIsomorphismAlgorithm::Ullmann => Self::Ullmann(),
-            GraphCoreSubgraphIsomorphismAlgorithm::Ri => Self::Ri(),
-            GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length } => {
-                Self::ArcMatch { path_length }
-            }
             GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit => Self::Vf2Rdkit(),
             GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch => Self::RayKirsch(),
+            GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi => Self::BitsetRi(),
+            GraphCoreSubgraphIsomorphismAlgorithm::Glasgow => Self::Glasgow(),
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphCoreSubgraphIsomorphismAlgorithm {
         match self {
-            Self::Vf2() => GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
-            Self::Ullmann() => GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
-            Self::Ri() => GraphCoreSubgraphIsomorphismAlgorithm::Ri,
-            Self::ArcMatch { path_length } => {
-                GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length }
-            }
             Self::Vf2Rdkit() => GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
             Self::RayKirsch() => GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch,
+            Self::BitsetRi() => GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
+            Self::Glasgow() => GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
         }
     }
 }
@@ -481,18 +471,28 @@ mod tests {
     #[case::nauty(
         GraphCoreAutomorphismAlgorithm::Nauty,
         AutomorphismAlgorithm::Nauty(),
+        AutomorphismAlgorithm::TrailIr(),
         "AutomorphismAlgorithm.Nauty()"
+    )]
+    #[case::trail_ir(
+        GraphCoreAutomorphismAlgorithm::TrailIr,
+        AutomorphismAlgorithm::TrailIr(),
+        AutomorphismAlgorithm::Nauty(),
+        "AutomorphismAlgorithm.TrailIr()"
     )]
     fn test_automorphism_algorithm_value(
         #[case] rust: GraphCoreAutomorphismAlgorithm,
         #[case] python: AutomorphismAlgorithm,
+        #[case] unequal: AutomorphismAlgorithm,
         #[case] expected_repr: &str,
     ) {
         assert_eq!(AutomorphismAlgorithm::from_rust(rust), python);
         assert_eq!(python.to_rust(), rust);
+        assert_ne!(python, unequal);
         Python::attach(|py| {
             let expected = into_py_variant(py, AutomorphismAlgorithm::from_rust(rust)).unwrap();
             let value = into_py_variant(py, python).unwrap();
+            let unequal = into_py_variant(py, unequal).unwrap();
 
             assert_eq!(
                 value
@@ -505,6 +505,7 @@ mod tests {
                 expected_repr
             );
             assert!(value.bind(py).as_any().eq(expected.bind(py)).unwrap());
+            assert!(!value.bind(py).as_any().eq(unequal.bind(py)).unwrap());
         });
     }
 
@@ -744,22 +745,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vf2(
-        GraphCoreSubgraphIsomorphismAlgorithm::Vf2,
-        SubgraphIsomorphismAlgorithm::Vf2()
-    )]
-    #[case::ullmann(
-        GraphCoreSubgraphIsomorphismAlgorithm::Ullmann,
-        SubgraphIsomorphismAlgorithm::Ullmann()
-    )]
-    #[case::ri(
-        GraphCoreSubgraphIsomorphismAlgorithm::Ri,
-        SubgraphIsomorphismAlgorithm::Ri()
-    )]
-    #[case::arc_match(
-        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-    )]
     #[case::vf2_rdkit(
         GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
         SubgraphIsomorphismAlgorithm::Vf2Rdkit()
@@ -767,6 +752,14 @@ mod tests {
     #[case::ray_kirsch(
         GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch,
         SubgraphIsomorphismAlgorithm::RayKirsch()
+    )]
+    #[case::bitset_ri(
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
+        SubgraphIsomorphismAlgorithm::BitsetRi()
+    )]
+    #[case::glasgow(
+        GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
+        SubgraphIsomorphismAlgorithm::Glasgow()
     )]
     fn test_subgraph_isomorphism_algorithm_from_rust(
         #[case] algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
@@ -776,22 +769,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vf2(
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        GraphCoreSubgraphIsomorphismAlgorithm::Vf2
-    )]
-    #[case::ullmann(
-        SubgraphIsomorphismAlgorithm::Ullmann(),
-        GraphCoreSubgraphIsomorphismAlgorithm::Ullmann
-    )]
-    #[case::ri(
-        SubgraphIsomorphismAlgorithm::Ri(),
-        GraphCoreSubgraphIsomorphismAlgorithm::Ri
-    )]
-    #[case::arc_match(
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        GraphCoreSubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-    )]
     #[case::vf2_rdkit(
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit
@@ -799,6 +776,14 @@ mod tests {
     #[case::ray_kirsch(
         SubgraphIsomorphismAlgorithm::RayKirsch(),
         GraphCoreSubgraphIsomorphismAlgorithm::RayKirsch
+    )]
+    #[case::bitset_ri(
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
+        GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi
+    )]
+    #[case::glasgow(
+        SubgraphIsomorphismAlgorithm::Glasgow(),
+        GraphCoreSubgraphIsomorphismAlgorithm::Glasgow
     )]
     fn test_subgraph_isomorphism_algorithm_to_rust(
         #[case] algorithm: SubgraphIsomorphismAlgorithm,
@@ -808,40 +793,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::vf2(
-        SubgraphIsomorphismAlgorithm::Vf2(),
-        "SubgraphIsomorphismAlgorithm.Vf2()",
-        None
-    )]
-    #[case::ullmann(
-        SubgraphIsomorphismAlgorithm::Ullmann(),
-        "SubgraphIsomorphismAlgorithm.Ullmann()",
-        None
-    )]
-    #[case::ri(
-        SubgraphIsomorphismAlgorithm::Ri(),
-        "SubgraphIsomorphismAlgorithm.Ri()",
-        None
-    )]
-    #[case::arc_match(
-        SubgraphIsomorphismAlgorithm::ArcMatch { path_length: 6 },
-        "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
-        Some(6),
-    )]
     #[case::vf2_rdkit(
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
-        "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
-        None
+        "SubgraphIsomorphismAlgorithm.Vf2Rdkit()"
     )]
     #[case::ray_kirsch(
         SubgraphIsomorphismAlgorithm::RayKirsch(),
-        "SubgraphIsomorphismAlgorithm.RayKirsch()",
-        None
+        "SubgraphIsomorphismAlgorithm.RayKirsch()"
+    )]
+    #[case::bitset_ri(
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
+        "SubgraphIsomorphismAlgorithm.BitsetRi()"
+    )]
+    #[case::glasgow(
+        SubgraphIsomorphismAlgorithm::Glasgow(),
+        "SubgraphIsomorphismAlgorithm.Glasgow()"
     )]
     fn test_subgraph_isomorphism_algorithm_value(
         #[case] algorithm: SubgraphIsomorphismAlgorithm,
         #[case] expected_repr: &str,
-        #[case] expected_path_length: Option<usize>,
     ) {
         Python::attach(|py| {
             let expected = into_py_variant(
@@ -858,17 +828,6 @@ mod tests {
                 expected_repr
             );
             assert!(algorithm.eq(expected).unwrap());
-            match expected_path_length {
-                Some(path_length) => assert_eq!(
-                    algorithm
-                        .getattr("path_length")
-                        .unwrap()
-                        .extract::<usize>()
-                        .unwrap(),
-                    path_length
-                ),
-                None => assert!(algorithm.getattr("path_length").is_err()),
-            }
         });
     }
 

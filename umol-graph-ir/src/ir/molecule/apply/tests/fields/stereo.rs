@@ -122,7 +122,7 @@ fn test_molecule_apply_stereo_atom_configurations_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     if !journaled {
         for entry in &mut removal_entries.stereo_atoms[..failure] {
             entry.2.configuration = new.clone();
@@ -219,7 +219,7 @@ fn test_molecule_apply_edit_modify_stereo_atom_field(
     } else {
         molecule.apply_edit(edit, &mut state)
     };
-    assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+    assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
     assert_eq!(molecule, expected);
 
     if journaled {
@@ -367,7 +367,7 @@ fn test_molecule_apply_stereo_bond_configurations_error(
     } else {
         molecule.apply_edit(batch.clone(), &mut state)
     };
-    assert_eq!(result, Err(error.clone()));
+    assert_eq!(result, Err(error.clone().into()));
     if !journaled {
         for entry in &mut stereo_bond_entries.stereo_bonds[..failure] {
             entry.2.configuration = new.clone();
@@ -474,7 +474,7 @@ fn test_molecule_apply_edit_modify_stereo_bond_field(
     } else {
         molecule.apply_edit(edit, &mut state)
     };
-    assert_eq!(repeated, Err(TransactionError::OldStateMismatch));
+    assert_eq!(repeated, Err(TransactionError::OldStateMismatch.into()));
     assert_eq!(molecule, expected);
 
     if journaled {

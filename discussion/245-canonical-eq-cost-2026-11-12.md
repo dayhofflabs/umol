@@ -3,6 +3,7 @@
 Status: Completed
 Date: 2026-11-12
 Relates: [244](244-reaction-span-canonicalization-2026-11-09.md),
+[254](254-edge-colored-automorphisms-2026-11-26.md),
 [data types guide](../docs/development/data-types.md)
 
 ## Purpose

@@ -138,6 +138,6 @@ fn test_molecule_apply_edit_molecule_constraint_error(
     } else {
         molecule.apply_edit(edit, &mut state)
     };
-    assert_eq!(result, Err(expected));
+    assert_eq!(result, Err(expected.into()));
     assert_eq!(molecule, initial);
 }

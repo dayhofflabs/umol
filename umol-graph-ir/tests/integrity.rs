@@ -9,7 +9,7 @@ use umol_graph_core::{
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomForm, AtomId, BondForm, BooleanForm, Canonicalize,
     CanonicalizeContext, Contradiction, ElectronCountsForm, EntitySpan, FrameTransport,
-    GraphSymmetryConfig, IncidenceLevel, LigandPermutation, LigandSymmetryForm, Molecule,
+    GraphSymmetryConfig, LigandPermutation, LigandSymmetryForm, Molecule,
     MoleculeCanonicalizeError, MoleculeEntries, MulticenterBondForm, MulticenterBondId, NumForm,
     OrientedLigandPermutation, ReactionSpan, ReactionSpanCanonicalizeError, ReactionSpanEntries,
     StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoConfigurationForm, StereoCoset,
@@ -81,19 +81,6 @@ fn test_molecule_electron_attributes(
     assert_eq!(stored, &ElectronCountsForm::Lit(counts.clone()));
     assert_eq!(sum, NumForm::Lit(total));
     assert_eq!(
-        molecule
-            .incidence_graph(IncidenceLevel::Full)
-            .graph()
-            .edge_count(),
-        3
-    );
-    assert_eq!(
-        span.incidence_graph(IncidenceLevel::Full)
-            .graph()
-            .edge_count(),
-        3
-    );
-    assert_eq!(
         molecule.clone().canonicalize(&CanonicalizeContext {
             automorphism_algorithm: AutomorphismAlgorithm::Nauty
         }),
@@ -115,10 +102,13 @@ fn test_molecule_electron_attributes(
     ] {
         let config = SubstructureMatchConfig {
             match_algorithm,
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         };
-        assert_eq!(molecule.substructure_matches(&molecule, config), Ok(vec![]));
+        assert_eq!(molecule.substructure_matches(&molecule, config), vec![]);
         let mut valid = molecule.clone();
         if aromatic {
             valid
@@ -131,8 +121,8 @@ fn test_molecule_electron_attributes(
                 .attributes_mut()
                 .electrons = ElectronCountsForm::Lit(vec![1, 2, 0]);
         }
-        assert_eq!(molecule.substructure_matches(&valid, config), Ok(vec![]));
-        assert_eq!(valid.substructure_matches(&molecule, config), Ok(vec![]));
+        assert_eq!(molecule.substructure_matches(&valid, config), vec![]);
+        assert_eq!(valid.substructure_matches(&molecule, config), vec![]);
     }
 }
 

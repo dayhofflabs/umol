@@ -3,7 +3,8 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{
-    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+    AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 
@@ -42,8 +43,11 @@ proptest! {
                 reaction.lhs(),
                 SubstructureMatchConfig {
                     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                    reduce_pattern_symmetry: false,
+                    reduce_host_symmetry: false,
                 },
             )
             .map_err(|error| TestCaseError::fail(format!("matching failed: {error}")))?;
@@ -72,8 +76,11 @@ proptest! {
         .expect("identity atom correspondence induces a molecule correspondence");
         let (product, witness) = reaction.tracked_apply(reaction.lhs(), SubstructureMatchConfig {
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }).unwrap().next().unwrap().unwrap();
 
         prop_assert_eq!(witness.reverse().reverse(), witness.clone());

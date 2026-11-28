@@ -1,17 +1,20 @@
 //! Unit tests for the colors and the remapping checks of a reaction span.
 
 use std::cmp::Ordering;
+use std::collections::{BTreeSet, VecDeque};
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
+use umol_graph_core::{AutomorphismAlgorithm, QuerySymmetryConstraints};
 
 use super::*;
+use crate::ir::incidence::IncidenceLevel;
 use crate::ir::stereo::{StereoAtomSpans, StereoBondSpans};
 use crate::ir::{
     ArithExpr, AromaticSystemConstraintForm, AromaticSystemForm, AromaticSystemId,
     AtomConstraintForm, AtomForm, BondConstraintForm, BondForm, BooleanForm, Constraint,
     ConstraintSpan, DativeBondConstraintForm, DativeBondForm, DativeBondId, Deltas, ElementForm,
-    IncidenceLevel, Molecule, MoleculeConstraint, MoleculeEntries, MulticenterBondConstraintForm,
+    Molecule, MoleculeConstraint, MoleculeEntries, MulticenterBondConstraintForm,
     MulticenterBondForm, MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondForm,
     NoncovalentBondId, NoncovalentBondKind, NumForm, Reaction, ReactionSpanEntries,
     StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
@@ -215,8 +218,12 @@ fn test_initial_colors_constraints(
         include_constraints,
     )
     .unwrap();
+    let color_of = |entity: Entity| match entity {
+        Entity::Bond(bond) => colors.edges[graph.bond_edge(bond).unwrap().index()],
+        _ => colors.entities[graph.node_of(entity).unwrap().index()],
+    };
     assert_eq!(
-        colors.entities[graph.node_of(lhs).index()] == colors.entities[graph.node_of(rhs).index()],
+        color_of(lhs) == color_of(rhs),
         expected[usize::from(include_constraints)]
     );
     assert_eq!(span, original);
@@ -278,8 +285,8 @@ fn test_initial_colors_span(
     )
     .unwrap();
     assert_eq!(
-        colors.entities[graph.node_of(Entity::Atom(AtomId(0))).index()]
-            == colors.entities[graph.node_of(Entity::Atom(AtomId(1))).index()],
+        colors.entities[graph.node_of(Entity::Atom(AtomId(0))).unwrap().index()]
+            == colors.entities[graph.node_of(Entity::Atom(AtomId(1))).unwrap().index()],
         expected[usize::from(include_constraints)]
     );
     assert_eq!(span, original);
@@ -326,8 +333,14 @@ fn test_initial_colors_stereo_atom(
         include_constraints,
     )
     .map(|colors| {
-        colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(0))).index()]
-            == colors.entities[graph.node_of(Entity::StereoAtom(StereoAtomId(1))).index()]
+        colors.entities[graph
+            .node_of(Entity::StereoAtom(StereoAtomId(0)))
+            .unwrap()
+            .index()]
+            == colors.entities[graph
+                .node_of(Entity::StereoAtom(StereoAtomId(1)))
+                .unwrap()
+                .index()]
     });
     assert_eq!(actual, expected[usize::from(include_constraints)]);
     assert_eq!(span, original);
@@ -374,8 +387,14 @@ fn test_initial_colors_stereo_bond(
         include_constraints,
     )
     .map(|colors| {
-        colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(0))).index()]
-            == colors.entities[graph.node_of(Entity::StereoBond(StereoBondId(1))).index()]
+        colors.entities[graph
+            .node_of(Entity::StereoBond(StereoBondId(0)))
+            .unwrap()
+            .index()]
+            == colors.entities[graph
+                .node_of(Entity::StereoBond(StereoBondId(1)))
+                .unwrap()
+                .index()]
     });
     assert_eq!(actual, expected[usize::from(include_constraints)]);
     assert_eq!(span, original);
@@ -403,7 +422,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![0, 2, 3, 1, 4, 6, 7, 5, 8, 9],
+    vec![0, 2, 3, 1, 4, 5],
     true
 )]
 #[case::transposition(
@@ -427,7 +446,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![0, 2, 1, 3, 4, 6, 5, 7, 8, 9],
+    vec![0, 2, 1, 3, 4, 5],
     false
 )]
 #[case::site_moved(
@@ -451,7 +470,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![1, 0, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![1, 0, 2, 3, 4, 5],
     false
 )]
 #[case::renumbered(
@@ -475,7 +494,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    vec![4, 3, 2, 1, 0, 5],
     true
 )]
 #[case::renumbered_inverted(
@@ -499,7 +518,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![4, 3, 2, 1, 0, 8, 7, 6, 5, 9],
+    vec![4, 3, 2, 1, 0, 5],
     false
 )]
 #[case::stereo_bond(
@@ -523,7 +542,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     true
 )]
 #[case::stereo_bond_inverted(
@@ -547,7 +566,7 @@ fn test_initial_colors_stereo_bond(
     )
     .to_reaction_span()
     .unwrap(),
-    vec![0, 1, 2, 3, 4, 5, 6, 7],
+    vec![0, 1, 2, 3, 4],
     false
 )]
 #[case::modified_configuration(
@@ -601,7 +620,7 @@ fn test_initial_colors_stereo_bond(
         )],
         ..Default::default()
     }),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![0, 1, 2, 3, 4, 5],
     true
 )]
 #[case::modified_configuration_reversed(
@@ -655,7 +674,7 @@ fn test_initial_colors_stereo_bond(
         )],
         ..Default::default()
     }),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    vec![0, 1, 2, 3, 4, 5],
     false
 )]
 fn test_remapping_preserves_stereo(
@@ -680,7 +699,7 @@ fn test_remapping_preserves_stereo(
         bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
         ..Default::default()
     }),
-    vec![NodeId(1), NodeId(0), NodeId(2)],
+    vec![NodeId(1), NodeId(0)],
     true,
 )]
 #[case::distinct_ligands(
@@ -702,7 +721,7 @@ fn test_remapping_preserves_stereo(
         )],
         ..Default::default()
     }),
-    (0..10).map(NodeId::from).collect(),
+    (0..6).map(NodeId::from).collect(),
     true,
 )]
 #[case::prostereogenic_explicit_hydrogens(
@@ -725,8 +744,7 @@ fn test_remapping_preserves_stereo(
         ..Default::default()
     }),
     vec![
-        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
-        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4), NodeId(5),
     ],
     false,
 )]
@@ -760,9 +778,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     true,
 )]
@@ -789,7 +805,7 @@ fn test_remapping_preserves_stereo(
     }),
     vec![
         NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
-        NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
+        NodeId(6),
     ],
     true,
 )]
@@ -816,8 +832,7 @@ fn test_remapping_preserves_stereo(
         ..Default::default()
     }),
     vec![
-        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
-        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4), NodeId(5),
     ],
     false,
 )]
@@ -844,8 +859,7 @@ fn test_remapping_preserves_stereo(
         ..Default::default()
     }),
     vec![
-        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
-        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4), NodeId(5),
     ],
     false,
 )]
@@ -882,9 +896,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     false,
 )]
@@ -914,7 +926,7 @@ fn test_remapping_preserves_stereo(
     }),
     vec![
         NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
-        NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
+        NodeId(6),
     ],
     true,
 )]
@@ -956,9 +968,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     false,
 )]
@@ -1008,9 +1018,7 @@ fn test_remapping_preserves_stereo(
     vec![
         NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
         NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
-        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
-        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
-        NodeId(19), NodeId(18),
+        NodeId(11), NodeId(10),
     ],
     true,
 )]
@@ -1033,23 +1041,6 @@ fn test_retain_stereo_preserving_generators(
 }
 
 #[rstest]
-#[case::bond_endpoint(
-    ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![
-            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-        ],
-        bonds: vec![(
-            AtomId(0),
-            AtomId(1),
-            EntitySpan::Unchanged(BondForm::from_order(1)),
-        )],
-        ..Default::default()
-    }),
-    Entity::Bond(BondId(0)),
-    AtomId(0),
-    (Incidence::BondEndpoint, None)
-)]
 #[case::aromatic_atom_unchanged(
     ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![
@@ -1164,16 +1155,13 @@ fn test_incidence_color(
     #[case] expected: (Incidence, Option<EntitySpan<Option<i64>>>),
 ) {
     let incidence_graph = span.incidence_graph(IncidenceLevel::Constitution);
-    let edge = incidence_graph
-        .graph()
-        .find_edge(
-            incidence_graph.node_of(owner),
-            incidence_graph.node_of(Entity::Atom(atom)),
-        )
+    let (edge, _) = incidence_graph
+        .incidences()
+        .find(|&(edge, _)| incidence_graph.incidence_endpoints(edge) == Some((owner, atom)))
         .unwrap();
     let (incidence, electron_count) = incidence_color(&span, &incidence_graph, edge);
 
-    assert_eq!((incidence.clone(), electron_count), expected);
+    assert_eq!((incidence, electron_count), expected);
 }
 
 #[fixture]
@@ -1495,12 +1483,12 @@ fn test_initial_colors(
     let incidence_graph = span.incidence_graph(IncidenceLevel::Full);
     let colors = initial_colors(&span, &incidence_graph, DescriptionLevel::Structure, true)
         .expect("fixed span has colors");
+    let color_of = |entity: Entity| match entity {
+        Entity::Bond(bond) => colors.edges[incidence_graph.bond_edge(bond).unwrap().index()],
+        _ => colors.entities[incidence_graph.node_of(entity).unwrap().index()],
+    };
 
-    assert_eq!(
-        colors.entities[incidence_graph.node_of(lhs).index()]
-            == colors.entities[incidence_graph.node_of(rhs).index()],
-        expected
-    );
+    assert_eq!(color_of(lhs) == color_of(rhs), expected);
 }
 
 #[rstest]
@@ -1545,8 +1533,8 @@ fn test_initial_colors_order(
     )
     .unwrap();
     assert_eq!(
-        colors.entities[incidence_graph.node_of(lhs).index()]
-            .cmp(&colors.entities[incidence_graph.node_of(rhs).index()]),
+        colors.entities[incidence_graph.node_of(lhs).unwrap().index()]
+            .cmp(&colors.entities[incidence_graph.node_of(rhs).unwrap().index()]),
         expected,
     );
 }
@@ -1587,11 +1575,6 @@ fn test_initial_colors_order(
     [Entity::MulticenterBond(MulticenterBondId(1)), Entity::Atom(AtomId(1))],
     false
 )]
-#[case::bond_endpoint(
-    [Entity::Bond(BondId(0)), Entity::Atom(AtomId(0))],
-    [Entity::Bond(BondId(2)), Entity::Atom(AtomId(1))],
-    true
-)]
 #[case::dative_role(
     [Entity::DativeBond(DativeBondId(0)), Entity::Atom(AtomId(0))],
     [Entity::DativeBond(DativeBondId(0)), Entity::Atom(AtomId(7))],
@@ -1616,15 +1599,14 @@ fn test_initial_colors_incidence(
     )
     .expect("fixed span has colors");
     let color = |[owner, atom]: [Entity; 2]| {
-        let nodes = [owner, atom].map(|entity| incidence_graph.node_of(entity));
+        let Entity::Atom(atom) = atom else {
+            panic!("the second endpoint must be an atom");
+        };
         let (edge, _) = incidence_graph
             .incidences()
-            .find(|&(edge, _)| {
-                let [first, second] = incidence_graph.graph().edge_endpoints(edge);
-                nodes == [first, second] || nodes == [second, first]
-            })
+            .find(|&(edge, _)| incidence_graph.incidence_endpoints(edge) == Some((owner, atom)))
             .expect("the case names an incidence of the fixed span");
-        colors.incidences[edge.index()]
+        colors.edges[edge.index()]
     };
 
     assert_eq!(color(lhs) == color(rhs), expected);
@@ -1701,4 +1683,201 @@ fn test_initial_colors_error(
         initial_colors(&span, &incidence_graph, level, include_constraints),
         Err(Contradiction)
     );
+}
+
+fn span_subgroup_elements(node_count: usize, generators: &[Vec<NodeId>]) -> BTreeSet<Vec<u32>> {
+    let identity: Vec<u32> = (0..node_count as u32).collect();
+    let mut visited = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    visited.insert(identity.clone());
+    queue.push_back(identity);
+    while let Some(current) = queue.pop_front() {
+        for generator in generators {
+            let next: Vec<u32> = current.iter().map(|&x| generator[x as usize].0).collect();
+            if visited.insert(next.clone()) {
+                queue.push_back(next);
+            }
+        }
+    }
+    visited
+}
+
+#[rstest]
+#[case::symmetric_epoxidation(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Some(2)
+)]
+#[case::asymmetric_monosubstitution(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Some(1)
+)]
+#[case::benzene_monosubstitution(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::Cl)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(4), AtomId(5), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(5), AtomId(0), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(6), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Some(2)
+)]
+#[case::tetrahedral_walden_inversion(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::F, Element::F, Element::F]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    Some(12)
+)]
+#[case::added_chiral_center(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::F, Element::F, Element::F]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+        )],
+        ..Default::default()
+    }),
+    Some(12)
+)]
+#[case::added_asymmetric_molecule_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0)]),
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    Some(1)
+)]
+#[case::added_symmetric_molecule_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0), AtomId(1)]),
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    Some(2)
+)]
+#[case::malformed_stereo_falls_back_none(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::F, Element::F, Element::F]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 2u32)),
+        )],
+        ..Default::default()
+    }),
+    None
+)]
+fn test_reaction_span_proper_incidence_generators(
+    #[case] span: ReactionSpan,
+    #[case] expected_order: Option<usize>,
+) {
+    let trail = span.proper_incidence_generators(AutomorphismAlgorithm::TrailIr);
+    let nauty = span.proper_incidence_generators(AutomorphismAlgorithm::Nauty);
+    match expected_order {
+        None => {
+            assert!(trail.is_none());
+            assert!(nauty.is_none());
+        }
+        Some(expected_order) => {
+            let (trail_inc, trail_gens) = trail.expect("valid span produces proper generators");
+            let (nauty_inc, nauty_gens) = nauty.expect("valid span produces proper generators");
+            let trail_group = span_subgroup_elements(trail_inc.node_count(), &trail_gens);
+            let nauty_group = span_subgroup_elements(nauty_inc.node_count(), &nauty_gens);
+            assert_eq!(trail_group, nauty_group);
+            assert_eq!(trail_group.len(), expected_order);
+
+            let q_trail =
+                QuerySymmetryConstraints::try_from_generators(trail_inc.raw_graph(), &trail_gens)
+                    .unwrap();
+            let q_nauty =
+                QuerySymmetryConstraints::try_from_generators(nauty_inc.raw_graph(), &nauty_gens)
+                    .unwrap();
+            assert_eq!(q_trail.constraints(), q_nauty.constraints());
+        }
+    }
 }

@@ -269,7 +269,7 @@ mod tests {
                         MaximumIndependentSetAlgorithm::BranchAndBound,
                 },
                 stereo: StereoValidateConfig {
-                    automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
                     ring_config: Default::default(),
                 },
             }

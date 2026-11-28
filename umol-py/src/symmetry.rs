@@ -192,7 +192,7 @@ pub struct GraphSymmetryConfig(GraphIrGraphSymmetryConfig);
 #[pymethods]
 impl GraphSymmetryConfig {
     #[new]
-    #[pyo3(signature = (*, automorphism_algorithm=AutomorphismAlgorithm::Nauty(), max_classification_trials=4096, include_constraints=false))]
+    #[pyo3(signature = (*, automorphism_algorithm=AutomorphismAlgorithm::TrailIr(), max_classification_trials=4096, include_constraints=false))]
     fn new(
         automorphism_algorithm: AutomorphismAlgorithm,
         max_classification_trials: u32,

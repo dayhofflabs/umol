@@ -102,6 +102,7 @@ approximate.
 | `*Error` | operational or setup failure, the `Err` side | 58 | all |
 | `*Validator` | validates a tier-2 invariant or tier-3 conformance property | 12 | graph after the integrity-check migration |
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
+| `*Scratch` | opaque reusable buffer carrier for repeated-call hot loops | 2 | graph-core |
 | `*Form` / `*Dsl` | lattice-shaped graph-IR value / boundary surface | 69 / 38 | graph-ir, py |
 
 `*Failure` has no member yet, but is named in settled vocabulary and expected to gain one.
@@ -509,7 +510,7 @@ structural composition and connectivity without adding stereo configuration.
 
 **Not:** all overlays, because stereo atoms and stereo bonds belong only to the structure level. Not
 constraints, which do not contribute to structural identity.
-**In code:** private `DescriptionLevel::Constitution`; public `IncidenceLevel::Constitution`.
+**In code:** private `DescriptionLevel::Constitution`, `IncidenceLevel::Constitution`.
 
 ### Constraint
 
@@ -916,7 +917,7 @@ to `DescriptionLevel::Structure`, not `DescriptionLevel::Full`.
 
 **Not:** a chemistry model or conformance pass. The full description preserves the complete
 represented assertion; it does not validate it.
-**In code:** private `DescriptionLevel::Full`; public `IncidenceLevel::Full` in its
+**In code:** private `DescriptionLevel::Full`; private `IncidenceLevel::Full` in its
 carrier-specific sense.
 
 ### Graph symmetry
@@ -987,7 +988,7 @@ The notion appears at three levels and they are the same idea:
 
 **Not:** *projection*, which is the operation that reads a value across an incidence. Incidence is
 the relationship; projection is what you do with it.
-**In code:** `incident*` methods, `IncidenceGraph`.
+**In code:** `incident*` methods; crate-private `IncidenceGraph`.
 
 ### Incidence constraint
 
@@ -1011,32 +1012,38 @@ the whole entity-constraint category.
 
 ### Incidence graph
 
-The **incidence graph**, also called the Levi graph, makes relations explicit as nodes: atoms occupy
-the node space, every selected relation becomes a **pseudonode**, and each pseudonode is wired to its
-participants. Everything defined over graphs then applies to the whole entity model unchanged —
-canonical labeling, automorphisms, subgraph isomorphism — with no bespoke hypergraph algorithm.
+The **incidence graph** is a crate-private overlay-augmented graph over a molecular representation:
+atoms occupy the leading nodes, localized bonds stay as direct edges between their endpoint atoms,
+and only selected overlay relations become **pseudonodes** wired to their participating atoms by
+role-labeled incidence edges. Because localized bonds are kept as direct edges rather than
+subdivided into nodes, it is not a bipartite Levi graph. Everything defined over edge-colored simple
+graphs then applies to the entity model unchanged — canonical labeling, automorphisms, subgraph
+isomorphism — with no bespoke hypergraph algorithm.
 
-Stereo elements attach to their site only, because the ligand topology is already present through the
-bonds; the only new information a stereo node carries is its site and, at colouring time, its label.
-Bond direction is not encoded structurally either: the colouring separates the endpoints of a
-directed bond, so a dative donor and acceptor are never automorphism-equivalent.
+Stereo entities attach via `StereoAnchor` edges to their site atom(s) (carrying virtual-ligand
+flags) and `StereoLigand` edges to their distinct explicit atom ligands; for a stereo bond, the two
+endpoint anchors uniquely identify the site bond on a simple graph. Bond direction is not encoded
+structurally either: edge coloring separates the endpoints of a directed bond, so a dative donor
+and acceptor are never automorphism-equivalent.
 
-`IncidenceLevel` names three carrier levels, which land on the chemist's own hierarchy: `Topology`
-is atoms and localized bonds (AB), `Constitution` adds the non-stereo domain (DAMN), and `Full` adds
-the stereo domain (SS). The final name means the complete incidence carrier; constraints have no
-incidence nodes. The parallel description level for this carrier is `Structure`.
+`IncidenceLevel` names three crate-private carrier levels, which land on the chemist's own
+hierarchy: `Topology` is atoms and localized bonds (AB, with no pseudonodes), `Constitution` adds
+the non-stereo domain (DAMN), and `Full` adds the stereo domain (SS). The final name means the
+complete incidence carrier; constraints have no incidence nodes. The parallel description level for
+this carrier is `Structure`.
 
-**Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
-bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
-`SubstructureMatchAlgorithm::GraphAndOverlays` — match the topology, then verify overlays against the
-correspondence — is the default, and `Incidence` is chosen when the connectivity a pattern turns on is
-carried by an overlay rather than by bonds. Both return the same matches; the difference is pruning,
-not semantics.
+**Cost, and why it is not the default.** Even without subdividing localized bonds, the incidence
+graph allocates pseudonodes and incidence edges for overlays and inflates host atom degrees with
+overlay attachments. So `SubstructureMatchAlgorithm::GraphAndOverlays` — match the atom-and-bond
+topology directly, then verify overlays against the correspondence — is the default, and `Incidence`
+is chosen when the connectivity a pattern turns on is carried by an overlay rather than by bonds.
+Both return the same matches; the difference is pruning, not semantics.
 
-**Not:** the molecular topology, which is the atom-and-bond graph itself. The incidence graph is a
-construction over a structure, not a representation of one.
-**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceLevel`,
-`SubstructureMatchAlgorithm::Incidence`.
+**Not:** a bipartite Levi graph; the molecular topology, which is the atom-and-bond graph itself.
+The incidence graph is an internal algorithmic construction over a structure, not a public
+representation of one.
+**In code:** crate-private `IncidenceGraph`, `IncidenceNodeId`, `IncidenceEdgeId`, `IncidenceEdge`,
+`Incidence`, `IncidenceLevel`, `incidence_graph`; public `SubstructureMatchAlgorithm::Incidence`.
 
 ### Inconsistency
 
@@ -1162,7 +1169,7 @@ kinds introduced together, whereas a level includes that domain and every preced
 
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
-**In code:** private `DescriptionLevel`; public `IncidenceLevel`.
+**In code:** private `DescriptionLevel`, `IncidenceLevel`.
 
 ### Ligand and site
 
@@ -1229,8 +1236,9 @@ overridden.
 **Not:** interchangeable, and neither is *correspondence*, which is the *result* of pattern matching
 rather than the operation.
 **In code:** first sense — `Matching`, `BondMatching`, `PerfectMatchingAlgorithm`,
-`MatchingEnumerationAlgorithm`; second sense — `substructure_matches`, `SubstructureMatchAlgorithm`,
-`Lattice::matches`.
+`MatchingEnumerationAlgorithm`; second sense — `substructure_matches`, `has_substructure_match`,
+`first_substructure_match`, `count_substructure_matches`, `SubstructureMatchAlgorithm`,
+`PreparedSubstructurePattern`, `PreparedSubstructureHost`, `Lattice::matches`.
 
 ### Mismatch
 
@@ -1464,6 +1472,18 @@ The [resolver recovery contract](operations.md#realizability-failures-and-recove
 classified failures admit recovery and how conflicts differ.
 **In code:** `AromaticityFailurePolicy`, `StereoFailurePolicy`.
 
+### Prepared
+
+A **`Prepared*`** type is an immutable, snapshotted carrier that precomputes structural plans,
+bitsets, predicate classes, validated/normalized deltas, or transparent lazy caches for repeated
+matching or reaction application. Preparation preserves exact parity with the corresponding
+one-shot operation and isolates the prepared carrier from later mutations to its source inputs.
+
+**Not:** a `*Scratch` buffer carrier (which is mutable, stateless, and reused across arbitrary
+inputs) or an unvalidated open carrier.
+**In code:** `PreparedSubgraphQuery`, `PreparedSubgraphTarget`, `PreparedSubstructurePattern`,
+`PreparedSubstructureHost`, `PreparedReaction`.
+
 ### Principal field
 
 A **principal field** is the [inherent field](#inherent-field) written first in an entity's
@@ -1498,7 +1518,8 @@ emits one product-component collection per successful match without application 
 correspondences.
 
 **Not:** `apply`, which returns unsplit products; reaction construction or composition.
-**In code:** `React`, `react`, `react_all`, `ReactionProductsIter`.
+**In code:** `React`, `react`, `react_prepared`, `react_all`, `react_all_prepared`,
+`ReactionProductsIter`.
 
 ### Reaction
 
@@ -1721,16 +1742,13 @@ says how results arrive.
 
 An operation returning a single value — one output struct, one set, one coloring, a count, an
 `Option` — takes none of these prefixes and has no visitor form; plural-sounding names for
-single-value operations, such as `automorphisms`, are not delivery prefixes. In this family,
-`try_*` marks restricted input-domain dispatch (simple graph against subdivision fallback), while
-`*_fallback` marks the corresponding fallback route. Both compose with the delivery prefix. The
-general meaning of `try_*` is defined under *Try prefix*. The execution contract behind the
-prefixes — streamability, visitor payload, and emission order — is defined in the algorithm
-execution guide.
+single-value operations, such as `automorphisms`, are not delivery prefixes. The general meaning
+of `try_*` is defined under *Try prefix*. The execution contract behind the prefixes —
+streamability, visitor payload, and emission order — is defined in the algorithm execution guide.
 
 **Not:** *iterative* for visitor delivery — an implementation may remain recursive while visiting
 results. Not a bare plural name for an eager collection-returning operation.
-**In code:** `visit_simple_cycles`, `try_visit_relevant_cycles`, `visit_perfect_matchings`,
+**In code:** `visit_simple_cycles`, `visit_relevant_cycles`, `visit_perfect_matchings`,
 `enumerate_relevant_cycles`; per the settled migration, `enumerate_subgraph_isomorphisms` and
 `visit_subgraph_isomorphisms`.
 
@@ -1746,6 +1764,26 @@ relevant-cycle enumeration algorithm is operational configuration.
 
 **Not:** incidence constraint.
 **In code:** the ring-constraint component of tier-2 invariants validation in `umol-graph`.
+
+### Scratch
+
+A **`*Scratch`** type is an opaque, algorithm-independent reusable buffer carrier paired with a
+`*_with_scratch` method counterpart.
+
+Admission policy:
+
+- Add a `*Scratch` type and `*_with_scratch` counterpart only when benchmarks establish that
+  per-call buffer allocation is a measurable share of runtime in repeated-call loops (search trees,
+  stabilizers, batch calls).
+- Keep the no-scratch operation as the primary entry point on the same receiver (`Graph`).
+- Keep `*Scratch` opaque and problem-scoped rather than backend-specific, reusable across arbitrary
+  inputs with output identical to the no-scratch method (prior calls never affect subsequent
+  results), and Rust-only unless binding benchmarks justify exposing it to Python.
+
+**Not:** a config, an algorithm parameter, a stateful solver handle, or an observable cache.
+**In code:** `AutomorphismScratch`, `SubgraphIsomorphismScratch`,
+`Graph::automorphisms_with_scratch`, `Graph::canonical_labeling_with_scratch`,
+`PreparedSubgraphQuery::*_with_scratch`.
 
 ### Solution
 
@@ -1850,7 +1888,7 @@ including the inherent values carried by those entities. It does not include ove
 
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
-**In code:** private `DescriptionLevel::Topology`; public `IncidenceLevel::Topology`.
+**In code:** private `DescriptionLevel::Topology`, `IncidenceLevel::Topology`.
 
 ### Topicity
 
@@ -1950,8 +1988,7 @@ a checked operation cannot fail handles that result explicitly rather than requi
 public method solely to avoid it.
 
 **Not:** a general marker for fallibility.
-**In code:** `map`/`try_map`, `remap`/`try_remap`, `from_entries`/`try_from_entries`, and
-`try_visit_relevant_cycles` for restricted dispatch.
+**In code:** `map`/`try_map`, `remap`/`try_remap`, `from_entries`/`try_from_entries`.
 
 ### Underdetermined
 

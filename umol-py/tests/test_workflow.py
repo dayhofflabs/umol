@@ -192,7 +192,7 @@ def test_fingerprint_workflow():
     pattern_config = PatternFingerprintConfig(
         width=16,
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
     )
     structural_config = StructuralFingerprintConfig(
         max_bonds=0,
@@ -227,8 +227,8 @@ def test_fingerprint_workflow():
         15,
     ]
     assert structural.keys == (
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 06 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 08 00 00 00 00 00 00 00"),
     )
     assert combined.features.entries == (
         (864662311, -1),
@@ -252,8 +252,8 @@ def test_fingerprint_workflow():
     assert hashed.ids == (864662311, 2246728737)
     assert counted.entries == ((864662311, 1), (2246728737, 1))
     assert structural.keys == (
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
-        bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 06 00 00 00 00 00 00 00"),
+        bytes.fromhex("01 00 00 00 04 00 00 00 08 00 00 00 00 00 00 00"),
     )
     assert combined.features.entries == (
         (864662311, -1),
@@ -277,7 +277,7 @@ def test_substructure_workflow():
     host_snapshot = Molecule.from_smiles("CCO")
     config = SubstructureSearchConfig(
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
     )
 
     matches = pattern.substructure_matches(host, config=config)
@@ -324,7 +324,7 @@ def test_reaction_application_workflow():
     host_snapshot = Molecule.from_smiles("CCO")
     config = ReactionApplicationConfig(
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
     )
 
     applications = list(reaction.tracked_apply(host, config=config))

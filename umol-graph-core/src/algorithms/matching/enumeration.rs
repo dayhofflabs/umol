@@ -177,9 +177,9 @@ impl<'a> MatchingSearchState<'a> {
     pub(super) fn new(graph: &'a Graph) -> Self {
         Self {
             graph,
-            included: vec![false; graph.edge_bound()],
-            excluded: vec![false; graph.edge_bound()],
-            covered: vec![false; graph.node_bound()],
+            included: vec![false; graph.edge_count()],
+            excluded: vec![false; graph.edge_count()],
+            covered: vec![false; graph.node_count()],
             included_size: 0,
         }
     }
@@ -249,7 +249,7 @@ impl<'a> MatchingSearchState<'a> {
     }
 
     pub(super) fn residual_graph(&self) -> (Graph, GraphCorrespondence) {
-        let mut original_to_residual = vec![None; self.graph.node_bound()];
+        let mut original_to_residual = vec![None; self.graph.node_count()];
         let mut node_matched_pairs = Vec::new();
         for original in self.graph.node_ids() {
             if !self.covered[original.index()] {
@@ -326,7 +326,7 @@ impl<'a> MatchingSearchState<'a> {
             .enumerate()
             .filter_map(|(index, &included)| included.then_some(EdgeId(index as u32)))
             .collect();
-        let mut mate = vec![None; self.graph.node_bound()];
+        let mut mate = vec![None; self.graph.node_count()];
         for &edge in &edges {
             let [first, second] = self.graph.edge_endpoints(edge);
             mate[first.index()] = Some(second);

@@ -39,7 +39,7 @@ pub struct Matching {
 impl Matching {
     fn from_mates(graph: &Graph, mates: &[i32]) -> Self {
         let mut edges = Vec::new();
-        let mut represented = vec![false; graph.node_bound()];
+        let mut represented = vec![false; graph.node_count()];
         for eid in graph.edge_ids() {
             let [a, b] = graph.edge_endpoints(eid);
             if mates[a.index()] == b.0 as i32 && !represented[a.index()] && !represented[b.index()]
@@ -352,7 +352,7 @@ fn backtrack_pair(graph: &Graph, order: &[NodeId], idx: usize, mate: &mut [i32])
 }
 
 fn augment_from(graph: &Graph, mate: &mut [i32], root: usize) -> bool {
-    let n = graph.node_bound();
+    let n = graph.node_count();
     let mut used = vec![false; n];
     let mut p = vec![-1i32; n];
     let mut base: Vec<usize> = (0..n).collect();
@@ -641,12 +641,6 @@ mod tests {
         vec![EdgeId(0), EdgeId(5)],
         true,
     )]
-    #[case::parallel_edges(
-        2,
-        vec![[0, 1], [0, 1]],
-        vec![EdgeId(0)],
-        true,
-    )]
     #[case::petersen(
         10,
         vec![
@@ -840,7 +834,6 @@ mod tests {
     #[case::c6(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 2)]
     #[case::k4(4, vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]], 3)]
     #[case::greedy_counterexample(4, vec![[1, 2], [0, 1], [2, 3]], 1)]
-    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 2)]
     fn test_graph_enumerate_perfect_matchings(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
@@ -902,7 +895,6 @@ mod tests {
     #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], 3)]
     #[case::path_3(3, vec![[0, 1], [1, 2]], 2)]
     #[case::single_edge(2, vec![[0, 1]], 1)]
-    #[case::parallel_edges(2, vec![[0, 1], [0, 1]], 2)]
     fn test_graph_enumerate_maximum_matchings(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
@@ -1243,7 +1235,7 @@ mod tests {
         let mut matchings = Vec::new();
 
         for mask in 0..subset_count {
-            let mut matched = vec![false; graph.node_bound()];
+            let mut matched = vec![false; graph.node_count()];
             let mut edges = Vec::new();
             let mut valid = true;
             for edge in graph.edge_ids() {
@@ -1292,7 +1284,7 @@ mod tests {
     }
 
     fn greedy_matching_size(graph: &Graph) -> usize {
-        let mut matched = vec![false; graph.node_bound()];
+        let mut matched = vec![false; graph.node_count()];
         let mut size = 0;
         for edge in graph.edge_ids() {
             let [first, second] = graph.edge_endpoints(edge);

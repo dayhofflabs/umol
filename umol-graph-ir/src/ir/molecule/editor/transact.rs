@@ -16,9 +16,11 @@ impl MoleculeEditor {
     ///
     /// # Errors
     ///
-    /// Returns MoleculeApplyError::Transaction when an edit handle, precondition, or shape is
-    /// invalid for the evolving editor state. Earlier completed edits remain applied; later edits
-    /// are not attempted. The editor remains available for inspection and further changes.
+    /// Returns [`MoleculeApplyError::Transaction`] when an edit handle, precondition, or shape is
+    /// invalid for the evolving editor state, or [`MoleculeApplyError::Integrity`] when adding a
+    /// localized bond would create a self-loop or parallel bond. Earlier completed edits remain
+    /// applied; later edits are not attempted. The editor remains available for inspection and
+    /// further changes.
     ///
     /// # Semantic properties
     ///
@@ -40,8 +42,8 @@ impl MoleculeEditor {
     ///
     /// # Errors
     ///
-    /// Returns the same transaction error as [`Self::apply`], retaining the completed prefix
-    /// without returning a correspondence.
+    /// Returns the same transaction or localized-bond integrity error as [`Self::apply`],
+    /// retaining the completed prefix without returning a correspondence.
     ///
     /// # Semantic properties
     ///
@@ -81,11 +83,11 @@ mod tests {
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
     use crate::ir::edit::{AtomHandle, DativeBondHandle, Edit, Edits};
-    use crate::ir::entity::EntityKind;
+    use crate::ir::entity::{Entity, EntityKind};
     use crate::ir::error::MoleculeApplyError;
     use crate::ir::id::{AtomId, BondId, DativeBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-    use crate::ir::molecule::{Molecule, TransactionError};
+    use crate::ir::molecule::{Molecule, MoleculeIntegrityError, TransactionError};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::num::NumForm;
@@ -247,5 +249,44 @@ mod tests {
                 r#"{:atoms ["C" "N" "O#c1" "F"] :bonds [[2 3 "1"]]}"#
             ))
         );
+    }
+
+    #[rstest]
+    #[case::self_loop(
+        AtomId(0),
+        AtomId(0),
+        MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::Bond(BondId(1)),
+            atom: AtomId(0),
+        }
+    )]
+    #[case::parallel_bond(
+        AtomId(1),
+        AtomId(0),
+        MoleculeIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        }
+    )]
+    fn test_molecule_editor_apply_bond_integrity_error(
+        #[case] first: AtomId,
+        #[case] second: AtomId,
+        #[case] expected: MoleculeIntegrityError,
+        #[values(false, true)] tracked: bool,
+    ) {
+        let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+        let mut editor = source.clone().edit();
+        let mut edits = Edits::new();
+        edits.add_bond(
+            AtomHandle::Id(first),
+            AtomHandle::Id(second),
+            BondForm::from_order(2),
+        );
+        let error = if tracked {
+            editor.tracked_apply(edits).unwrap_err()
+        } else {
+            editor.apply(edits).unwrap_err()
+        };
+        assert_eq!(error, MoleculeApplyError::Integrity(expected));
+        assert_eq!(editor.finish(), Ok(source));
     }
 }

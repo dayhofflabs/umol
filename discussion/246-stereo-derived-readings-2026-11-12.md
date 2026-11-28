@@ -3,7 +3,8 @@
 Status: Completed
 Date: 2026-11-12
 Relates: [245](245-canonical-eq-cost-2026-11-12.md),
-[249](249-release-0-11-preparation-2026-11-16.md)
+[249](249-release-0-11-preparation-2026-11-16.md),
+[254](254-edge-colored-automorphisms-2026-11-26.md)
 
 ## Purpose
 

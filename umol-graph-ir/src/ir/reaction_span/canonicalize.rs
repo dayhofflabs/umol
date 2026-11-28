@@ -1,18 +1,20 @@
 //! Reaction-span and reaction canonicalization.
 
-use umol_graph_core::{EdgeId, Graph, NodeId, SubdivisionNodeSource};
+use umol_graph_core::NodeId;
 
 use super::super::aromatic::{aromatic_system_representative_action, AromaticSystemForm};
 use super::super::canonicalize::{
     color_representatives, hash_value, molecule_remapping, reaction_canonicalize_level,
     reaction_span_canonicalize_level, Canonicalize, CanonicalizeContext, DeferredKey,
-    ReactionCanonicalizeError, ReactionSpanCanonicalizeError, TopologySearchInput,
+    ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
 };
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
 use super::super::id::{AtomId, BondId};
-use super::super::incidence::{IncidenceGraph, IncidenceLevel};
+use super::super::incidence::{
+    IncidenceEdge, IncidenceEdgeId, IncidenceGraph, IncidenceLevel, IncidenceNodeId,
+};
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::{multicenter_bond_representative_action, MulticenterBondForm};
 use super::super::reaction::Reaction;
@@ -23,9 +25,9 @@ use super::super::stereo::{
     StereoBondForm,
 };
 use super::super::symmetry::{
-    canonical_search, canonical_search_from_partition, canonical_search_with_generator_filter,
-    remapping_exists, remapping_preserves_incidences, AutomorphismAdapter, AutomorphismColor,
-    CanonicalCandidate, CanonicalSearchResult, InitialColors, OrderedPartition,
+    canonical_search, canonical_search_with_generator_filter, remapping_exists,
+    remapping_preserves_incidences, AutomorphismAdapter, CanonicalCandidate, CanonicalSearchResult,
+    InitialColors, OrderedPartition,
 };
 use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
 use super::symmetry::{
@@ -62,6 +64,33 @@ struct ColorKey {
     constraints: Vec<ConstraintSpan>,
 }
 
+fn sorted_bonds_by_atom_images(
+    span: &ReactionSpan,
+    atom_images: &[usize],
+) -> Vec<(BondId, [u32; 2])> {
+    let mut bonds = span
+        .graph()
+        .edge_ids()
+        .enumerate()
+        .map(|(index, edge)| {
+            let [first, second] = span
+                .graph()
+                .edge_endpoints(edge)
+                .map(|atom| atom_images[atom.index()] as u32);
+            (
+                matches!(span.bonds()[index], EntitySpan::Added(_)),
+                [first.min(second), first.max(second)],
+                BondId(index as u32),
+            )
+        })
+        .collect::<Vec<_>>();
+    bonds.sort_unstable();
+    bonds
+        .into_iter()
+        .map(|(_, endpoints, id)| (id, endpoints))
+        .collect()
+}
+
 fn remapping_from_order(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
@@ -72,9 +101,9 @@ fn remapping_from_order(
         .map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
-        let (entity_kind, kind_id) = match incidence_graph.entity(node) {
+        let (entity_kind, kind_id) = match incidence_graph.entity(IncidenceNodeId::from(node)) {
             Entity::Atom(id) => (0, id.index()),
-            Entity::Bond(id) => (1, id.index()),
+            Entity::Bond(_) => unreachable!("localized bonds are edges, not incidence nodes"),
             Entity::DativeBond(id) => (2, id.index()),
             Entity::AromaticSystem(id) => (3, id.index()),
             Entity::MulticenterBond(id) => (4, id.index()),
@@ -85,24 +114,47 @@ fn remapping_from_order(
         images[entity_kind][kind_id] = next[entity_kind];
         next[entity_kind] += 1;
     }
+    let sorted_bonds = sorted_bonds_by_atom_images(span, &images[0]);
+    for (image, (id, _)) in sorted_bonds.into_iter().enumerate() {
+        images[1][id.index()] = image;
+    }
     molecule_remapping(&images)
 }
 
-/// The remapping that sends every entity of `incidence_graph` to its image under `generator`.
+/// The remapping that sends every entity of `source` to its image in `target` under `node_images`.
+pub(super) fn remapping_from_images(
+    source: &ReactionSpan,
+    target: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    node_images: &[NodeId],
+) -> MoleculeRemapping {
+    let mut images = source
+        .entity_counts()
+        .map(|count| (0..count).collect::<Vec<_>>());
+    for node in incidence_graph.node_ids() {
+        let entity = incidence_graph.entity(node);
+        images[entity.kind() as usize][entity.kind_id()] = incidence_graph
+            .entity(IncidenceNodeId::from(node_images[node.index()]))
+            .kind_id();
+    }
+    for edge in source.graph().edge_ids() {
+        let [first, second] = source.graph().edge_endpoints(edge);
+        let target_edge = target
+            .graph()
+            .find_edge(node_images[first.index()], node_images[second.index()])
+            .expect("incidence-preserving remapping carries every localized bond to a bond");
+        images[1][edge.index()] = target_edge.index();
+    }
+    molecule_remapping(&images)
+}
+
+/// The remapping that sends every entity of `span` to its image under `generator`.
 fn remapping_from_generator(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
     generator: &[NodeId],
 ) -> MoleculeRemapping {
-    let mut images = span
-        .entity_counts()
-        .map(|count| (0..count).collect::<Vec<_>>());
-    for node in incidence_graph.graph().node_ids() {
-        let entity = incidence_graph.entity(node);
-        images[entity.kind() as usize][entity.kind_id()] =
-            incidence_graph.entity(generator[node.index()]).kind_id();
-    }
-    molecule_remapping(&images)
+    remapping_from_images(span, span, incidence_graph, generator)
 }
 
 /// Keep the generators that carry `span` onto itself: the span remapped by the generator equals the
@@ -163,6 +215,30 @@ fn same_entity_color(
     }
 }
 
+fn same_edge_color(
+    source: &ReactionSpan,
+    source_incidence: &IncidenceGraph,
+    source_edge: IncidenceEdgeId,
+    target: &ReactionSpan,
+    target_incidence: &IncidenceGraph,
+    target_edge: IncidenceEdgeId,
+) -> bool {
+    match (
+        source_incidence.edge(source_edge),
+        target_incidence.edge(target_edge),
+    ) {
+        (IncidenceEdge::Bond(source_bond), IncidenceEdge::Bond(target_bond)) => {
+            source.bonds()[source_bond.index()].as_color()
+                == target.bonds()[target_bond.index()].as_color()
+        }
+        (IncidenceEdge::Incidence(_), IncidenceEdge::Incidence(_)) => {
+            incidence_color(source, source_incidence, source_edge)
+                == incidence_color(target, target_incidence, target_edge)
+        }
+        _ => false,
+    }
+}
+
 /// Whether the color integers of two normalized spans stand for the same colors, each equally
 /// often. The integers are those of `initial_colors` at one level.
 fn same_colors(
@@ -177,150 +253,59 @@ fn same_colors(
     else {
         return false;
     };
-    let Some(incidences) =
-        color_representatives(&source_colors.incidences, &target_colors.incidences)
-    else {
+    let Some(edges) = color_representatives(&source_colors.edges, &target_colors.edges) else {
         return false;
     };
     entities.into_iter().all(|(entity, image)| {
         same_entity_color(
             source,
-            source_incidence.entity(NodeId(entity as u32)),
+            source_incidence.entity(IncidenceNodeId(entity as u32)),
             target,
-            target_incidence.entity(NodeId(image as u32)),
+            target_incidence.entity(IncidenceNodeId(image as u32)),
         )
-    }) && incidences.into_iter().all(|(edge, image)| {
-        incidence_color(source, source_incidence, EdgeId(edge as u32))
-            == incidence_color(target, target_incidence, EdgeId(image as u32))
+    }) && edges.into_iter().all(|(edge, image)| {
+        same_edge_color(
+            source,
+            source_incidence,
+            IncidenceEdgeId(edge as u32),
+            target,
+            target_incidence,
+            IncidenceEdgeId(image as u32),
+        )
     })
 }
 
-/// Construct the topology search input from the dense normalized colors of topology entities.
+/// The order of every incidence node of `level` for an atom order.
 ///
-/// The vertices are the atoms of the union graph. A removed and an added bond on one atom pair
-/// differ in color, so at most one of them is a direct edge.
-fn topology_search_input(
-    span: &ReactionSpan,
-    incidence_graph: &IncidenceGraph,
-    entity_colors: &[u32],
-) -> TopologySearchInput {
-    let bond_color = |index: usize| {
-        let node = incidence_graph.node_of(Entity::Bond(BondId(index as u32)));
-        entity_colors[node.index()]
-    };
-    let mut bond_color_counts = vec![0_usize; entity_colors.len()];
-    for index in 0..span.bonds().len() {
-        bond_color_counts[bond_color(index) as usize] += 1;
-    }
-    let direct_bond_color = bond_color_counts
-        .into_iter()
-        .enumerate()
-        .filter(|(_, count)| *count > 0)
-        .max_by(|(lhs_color, lhs_count), (rhs_color, rhs_count)| {
-            lhs_count
-                .cmp(rhs_count)
-                .then_with(|| rhs_color.cmp(lhs_color))
-        })
-        .map(|(color, _)| color as u32);
-
-    let atom_count = span.atoms().len();
-    let mut colors = entity_colors[..atom_count]
-        .iter()
-        .copied()
-        .map(AutomorphismColor::Entity)
-        .collect::<Vec<_>>();
-    let mut node_sources = (0..atom_count)
-        .map(|index| SubdivisionNodeSource::Node(NodeId(index as u32)))
-        .collect::<Vec<_>>();
-    let mut edges = Vec::<[u32; 2]>::with_capacity(span.bonds().len() * 2);
-
-    for (index, edge) in span.graph().edge_ids().enumerate() {
-        let color = bond_color(index);
-        let [first, second] = span.graph().edge_endpoints(edge).map(|atom| atom.0);
-        if direct_bond_color == Some(color) {
-            edges.push([first, second]);
-        } else {
-            let subdivision = NodeId(node_sources.len() as u32);
-            node_sources.push(SubdivisionNodeSource::Node(subdivision));
-            colors.push(AutomorphismColor::Entity(color));
-            edges.push([first, subdivision.0]);
-            edges.push([subdivision.0, second]);
-        }
-    }
-
-    let graph = Graph::new(node_sources.len(), &edges);
-    debug_assert!(graph.is_simple());
-    let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
-        let AutomorphismColor::Entity(color) = *color else {
-            unreachable!("the topology search input uses entity colors")
-        };
-        color
-    }));
-
-    TopologySearchInput {
-        adapter: AutomorphismAdapter {
-            graph,
-            colors,
-            node_sources,
-            source_node_count: atom_count,
-        },
-        initial_partition,
-    }
-}
-
-/// The order of every entity of `level` for an atom order.
-///
-/// The atoms stand as the search orders them. The entities of each further kind follow with the
-/// lhs-present ones first, each group by its participants. Entities of one kind and group on the
-/// same participants keep their search order.
+/// The atoms stand as the search orders them. The overlay entities of each further kind follow
+/// with the lhs-present ones first, each group by its participants. Entities of one kind and group
+/// on the same participants keep their search order.
 fn entity_order(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
     level: DescriptionLevel,
     order: &[NodeId],
 ) -> Vec<NodeId> {
-    let node_count = incidence_graph.graph().node_count();
+    let node_count = incidence_graph.node_count();
     let mut positions = vec![0_usize; node_count];
     let mut atom_images = vec![0_usize; span.atoms().len()];
     let mut entity_order = Vec::with_capacity(node_count);
     for (position, &node) in order.iter().enumerate() {
         positions[node.index()] = position;
-        if let Entity::Atom(id) = incidence_graph.entity(node) {
+        if let Entity::Atom(id) = incidence_graph.entity(IncidenceNodeId::from(node)) {
             atom_images[id.index()] = entity_order.len();
             entity_order.push(node);
         }
     }
     let atom_image = |atom: AtomId| atom_images[atom.index()];
     let search_position = |entity: Entity| {
-        let node = incidence_graph.node_of(entity);
+        let node = NodeId::from(
+            incidence_graph
+                .node_of(entity)
+                .expect("overlay entity belongs to incidence graph"),
+        );
         (positions[node.index()], node)
     };
-
-    let mut bond_images = vec![0_usize; span.bonds().len()];
-    let mut bonds = span
-        .graph()
-        .edge_ids()
-        .enumerate()
-        .map(|(index, edge)| {
-            let [first, second] = span
-                .graph()
-                .edge_endpoints(edge)
-                .map(|atom| atom_images[atom.index()]);
-            let (position, node) = search_position(Entity::Bond(BondId(index as u32)));
-            (
-                matches!(span.bonds()[index], EntitySpan::Added(_)),
-                (first.min(second), first.max(second)),
-                position,
-                node,
-                index,
-            )
-        })
-        .collect::<Vec<_>>();
-    bonds.sort_unstable();
-    for (image, &(_, _, _, node, index)) in bonds.iter().enumerate() {
-        bond_images[index] = image;
-        entity_order.push(node);
-    }
 
     if level >= DescriptionLevel::Constitution {
         let mut dative = span
@@ -430,6 +415,13 @@ fn entity_order(
         stereo_atoms.sort_unstable();
         entity_order.extend(stereo_atoms.into_iter().map(|(_, _, _, node)| node));
 
+        let mut bond_images = vec![0_usize; span.bonds().len()];
+        for (image, (id, _)) in sorted_bonds_by_atom_images(span, &atom_images)
+            .into_iter()
+            .enumerate()
+        {
+            bond_images[id.index()] = image;
+        }
         let mut stereo_bonds = span
             .stereo_bonds()
             .ids()
@@ -463,11 +455,13 @@ fn color_key(
     colors: &InitialColors,
     entity_order: &[NodeId],
 ) -> ColorKey {
-    let mut atom_images = vec![0_u32; span.atoms().len()];
-    let mut bond_images = vec![0_u32; span.bonds().len()];
+    let atom_count = span.atoms().len();
+    let bond_count = span.bonds().len();
+    let mut atom_images = vec![0_usize; atom_count];
+    let mut bond_images = vec![0_u32; bond_count];
     let mut key = ColorKey {
-        atoms: Vec::with_capacity(atom_images.len()),
-        bonds: Vec::with_capacity(bond_images.len()),
+        atoms: Vec::with_capacity(atom_count),
+        bonds: Vec::with_capacity(bond_count),
         dative: Vec::new(),
         aromatic: Vec::new(),
         multicenter: Vec::new(),
@@ -476,32 +470,38 @@ fn color_key(
         stereo_bonds: Vec::new(),
         constraints: Vec::new(),
     };
-    for &node in entity_order {
+    for &node in &entity_order[..atom_count] {
         let color = colors.entities[node.index()];
-        match incidence_graph.entity(node) {
-            Entity::Atom(id) => {
-                atom_images[id.index()] = key.atoms.len() as u32;
-                key.atoms.push(color);
-            }
-            Entity::Bond(id) => {
-                bond_images[id.index()] = key.bonds.len() as u32;
-                let [first, second] = span
-                    .graph()
-                    .edge_endpoints(EdgeId::from(id))
-                    .map(|atom| atom_images[atom.index()]);
-                key.bonds
-                    .push([first.min(second), first.max(second), color]);
+        let Entity::Atom(id) = incidence_graph.entity(IncidenceNodeId::from(node)) else {
+            unreachable!("atom nodes precede overlay nodes in entity_order");
+        };
+        atom_images[id.index()] = key.atoms.len();
+        key.atoms.push(color);
+    }
+    for (image, (bond_id, [first, second])) in sorted_bonds_by_atom_images(span, &atom_images)
+        .into_iter()
+        .enumerate()
+    {
+        bond_images[bond_id.index()] = image as u32;
+        let color = colors.edges[bond_id.index()];
+        key.bonds.push([first, second, color]);
+    }
+    for &node in &entity_order[atom_count..] {
+        let color = colors.entities[node.index()];
+        match incidence_graph.entity(IncidenceNodeId::from(node)) {
+            Entity::Atom(_) | Entity::Bond(_) => {
+                unreachable!("only overlay entities follow atoms in entity_order")
             }
             Entity::DativeBond(id) => {
                 let mut donors = span
                     .dative_bonds()
                     .donors(id)
-                    .map(|atom| atom_images[atom.index()])
+                    .map(|atom| atom_images[atom.index()] as u32)
                     .collect::<Vec<_>>();
                 donors.sort_unstable();
                 key.dative.push((
                     donors,
-                    atom_images[span.dative_bonds().acceptor(id).index()],
+                    atom_images[span.dative_bonds().acceptor(id).index()] as u32,
                     color,
                 ));
             }
@@ -509,7 +509,7 @@ fn color_key(
                 let atoms = span
                     .aromatic_systems()
                     .atoms(id)
-                    .map(|atom| AtomId(atom_images[atom.index()]))
+                    .map(|atom| AtomId(atom_images[atom.index()] as u32))
                     .collect::<Vec<_>>();
                 let action = aromatic_system_representative_action(atoms.clone());
                 let electrons = |form: &AromaticSystemForm| {
@@ -541,7 +541,7 @@ fn color_key(
                 let atoms = span
                     .multicenter_bonds()
                     .atoms(id)
-                    .map(|atom| AtomId(atom_images[atom.index()]))
+                    .map(|atom| AtomId(atom_images[atom.index()] as u32))
                     .collect::<Vec<_>>();
                 let action = multicenter_bond_representative_action(atoms.clone());
                 let electrons = |form: &MulticenterBondForm| {
@@ -573,7 +573,7 @@ fn color_key(
                 let [first, second] = span
                     .noncovalent_bonds()
                     .atoms(id)
-                    .map(|atom| atom_images[atom.index()]);
+                    .map(|atom| atom_images[atom.index()] as u32);
                 key.noncovalent
                     .push([first.min(second), first.max(second), color]);
             }
@@ -583,13 +583,16 @@ fn color_key(
                     .ligands(id)
                     .iter()
                     .map(|ligand| {
-                        StereoLigand::new(AtomId(atom_images[ligand.atom_id.index()]), ligand.kind)
+                        StereoLigand::new(
+                            AtomId(atom_images[ligand.atom_id.index()] as u32),
+                            ligand.kind,
+                        )
                     })
                     .collect::<Vec<_>>();
                 let action = stereo_atom_representative_action(&ligands)
                     .expect("stereo atom ligand frame has a supported degree");
                 key.stereo_atoms.push((
-                    atom_images[span.stereo_atoms().site(id).index()],
+                    atom_images[span.stereo_atoms().site(id).index()] as u32,
                     action.act(&ligands),
                     span.stereo_atoms()
                         .attributes(id)
@@ -606,7 +609,10 @@ fn color_key(
                     .ligands(id)
                     .iter()
                     .map(|ligand| {
-                        StereoLigand::new(AtomId(atom_images[ligand.atom_id.index()]), ligand.kind)
+                        StereoLigand::new(
+                            AtomId(atom_images[ligand.atom_id.index()] as u32),
+                            ligand.kind,
+                        )
                     })
                     .collect::<Vec<_>>();
                 let action = stereo_bond_representative_action(&ligands)
@@ -652,6 +658,7 @@ fn canonical_candidate(
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let colors = initial_colors(span, &incidence_graph, level, true)?;
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let build_key = |order: &[NodeId]| color_key(span, &incidence_graph, &colors, order);
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(span, &incidence_graph, level, order);
@@ -661,48 +668,31 @@ fn canonical_candidate(
         }
     };
     let selected = match level {
-        DescriptionLevel::Topology => {
-            let TopologySearchInput {
-                adapter,
-                initial_partition,
-            } = topology_search_input(span, &incidence_graph, &colors.entities);
-            canonical_search_from_partition(
-                &adapter,
-                initial_partition,
-                context.automorphism_algorithm,
-                &leaf_candidate,
-            )
-        }
-        DescriptionLevel::Constitution => {
-            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-            canonical_search(
-                &adapter,
-                &adapter.colors,
-                context.automorphism_algorithm,
-                &leaf_candidate,
-            )
-        }
+        DescriptionLevel::Topology | DescriptionLevel::Constitution => canonical_search(
+            &adapter,
+            adapter.node_colors(),
+            context.automorphism_algorithm,
+            &leaf_candidate,
+        ),
         DescriptionLevel::Structure => {
-            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
             let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
                 retain_stereo_preserving_generators(span, &incidence_graph, generators);
             };
             canonical_search_with_generator_filter(
                 &adapter,
-                &adapter.colors,
+                adapter.node_colors(),
                 context.automorphism_algorithm,
                 &leaf_candidate,
                 &filter_generators,
             )
         }
         DescriptionLevel::Full => {
-            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
             let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
                 retain_preserving_generators(span, &incidence_graph, generators);
             };
             canonical_search_with_generator_filter(
                 &adapter,
-                &adapter.colors,
+                adapter.node_colors(),
                 context.automorphism_algorithm,
                 &leaf_candidate,
                 &filter_generators,
@@ -783,23 +773,10 @@ impl ReactionSpan {
             return false;
         }
 
-        let search_input = |span: &ReactionSpan, incidence_graph, colors: &InitialColors| {
-            if level == DescriptionLevel::Topology {
-                let TopologySearchInput {
-                    adapter,
-                    initial_partition,
-                } = topology_search_input(span, incidence_graph, &colors.entities);
-                (adapter, initial_partition)
-            } else {
-                let adapter = AutomorphismAdapter::new(incidence_graph, colors);
-                let partition = OrderedPartition::from_descriptors(&adapter.colors);
-                (adapter, partition)
-            }
-        };
-        let (source_adapter, source_partition) =
-            search_input(&source, &source_incidence, &source_colors);
-        let (target_adapter, target_partition) =
-            search_input(&target, &target_incidence, &target_colors);
+        let source_adapter = AutomorphismAdapter::new(&source_incidence, &source_colors);
+        let source_partition = OrderedPartition::from_descriptors(source_adapter.node_colors());
+        let target_adapter = AutomorphismAdapter::new(&target_incidence, &target_colors);
+        let target_partition = OrderedPartition::from_descriptors(target_adapter.node_colors());
         let check = |images: &[NodeId]| {
             remapping_preserves_incidences(&source_adapter, &target_adapter, images)
                 && match level {
@@ -809,7 +786,7 @@ impl ReactionSpan {
                     }
                     DescriptionLevel::Full => source.framed_eq_under(
                         &target,
-                        &remapping_from_generator(&source, &source_incidence, images),
+                        &remapping_from_images(&source, &target, &source_incidence, images),
                     ),
                 }
         };

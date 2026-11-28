@@ -6,7 +6,7 @@
 //! entity kind (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally exposes the
 //! induced edge correspondence over the two graphs.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{Add, Sub};
@@ -15,6 +15,8 @@ use crate::compact::{Compaction, GraphCompaction};
 use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 use crate::remap::{GraphRemapping, Remapping};
+
+const INLINE_VALIDATION_LIMIT: usize = 32;
 
 /// A partial bijection between two `Id` spaces: the matched `(left, right)` pairs; every unmatched
 /// id is reported on its side. Only the matched pairs are stored — unmatched ids are derived on
@@ -99,31 +101,76 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
         left_count: usize,
         right_count: usize,
     ) -> Result<Self, CorrespondenceError<Id>> {
+        if matched_pairs.is_empty() {
+            return Ok(Self {
+                matched_pairs,
+                left_count,
+                right_count,
+            });
+        }
         let left_bound = Id::from(left_count);
         let right_bound = Id::from(right_count);
-        let mut left_ids = BTreeSet::new();
-        let mut right_ids = BTreeSet::new();
-        for &(left, right) in &matched_pairs {
-            if left >= left_bound {
-                return Err(CorrespondenceError::LeftIdOutOfRange {
-                    id: left,
-                    count: left_count,
-                });
+        let mut sorted = true;
+        if matched_pairs.len() <= INLINE_VALIDATION_LIMIT {
+            for (i, &(left, right)) in matched_pairs.iter().enumerate() {
+                if left >= left_bound {
+                    return Err(CorrespondenceError::LeftIdOutOfRange {
+                        id: left,
+                        count: left_count,
+                    });
+                }
+                if right >= right_bound {
+                    return Err(CorrespondenceError::RightIdOutOfRange {
+                        id: right,
+                        count: right_count,
+                    });
+                }
+                if i > 0 && left < matched_pairs[i - 1].0 {
+                    sorted = false;
+                }
+                let mut duplicate_right = false;
+                for &(prev_left, prev_right) in &matched_pairs[..i] {
+                    if prev_left == left {
+                        return Err(CorrespondenceError::DuplicateLeftId { id: left });
+                    }
+                    if prev_right == right {
+                        duplicate_right = true;
+                    }
+                }
+                if duplicate_right {
+                    return Err(CorrespondenceError::DuplicateRightId { id: right });
+                }
             }
-            if right >= right_bound {
-                return Err(CorrespondenceError::RightIdOutOfRange {
-                    id: right,
-                    count: right_count,
-                });
-            }
-            if !left_ids.insert(left) {
-                return Err(CorrespondenceError::DuplicateLeftId { id: left });
-            }
-            if !right_ids.insert(right) {
-                return Err(CorrespondenceError::DuplicateRightId { id: right });
+        } else {
+            let mut left_ids = BTreeSet::new();
+            let mut right_ids = BTreeSet::new();
+            for (i, &(left, right)) in matched_pairs.iter().enumerate() {
+                if left >= left_bound {
+                    return Err(CorrespondenceError::LeftIdOutOfRange {
+                        id: left,
+                        count: left_count,
+                    });
+                }
+                if right >= right_bound {
+                    return Err(CorrespondenceError::RightIdOutOfRange {
+                        id: right,
+                        count: right_count,
+                    });
+                }
+                if i > 0 && left < matched_pairs[i - 1].0 {
+                    sorted = false;
+                }
+                if !left_ids.insert(left) {
+                    return Err(CorrespondenceError::DuplicateLeftId { id: left });
+                }
+                if !right_ids.insert(right) {
+                    return Err(CorrespondenceError::DuplicateRightId { id: right });
+                }
             }
         }
-        matched_pairs.sort_unstable_by_key(|&(left, _)| left);
+        if !sorted {
+            matched_pairs.sort_unstable_by_key(|&(left, _)| left);
+        }
         Ok(Self {
             matched_pairs,
             left_count,
@@ -136,17 +183,37 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
     /// sorted by left, so no sort. Panics if an image is outside the declared right id space or
     /// occurs more than once; algorithmic producers are expected to establish these invariants.
     pub fn from_images(images: &[Id], right_count: usize) -> Self {
+        if images.is_empty() {
+            return Self {
+                matched_pairs: Vec::new(),
+                left_count: 0,
+                right_count,
+            };
+        }
         let right_bound = Id::from(right_count);
-        let mut right_ids = BTreeSet::new();
-        for &right in images {
-            assert!(
-                right < right_bound,
-                "correspondence image is out of range for the declared right id space"
-            );
-            assert!(
-                right_ids.insert(right),
-                "correspondence images must be unique"
-            );
+        if images.len() <= INLINE_VALIDATION_LIMIT {
+            for (i, &right) in images.iter().enumerate() {
+                assert!(
+                    right < right_bound,
+                    "correspondence image is out of range for the declared right id space"
+                );
+                assert!(
+                    !images[..i].contains(&right),
+                    "correspondence images must be unique"
+                );
+            }
+        } else {
+            let mut right_ids = BTreeSet::new();
+            for &right in images {
+                assert!(
+                    right < right_bound,
+                    "correspondence image is out of range for the declared right id space"
+                );
+                assert!(
+                    right_ids.insert(right),
+                    "correspondence images must be unique"
+                );
+            }
         }
 
         Self {
@@ -369,22 +436,13 @@ impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
 
 impl Correspondence<NodeId> {
     /// The induced edge correspondence: `(left_edge, right_edge)` pairs whose endpoints are matched
-    /// to a unique edge on the other side. Returns `None` when the declared node spaces do not
-    /// describe `left` and `right`, or when parallel edges make the induced pairing non-unique.
+    /// to an edge on the other side. Returns `None` when the declared node spaces do not describe
+    /// `left` and `right`.
     pub fn edge_matched_pairs(&self, left: &Graph, right: &Graph) -> Option<Vec<(EdgeId, EdgeId)>> {
         if self.left_count != left.node_count() || self.right_count != right.node_count() {
             return None;
         }
 
-        let mut right_edges: HashMap<[NodeId; 2], (EdgeId, bool)> = HashMap::new();
-        for edge in right.edge_ids() {
-            right_edges
-                .entry(right.edge_endpoints(edge))
-                .and_modify(|(_, unique)| *unique = false)
-                .or_insert((edge, true));
-        }
-
-        let mut used_right = BTreeSet::new();
         let mut matched_pairs = Vec::new();
         for left_edge in left.edge_ids() {
             let [left_first, left_second] = left.edge_endpoints(left_edge);
@@ -393,24 +451,15 @@ impl Correspondence<NodeId> {
             else {
                 continue;
             };
-            let endpoints = if right_first <= right_second {
-                [right_first, right_second]
-            } else {
-                [right_second, right_first]
-            };
-            let Some(&(right_edge, unique)) = right_edges.get(&endpoints) else {
-                continue;
-            };
-            if !unique || !used_right.insert(right_edge) {
-                return None;
+            if let Some(right_edge) = right.find_edge(right_first, right_second) {
+                matched_pairs.push((left_edge, right_edge));
             }
-            matched_pairs.push((left_edge, right_edge));
         }
         Some(matched_pairs)
     }
 
     /// The number of edges shared under the node matching (the maximum-common-edge-subgraph
-    /// objective), or `None` when the edge correspondence is not uniquely induced.
+    /// objective), or `None` when the declared node spaces do not describe `left` and `right`.
     pub fn shared_edge_count(&self, left: &Graph, right: &Graph) -> Option<usize> {
         self.edge_matched_pairs(left, right)
             .map(|pairs| pairs.len())
@@ -447,8 +496,7 @@ impl GraphCorrespondence {
     /// whenever every structurally matched edge is admissible — a subiso match, a common *induced*
     /// subgraph, or a common-subgraph walk whose adjacency enforces the edge predicate; not for an
     /// edge-subgraph result whose producer selects the edge component directly. Returns `None` when the
-    /// node correspondence does not describe the supplied graphs or does not induce unique edge
-    /// pairs.
+    /// node correspondence does not describe the supplied graphs.
     pub fn induce(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Option<Self> {
         let edges = Correspondence::new(
             nodes.edge_matched_pairs(left, right)?,
@@ -1188,6 +1236,7 @@ mod tests {
 
     #[rstest]
     #[case::empty(Vec::new(), 0, 0, Correspondence { matched_pairs: Vec::new(), left_count: 0, right_count: 0 })]
+    #[case::empty_non_zero_counts(Vec::new(), 4, 5, Correspondence { matched_pairs: Vec::new(), left_count: 4, right_count: 5 })]
     #[case::partial(
         vec![(NodeId(1), NodeId(3))],
         3,
@@ -1202,6 +1251,46 @@ mod tests {
             matched_pairs: vec![(NodeId(0), NodeId(3)), (NodeId(1), NodeId(1)), (NodeId(2), NodeId(0))],
             left_count: 3,
             right_count: 4,
+        },
+    )]
+    #[case::sorted_at_inline_limit(
+        (0..32).map(|i| (NodeId(i), NodeId(31 - i))).collect(),
+        32,
+        32,
+        Correspondence {
+            matched_pairs: (0..32).map(|i| (NodeId(i), NodeId(31 - i))).collect(),
+            left_count: 32,
+            right_count: 32,
+        },
+    )]
+    #[case::unsorted_at_inline_limit(
+        (0..32).rev().map(|i| (NodeId(i), NodeId(31 - i))).collect(),
+        32,
+        32,
+        Correspondence {
+            matched_pairs: (0..32).map(|i| (NodeId(i), NodeId(31 - i))).collect(),
+            left_count: 32,
+            right_count: 32,
+        },
+    )]
+    #[case::sorted_above_inline_limit(
+        (0..33).map(|i| (NodeId(i), NodeId(32 - i))).collect(),
+        33,
+        33,
+        Correspondence {
+            matched_pairs: (0..33).map(|i| (NodeId(i), NodeId(32 - i))).collect(),
+            left_count: 33,
+            right_count: 33,
+        },
+    )]
+    #[case::unsorted_above_inline_limit(
+        (0..33).rev().map(|i| (NodeId(i), NodeId(32 - i))).collect(),
+        33,
+        33,
+        Correspondence {
+            matched_pairs: (0..33).map(|i| (NodeId(i), NodeId(32 - i))).collect(),
+            left_count: 33,
+            right_count: 33,
         },
     )]
     fn test_correspondence_new(
@@ -1241,6 +1330,42 @@ mod tests {
         2,
         CorrespondenceError::DuplicateRightId { id: NodeId(1) },
     )]
+    #[case::duplicate_left_before_duplicate_right_inline(
+        vec![(NodeId(0), NodeId(1)), (NodeId(2), NodeId(3)), (NodeId(2), NodeId(1))],
+        4,
+        4,
+        CorrespondenceError::DuplicateLeftId { id: NodeId(2) },
+    )]
+    #[case::left_out_of_range_above_inline_limit(
+        (0..32).map(|i| (NodeId(i), NodeId(i))).chain([(NodeId(33), NodeId(32))]).collect(),
+        33,
+        33,
+        CorrespondenceError::LeftIdOutOfRange { id: NodeId(33), count: 33 },
+    )]
+    #[case::right_out_of_range_above_inline_limit(
+        (0..32).map(|i| (NodeId(i), NodeId(i))).chain([(NodeId(32), NodeId(33))]).collect(),
+        33,
+        33,
+        CorrespondenceError::RightIdOutOfRange { id: NodeId(33), count: 33 },
+    )]
+    #[case::duplicate_left_above_inline_limit(
+        (0..32).map(|i| (NodeId(i), NodeId(i))).chain([(NodeId(17), NodeId(32))]).collect(),
+        33,
+        33,
+        CorrespondenceError::DuplicateLeftId { id: NodeId(17) },
+    )]
+    #[case::duplicate_right_above_inline_limit(
+        (0..32).map(|i| (NodeId(i), NodeId(i))).chain([(NodeId(32), NodeId(17))]).collect(),
+        33,
+        33,
+        CorrespondenceError::DuplicateRightId { id: NodeId(17) },
+    )]
+    #[case::duplicate_left_before_duplicate_right_above_inline_limit(
+        (0..32).map(|i| (NodeId(i), NodeId(i))).chain([(NodeId(17), NodeId(3))]).collect(),
+        33,
+        33,
+        CorrespondenceError::DuplicateLeftId { id: NodeId(17) },
+    )]
     fn test_correspondence_new_error(
         #[case] matched_pairs: Vec<(NodeId, NodeId)>,
         #[case] left_count: usize,
@@ -1254,37 +1379,62 @@ mod tests {
     }
 
     #[rstest]
-    fn test_correspondence_from_images() {
-        // dense left 0,1,2 → images 3,1,0; every left matched, host id 2 right-unmatched.
-        let c = Correspondence::from_images(&[n(3), n(1), n(0)], 4);
-        assert_eq!(
-            c.matched_pairs(),
-            &[(n(0), n(3)), (n(1), n(1)), (n(2), n(0))]
-        );
-        assert_eq!(c.matched_pair_count(), 3);
+    #[case::empty(vec![], 4, vec![], vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)])]
+    #[case::dense(
+        vec![NodeId(3), NodeId(1), NodeId(0)],
+        4,
+        vec![(NodeId(0), NodeId(3)), (NodeId(1), NodeId(1)), (NodeId(2), NodeId(0))],
+        vec![NodeId(2)],
+    )]
+    #[case::at_inline_limit(
+        (0..32).rev().map(NodeId).collect(),
+        33,
+        (0..32).map(|i| (NodeId(i), NodeId(31 - i))).collect(),
+        vec![NodeId(32)],
+    )]
+    #[case::above_inline_limit(
+        (0..33).rev().map(NodeId).collect(),
+        34,
+        (0..33).map(|i| (NodeId(i), NodeId(32 - i))).collect(),
+        vec![NodeId(33)],
+    )]
+    fn test_correspondence_from_images(
+        #[case] images: Vec<NodeId>,
+        #[case] right_count: usize,
+        #[case] expected_pairs: Vec<(NodeId, NodeId)>,
+        #[case] expected_right_unmatched: Vec<NodeId>,
+    ) {
+        let c = Correspondence::from_images(&images, right_count);
+        assert_eq!(c.matched_pairs(), expected_pairs.as_slice());
+        assert_eq!(c.matched_pair_count(), images.len());
         assert_eq!(c.left_unmatched(), Vec::<NodeId>::new());
-        assert_eq!(c.right_unmatched(), vec![n(2)]);
+        assert_eq!(c.right_unmatched(), expected_right_unmatched);
     }
 
     #[rstest]
-    #[case::at_bound(&[NodeId(2)], 2)]
-    #[case::above_bound(&[NodeId(3)], 2)]
+    #[case::at_bound(vec![NodeId(2)], 2)]
+    #[case::above_bound(vec![NodeId(3)], 2)]
+    #[case::above_inline_limit((0..32).map(NodeId).chain([NodeId(33)]).collect(), 33)]
     #[should_panic(
         expected = "correspondence image is out of range for the declared right id space"
     )]
     fn test_correspondence_from_images_range(
-        #[case] images: &[NodeId],
+        #[case] images: Vec<NodeId>,
         #[case] right_count: usize,
     ) {
-        Correspondence::from_images(images, right_count);
+        Correspondence::from_images(&images, right_count);
     }
 
     #[rstest]
-    #[case::adjacent(&[NodeId(0), NodeId(0)])]
-    #[case::separated(&[NodeId(0), NodeId(1), NodeId(0)])]
+    #[case::adjacent(vec![NodeId(0), NodeId(0)], 2)]
+    #[case::separated(vec![NodeId(0), NodeId(1), NodeId(0)], 2)]
+    #[case::above_inline_limit((0..32).map(NodeId).chain([NodeId(17)]).collect(), 33)]
     #[should_panic(expected = "correspondence images must be unique")]
-    fn test_correspondence_from_images_duplicate(#[case] images: &[NodeId]) {
-        Correspondence::from_images(images, 2);
+    fn test_correspondence_from_images_duplicate(
+        #[case] images: Vec<NodeId>,
+        #[case] right_count: usize,
+    ) {
+        Correspondence::from_images(&images, right_count);
     }
 
     #[rstest]
@@ -1365,16 +1515,6 @@ mod tests {
         Graph::new(2, &[[0, 1]]),
         Correspondence::new(vec![(n(0), n(0))], 2, 1)
             .expect("correspondence producer preserves partial-bijection invariants"),
-    )]
-    #[case::parallel_left(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Graph::new(2, &[[0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
-    #[case::parallel_right(
-        Graph::new(2, &[[0, 1]]),
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
     )]
     fn test_graph_correspondence_induce_error(
         #[case] left: Graph,
@@ -1543,16 +1683,6 @@ mod tests {
         Correspondence::new(vec![(n(0), n(0))], 2, 1)
             .expect("correspondence producer preserves partial-bijection invariants"),
     )]
-    #[case::parallel_left(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Graph::new(2, &[[0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
-    #[case::parallel_right(
-        Graph::new(2, &[[0, 1]]),
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
-    )]
     fn test_correspondence_edge_matched_pairs_error(
         #[case] left: Graph,
         #[case] right: Graph,
@@ -1573,11 +1703,6 @@ mod tests {
         Graph::new(2, &[[0, 1]]),
         Correspondence::new(vec![(n(0), n(0))], 1, 2)
             .expect("correspondence producer preserves partial-bijection invariants"),
-    )]
-    #[case::parallel(
-        Graph::new(2, &[[0, 1]]),
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        Correspondence::from_images(&[n(0), n(1)], 2),
     )]
     fn test_correspondence_shared_edge_count_error(
         #[case] left: Graph,

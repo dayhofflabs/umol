@@ -97,7 +97,6 @@ pub use id::{
     AromaticSystemId, AtomId, AtomPosition, BondId, DativeBondId, MulticenterBondId,
     NoncovalentBondId, StereoAtomId, StereoBondId, StereoLigandPosition,
 };
-pub use incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::{
@@ -116,8 +115,8 @@ pub use noncovalent::{
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
 pub use reaction::{
-    DpoContradiction, React, Reaction, ReactionApplicationIter, ReactionIntegrityError,
-    ReactionProductsIter,
+    DpoContradiction, PreparedReaction, React, Reaction, ReactionApplicationIter,
+    ReactionIntegrityError, ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
 pub use remap::MoleculeRemapping;
@@ -134,7 +133,8 @@ pub use stereo::{
     TetrahedralConfiguration, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
-    SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,
+    PreparedSubstructureHost, PreparedSubstructurePattern, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig,
 };
 pub use traits::{
     AsLit, EntityPatch, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Reframe, ReframeKind,
@@ -142,10 +142,10 @@ pub use traits::{
 };
 pub use view::{
     AromaticSystemConstraintsView, AromaticSystemEditorViewMut, AromaticSystemView,
-    AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomConstraintsView,
-    AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondConstraintsView, BondEditorViewMut,
-    BondView, BondViewMut, BondViews, DativeBondConstraintsView, DativeBondEditorViewMut,
-    DativeBondView, DativeBondViewMut, DativeBondViews, GraphSymmetryView,
+    AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphismGroup, AtomCanonicalLabeling,
+    AtomConstraintsView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews, BondConstraintsView,
+    BondEditorViewMut, BondView, BondViewMut, BondViews, DativeBondConstraintsView,
+    DativeBondEditorViewMut, DativeBondView, DativeBondViewMut, DativeBondViews, GraphSymmetryView,
     MulticenterBondConstraintsView, MulticenterBondEditorViewMut, MulticenterBondView,
     MulticenterBondViewMut, MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView,
     NoncovalentBondEditorViewMut, NoncovalentBondView, NoncovalentBondViewMut,

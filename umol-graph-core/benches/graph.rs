@@ -1,4 +1,4 @@
-//! Graph addition, removal, and pushout benchmarks on paths.
+//! Graph and correspondence operations benchmarks.
 //!
 //! Addition and removal exclude input construction and final destruction. Addition
 //! covers unique and shared storage; removal starts from shared storage. Pushout
@@ -7,7 +7,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
+use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
 
 fn graph(node_count: usize) -> Graph {
     let edges: Vec<_> = (1..node_count as u32)
@@ -260,6 +260,48 @@ fn pushout(c: &mut Criterion) {
     group.finish();
 }
 
+fn induced_edges(c: &mut Criterion) {
+    let mut group = c.benchmark_group("induced_edges");
+    for (name, size, selected, expected) in [
+        ("ring_6", 6, 6, 6),
+        ("ring_64", 64, 64, 64),
+        ("ring_1024", 1024, 1024, 1024),
+        ("ring_4096_subset_6", 4096, 6, 5),
+    ] {
+        let edges: Vec<[u32; 2]> = (0..size).map(|node| [node, (node + 1) % size]).collect();
+        let graph = Graph::new(size as usize, &edges);
+        let nodes: Vec<NodeId> = (0..selected).rev().map(NodeId).collect();
+        assert_eq!(graph.induced_edges(&nodes).count(), expected);
+        group.bench_function(name, |b| {
+            b.iter(|| black_box(graph.induced_edges(black_box(&nodes)).count()))
+        });
+    }
+    group.finish();
+}
+
+fn correspondence_updates(c: &mut Criterion) {
+    let mut group = c.benchmark_group("correspondence_updates");
+    for size in [256usize, 4096, 65536] {
+        let correspondence = Correspondence::<NodeId>::identity(size);
+        let compaction = Compaction::new(size, vec![NodeId::from(size / 2)]).unwrap();
+        let step = Correspondence::from(&compaction);
+        group.bench_function(BenchmarkId::new("compact_right", size), |b| {
+            b.iter_batched(
+                || correspondence.clone(),
+                |mut value| {
+                    value.compact_right(black_box(&compaction)).unwrap();
+                    black_box(value)
+                },
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(BenchmarkId::new("compose", size), |b| {
+            b.iter(|| black_box(correspondence.compose(black_box(&step)).unwrap()))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     extend_nodes,
@@ -268,5 +310,7 @@ criterion_group!(
     remove,
     remove_cascading,
     pushout,
+    induced_edges,
+    correspondence_updates,
 );
 criterion_main!(benches);

@@ -169,7 +169,8 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::{
-        Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+        AutomorphismAlgorithm, Correspondence, RelevantCycleEnumerationAlgorithm,
+        SubgraphIsomorphismAlgorithm,
     };
 
     use super::super::aromatic::AromaticSystemForm;
@@ -199,8 +200,11 @@ mod tests {
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
         match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+        reduce_pattern_symmetry: false,
+        reduce_host_symmetry: false,
     };
 
     #[rstest]
@@ -1035,7 +1039,7 @@ mod tests {
         let a_inverse = a.reverse().unwrap();
         let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");
 
-        let alg = SubgraphIsomorphismAlgorithm::Vf2;
+        let alg = SubgraphIsomorphismAlgorithm::BitsetRi;
         let host = a.lhs().clone();
         let intermediate = a
             .apply(

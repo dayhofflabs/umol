@@ -5,7 +5,6 @@ use thiserror::Error;
 use super::entity::Entity;
 use super::molecule::{MoleculeIntegrityError, TransactionError};
 use super::reaction::DpoContradiction;
-use super::substructure::SubstructureMatchError;
 
 /// Unsatisfiable operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
@@ -59,9 +58,6 @@ pub enum ApplyPreconditionError {
     /// The reaction violates its rule-local DPO invariant.
     #[error("invalid reaction: {0}")]
     ReactionDpo(DpoContradiction),
-    /// The reaction LHS is not a matchable pattern.
-    #[error(transparent)]
-    Match(#[from] SubstructureMatchError),
 }
 
 impl From<Contradiction> for ApplyError {

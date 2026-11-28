@@ -33,7 +33,7 @@ impl Default for CanonicalizeConfig {
 #[pymethods]
 impl CanonicalizeConfig {
     #[new]
-    #[pyo3(signature = (*, automorphism_algorithm=AutomorphismAlgorithm::Nauty()))]
+    #[pyo3(signature = (*, automorphism_algorithm=AutomorphismAlgorithm::TrailIr()))]
     fn new(automorphism_algorithm: AutomorphismAlgorithm) -> Self {
         Self {
             automorphism_algorithm,
@@ -251,19 +251,26 @@ mod tests {
     #[case::default(CanonicalizeConfig::default())]
     fn test_canonicalize_config_new(#[case] expected: CanonicalizeConfig) {
         assert_eq!(
-            CanonicalizeConfig::new(AutomorphismAlgorithm::Nauty()),
+            CanonicalizeConfig::new(AutomorphismAlgorithm::TrailIr()),
             expected,
         );
     }
 
     #[rstest]
     #[case::default(CanonicalizeConfig::default(), "CanonicalizeConfig.default()")]
+    #[case::nauty(
+        CanonicalizeConfig::new(AutomorphismAlgorithm::Nauty()),
+        "CanonicalizeConfig(automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
+    )]
     fn test_canonicalize_config_repr(#[case] config: CanonicalizeConfig, #[case] expected: &str) {
         assert_eq!(config.__repr__(), expected);
     }
 
     #[rstest]
     #[case::default(GraphCanonicalizeConfig::default())]
+    #[case::nauty(GraphCanonicalizeConfig {
+        automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+    })]
     fn test_canonicalize_config_conversion(#[case] config: GraphCanonicalizeConfig) {
         assert_eq!(CanonicalizeConfig::from_rust(config).to_rust(), config);
     }
@@ -273,7 +280,7 @@ mod tests {
         assert_eq!(
             canonicalize_context(Some(CanonicalizeConfig::default())),
             GraphIrCanonicalizeContext {
-                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
             },
         );
     }

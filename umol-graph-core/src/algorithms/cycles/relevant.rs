@@ -180,7 +180,7 @@ impl ShortestPathDag {
         let (distances, visitation_order) = bfs_distances(graph, root, allowed);
 
         let root_key = (degrees[root.index()], root);
-        let mut included = vec![false; graph.node_bound()];
+        let mut included = vec![false; graph.node_count()];
         included[root.index()] = true;
         for &node in visitation_order.iter().skip(1) {
             if (degrees[node.index()], node) >= root_key {
@@ -193,7 +193,7 @@ impl ShortestPathDag {
             });
         }
 
-        let mut predecessors = vec![Vec::new(); graph.node_bound()];
+        let mut predecessors = vec![Vec::new(); graph.node_count()];
         for &node in component {
             if node == root || !included[node.index()] {
                 continue;
@@ -424,50 +424,10 @@ pub(super) fn visit_relevant_cycles_vismara<B>(
     max_cycle_size: usize,
     visitor: &mut impl FnMut(Cycle) -> ControlFlow<B>,
 ) -> ControlFlow<B> {
-    debug_assert!(graph.is_simple(), "direct Vismara input must be simple");
     if max_cycle_size < 3 {
         return ControlFlow::Continue(());
     }
     RelevantCycleAnalysis::new(graph).visit_cycles(graph, max_cycle_size, visitor)
-}
-
-pub(super) fn visit_relevant_cycles_vismara_fallback<B>(
-    source: &Graph,
-    max_cycle_size: usize,
-    visitor: &mut impl FnMut(Cycle) -> ControlFlow<B>,
-) -> ControlFlow<B> {
-    let mut loops = Vec::new();
-    let mut loopless_edges = Vec::new();
-    let mut edge_sources = Vec::new();
-
-    for edge in source.edge_ids() {
-        let [first, second] = source.edge_endpoints(edge);
-        if first == second {
-            loops.push(Cycle::normalized(source, vec![first], vec![edge]));
-            continue;
-        }
-        loopless_edges.push([first.0, second.0]);
-        edge_sources.push(edge);
-    }
-
-    if max_cycle_size >= 1 {
-        for cycle in loops {
-            if let ControlFlow::Break(value) = visitor(cycle) {
-                return ControlFlow::Break(value);
-            }
-        }
-    }
-    if max_cycle_size < 2 {
-        return ControlFlow::Continue(());
-    }
-
-    let loopless = Graph::new(source.node_count(), &loopless_edges);
-    let subdivision = loopless.subdivide_edges();
-    RelevantCycleAnalysis::new(subdivision.graph()).visit_cycles(
-        subdivision.graph(),
-        max_cycle_size.saturating_mul(2),
-        |cycle| visitor(cycle.map_subdivision(source, &subdivision, &edge_sources)),
-    )
 }
 
 impl RelevantCycleAnalysis {
@@ -480,8 +440,8 @@ impl RelevantCycleAnalysis {
         let mut components =
             graph.enumerate_biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
         components.sort();
-        let mut allowed = vec![false; graph.node_bound()];
-        let mut degrees = vec![0; graph.node_bound()];
+        let mut allowed = vec![false; graph.node_count()];
+        let mut degrees = vec![0; graph.node_count()];
 
         for component in components {
             for &node in &component {
@@ -648,7 +608,7 @@ fn bfs_distances(
     root: NodeId,
     allowed: &[bool],
 ) -> (Vec<Option<usize>>, Vec<NodeId>) {
-    let mut distances = vec![None; graph.node_bound()];
+    let mut distances = vec![None; graph.node_count()];
     let mut visitation_order = Vec::new();
     visitation_order.push(root);
     distances[root.index()] = Some(0);
@@ -784,11 +744,6 @@ mod tests {
         NodeId(0),
         vec![Some(0), Some(1), Some(1), Some(2), None],
     )]
-    #[case::parallel(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        NodeId(0),
-        vec![Some(0), Some(1)],
-    )]
     fn test_shortest_path_dag_distance(
         #[case] graph: Graph,
         #[case] root: NodeId,
@@ -835,21 +790,6 @@ mod tests {
             ShortestPath {
                 nodes: vec![NodeId(0), NodeId(2), NodeId(3)],
                 edges: vec![EdgeId(1), EdgeId(3)],
-            },
-        ],
-    )]
-    #[case::parallel(
-        Graph::new(2, &[[0, 1], [0, 1]]),
-        NodeId(0),
-        NodeId(1),
-        vec![
-            ShortestPath {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(0)],
-            },
-            ShortestPath {
-                nodes: vec![NodeId(0), NodeId(1)],
-                edges: vec![EdgeId(1)],
             },
         ],
     )]

@@ -109,7 +109,7 @@ use crate::{
         NoncovalentBondView, NoncovalentBondViews,
     },
     num::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
-    reaction::{Reaction, ReactionApplicationConfig, ReactionCompositionConfig},
+    reaction::{PreparedReaction, Reaction, ReactionApplicationConfig, ReactionCompositionConfig},
     reaction_span::ReactionSpan,
     remap::{MoleculeRemapping, Remapping},
     resolve::{
@@ -132,7 +132,9 @@ use crate::{
         StereoTerm, StereogenicSiteKind, Stereogenicity, TetrahedralConfiguration,
         TetrahedralStereoForm, Topicity,
     },
-    substructure::SubstructureSearchConfig,
+    substructure::{
+        PreparedSubstructureHost, PreparedSubstructurePattern, SubstructureSearchConfig,
+    },
     symmetry::{GraphSymmetry, GraphSymmetryConfig, GraphSymmetryView},
     transaction::{MoleculeEditor, RollbackMethod},
     transform::{
@@ -346,6 +348,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Edits>()?;
         module.add_class::<ReactionCompositionConfig>()?;
         module.add_class::<ReactionApplicationConfig>()?;
+        module.add_class::<PreparedReaction>()?;
         module.add_class::<Reaction>()?;
         module.add_class::<ReactionSpan>()?;
         module.add_class::<RingConfig>()?;
@@ -388,6 +391,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Entity>()?;
         module.add_class::<MoleculeMetadata>()?;
         module.add_class::<ReactionMetadata>()?;
+        module.add_class::<PreparedSubstructureHost>()?;
+        module.add_class::<PreparedSubstructurePattern>()?;
         module.add_class::<SubstructureSearchConfig>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;

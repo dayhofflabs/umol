@@ -20,8 +20,7 @@ impl Graph {
     ///
     /// On completion, the emitted components partition all nodes into maximal
     /// connected sets. Each slice is sorted by node id; components are ordered
-    /// by their least node id. Loops and parallel edges do not affect membership.
-    /// Empty graphs emit no components.
+    /// by their least node id. Empty graphs emit no components.
     ///
     /// Bfs collects one component through unrestricted breadth-first traversal
     /// and visits it at FinishTree. A visitor's [`ControlFlow::Break`] returns
@@ -97,8 +96,8 @@ mod tests {
         Graph::new(6, &[[0, 4], [4, 2], [2, 1], [3, 5]]),
         vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(4)], vec![NodeId(3), NodeId(5)]]
     )]
-    #[case::loops_parallel(
-        Graph::new(4, &[[0, 0], [0, 2], [0, 2], [1, 3], [3, 3]]),
+    #[case::two_pairs(
+        Graph::new(4, &[[0, 2], [1, 3]]),
         vec![vec![NodeId(0), NodeId(2)], vec![NodeId(1), NodeId(3)]]
     )]
     fn test_graph_visit_connected_components(

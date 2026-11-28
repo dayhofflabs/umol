@@ -258,7 +258,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 width=2048,
                 match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Vf2Rdkit()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
                 relevant_cycle_algorithm=(
                     RelevantCycleEnumerationAlgorithm.Vismara()
@@ -267,7 +267,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
             "PatternFingerprintConfig(width=2048, "
             "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
             "subgraph_isomorphism_algorithm="
-            "SubgraphIsomorphismAlgorithm.Vf2Rdkit(), "
+            "SubgraphIsomorphismAlgorithm.BitsetRi(), "
             "relevant_cycle_algorithm="
             "RelevantCycleEnumerationAlgorithm.Vismara())",
         ),
@@ -276,7 +276,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 width=512,
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Ullmann()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
                 relevant_cycle_algorithm=(
                     RelevantCycleEnumerationAlgorithm.Vismara()
@@ -286,7 +286,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
                 width=512,
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Ullmann()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
                 relevant_cycle_algorithm=(
                     RelevantCycleEnumerationAlgorithm.Vismara()
@@ -295,7 +295,7 @@ def test_hashed_fingerprint_config_ring_config(config, expected):
             "PatternFingerprintConfig(width=512, "
             "match_algorithm=SubstructureMatchAlgorithm.Incidence(), "
             "subgraph_isomorphism_algorithm="
-            "SubgraphIsomorphismAlgorithm.Ullmann(), "
+            "SubgraphIsomorphismAlgorithm.BitsetRi(), "
             "relevant_cycle_algorithm="
             "RelevantCycleEnumerationAlgorithm.Vismara())",
         ),
@@ -325,7 +325,7 @@ def test_structural_fingerprint_config(max_bonds):
     expected = StructuralFingerprintConfig(
         max_bonds=max_bonds,
         subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(),
-        automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
+        automorphism_algorithm=AutomorphismAlgorithm.TrailIr(),
     )
 
     assert value.max_bonds == max_bonds
@@ -338,7 +338,7 @@ def test_structural_fingerprint_config(max_bonds):
     assert repr(value) == (
         f"StructuralFingerprintConfig(max_bonds={max_bonds}, "
         "subgraph_enumeration_algorithm=SubgraphEnumerationAlgorithm.Esu(), "
-        "automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
+        "automorphism_algorithm=AutomorphismAlgorithm.TrailIr())"
     )
 
 
@@ -665,7 +665,7 @@ def test_molecule_counted_hashed_fingerprint(config, expected_entries):
                 width=64,
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
                 subgraph_isomorphism_algorithm=(
-                    SubgraphIsomorphismAlgorithm.Ullmann()
+                    SubgraphIsomorphismAlgorithm.BitsetRi()
                 ),
             ),
             64,
@@ -693,8 +693,8 @@ def test_molecule_pattern_fingerprint(
         (
             StructuralFingerprintConfig(max_bonds=0),
             [
-                bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
-                bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+                bytes.fromhex("01 00 00 00 04 00 00 00 06 00 00 00 00 00 00 00"),
+                bytes.fromhex("01 00 00 00 04 00 00 00 08 00 00 00 00 00 00 00"),
             ],
         ),
         (
@@ -704,24 +704,23 @@ def test_molecule_pattern_fingerprint(
                 automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
             ),
             [
-                bytes.fromhex("01 00 00 00 05 00 00 00 00 06 00 00 00 00 00 00 00"),
-                bytes.fromhex("01 00 00 00 05 00 00 00 00 08 00 00 00 00 00 00 00"),
+                bytes.fromhex("01 00 00 00 04 00 00 00 06 00 00 00 00 00 00 00"),
+                bytes.fromhex("01 00 00 00 04 00 00 00 08 00 00 00 00 00 00 00"),
                 bytes.fromhex(
-                    "03 00 00 00 05 00 00 00 00 06 00 00 00 05 00 00 00 00 "
-                    "06 00 00 00 03 00 00 00 01 01 00 02 00 00 00 00 00 00 "
-                    "00 02 00 00 00 01 00 00 00 02 00 00 00"
+                    "02 00 00 00 04 00 00 00 06 00 00 00 04 00 00 00 06 00 "
+                    "00 00 01 00 00 00 00 00 00 00 01 00 00 00 02 00 00 00 "
+                    "01 00"
                 ),
                 bytes.fromhex(
-                    "03 00 00 00 05 00 00 00 00 06 00 00 00 05 00 00 00 00 "
-                    "08 00 00 00 03 00 00 00 01 01 00 02 00 00 00 00 00 00 "
-                    "00 02 00 00 00 01 00 00 00 02 00 00 00"
+                    "02 00 00 00 04 00 00 00 06 00 00 00 04 00 00 00 08 00 "
+                    "00 00 01 00 00 00 00 00 00 00 01 00 00 00 02 00 00 00 "
+                    "01 00"
                 ),
                 bytes.fromhex(
-                    "05 00 00 00 05 00 00 00 00 06 00 00 00 05 00 00 00 00 "
-                    "06 00 00 00 05 00 00 00 00 08 00 00 00 03 00 00 00 01 "
-                    "01 00 03 00 00 00 01 01 00 04 00 00 00 00 00 00 00 03 "
-                    "00 00 00 01 00 00 00 03 00 00 00 01 00 00 00 04 00 00 "
-                    "00 02 00 00 00 04 00 00 00"
+                    "03 00 00 00 04 00 00 00 06 00 00 00 04 00 00 00 06 00 "
+                    "00 00 04 00 00 00 08 00 00 00 02 00 00 00 00 00 00 00 "
+                    "01 00 00 00 02 00 00 00 01 00 01 00 00 00 02 00 00 00 "
+                    "02 00 00 00 01 00"
                 ),
             ],
         ),

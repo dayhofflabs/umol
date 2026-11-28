@@ -10,6 +10,7 @@ readme = "README.md"
 keywords = ["algorithms", "graph", "isomorphism", "canonicalization"]
 description = "Graph data structures and algorithms for umol."
 exclude = ["/tests"]
+autobenches = false
 
 [lib]
 bench = false
@@ -19,6 +20,7 @@ proptest = []
 
 [dependencies]
 bitvec = "1.0.1"
+foldhash = "0.2.0"
 num-bigint = "0.4"
 umol-nauty-sys = { path = "../umol-nauty-sys", version = "0.11.0" }
 
@@ -26,6 +28,8 @@ umol-nauty-sys = { path = "../umol-nauty-sys", version = "0.11.0" }
 criterion = "0.8.1"
 pretty_assertions = "1.4.1"
 proptest = "1.7.0"
+rand = "0.10.3"
+rand_chacha = "0.10"
 rstest = "0.26.1"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1.0"
@@ -36,11 +40,23 @@ name = "property"
 required-features = ["proptest"]
 
 [[bench]]
-name = "algorithms"
+name = "automorphism"
+harness = false
+
+[[bench]]
+name = "common_subgraph"
+harness = false
+
+[[bench]]
+name = "cycles"
 harness = false
 
 [[bench]]
 name = "graph"
+harness = false
+
+[[bench]]
+name = "matching"
 harness = false
 
 [[bench]]
@@ -49,6 +65,14 @@ harness = false
 
 [[bench]]
 name = "restore"
+harness = false
+
+[[bench]]
+name = "subgraph_isomorphism"
+harness = false
+
+[[bench]]
+name = "traversal"
 harness = false
 
 [lints.clippy]

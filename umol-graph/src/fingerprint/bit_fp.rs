@@ -13,13 +13,13 @@ pub struct BitFp {
 }
 
 impl BitFp {
-    fn zeros(width: usize) -> Self {
+    pub(super) fn zeros(width: usize) -> Self {
         Self {
             bits: BitVec::repeat(false, width),
         }
     }
 
-    fn set(&mut self, bit: usize) {
+    pub(super) fn set(&mut self, bit: usize) {
         self.bits.set(bit, true);
     }
 

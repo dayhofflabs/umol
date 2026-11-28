@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use proptest::prelude::*;
-use umol_graph_core::{Compaction, Correspondence, EdgeId, Graph, GraphCorrespondence, NodeId};
+use umol_graph_core::{
+    Compaction, Correspondence, CorrespondenceError, EdgeId, Graph, GraphCorrespondence, NodeId,
+};
 
 use super::strategy;
 
@@ -43,7 +45,7 @@ where
 }
 
 fn graph_context_strategy() -> impl Strategy<Value = (Graph, Graph, Correspondence<NodeId>)> {
-    (strategy::multigraph(6, 10), strategy::multigraph(6, 10)).prop_flat_map(|(left, right)| {
+    (strategy::simple_graph(6, 10), strategy::simple_graph(6, 10)).prop_flat_map(|(left, right)| {
         let correspondence =
             correspondence_with_counts_strategy(left.node_count(), right.node_count());
         (Just(left), Just(right), correspondence)
@@ -105,7 +107,7 @@ fn reference_edge_matched_pairs(
 }
 
 fn correspondence_images_strategy() -> impl Strategy<Value = (Vec<NodeId>, usize)> {
-    (0usize..8).prop_flat_map(|right_count| {
+    (0usize..48).prop_flat_map(|right_count| {
         (
             Just((0..right_count).map(NodeId::from).collect::<Vec<_>>()).prop_shuffle(),
             0usize..=right_count,
@@ -117,7 +119,104 @@ fn correspondence_images_strategy() -> impl Strategy<Value = (Vec<NodeId>, usize
     })
 }
 
+fn check_correspondence_pairs_sequentially(
+    matched_pairs: &[(NodeId, NodeId)],
+    left_count: usize,
+    right_count: usize,
+) -> Result<Vec<(NodeId, NodeId)>, CorrespondenceError<NodeId>> {
+    let left_bound = NodeId::from(left_count);
+    let right_bound = NodeId::from(right_count);
+    let mut left_ids = BTreeSet::new();
+    let mut right_ids = BTreeSet::new();
+    for &(left, right) in matched_pairs {
+        if left >= left_bound {
+            return Err(CorrespondenceError::LeftIdOutOfRange {
+                id: left,
+                count: left_count,
+            });
+        }
+        if right >= right_bound {
+            return Err(CorrespondenceError::RightIdOutOfRange {
+                id: right,
+                count: right_count,
+            });
+        }
+        if !left_ids.insert(left) {
+            return Err(CorrespondenceError::DuplicateLeftId { id: left });
+        }
+        if !right_ids.insert(right) {
+            return Err(CorrespondenceError::DuplicateRightId { id: right });
+        }
+    }
+    let mut sorted = matched_pairs.to_vec();
+    sorted.sort_unstable_by_key(|&(left, _)| left);
+    Ok(sorted)
+}
+
 proptest! {
+
+    /// Checked construction accepts valid partial bijections across both inline (`<= 32`) and
+    /// fallback (`> 32`) sizes, sorts by left id, and preserves sequential error precedence.
+    #[test]
+    fn test_correspondence_new(
+        left_count in 0usize..48,
+        right_count in 0usize..48,
+        pairs in prop::collection::vec((0u32..52, 0u32..52), 0..48),
+    ) {
+        let matched_pairs: Vec<(NodeId, NodeId)> =
+            pairs.into_iter().map(|(l, r)| (NodeId(l), NodeId(r))).collect();
+        let expected =
+            check_correspondence_pairs_sequentially(&matched_pairs, left_count, right_count);
+        match (Correspondence::new(matched_pairs, left_count, right_count), expected) {
+            (Ok(actual), Ok(expected_pairs)) => {
+                prop_assert_eq!(actual.matched_pairs(), expected_pairs.as_slice());
+                prop_assert_eq!(actual.left_count(), left_count);
+                prop_assert_eq!(actual.right_count(), right_count);
+            }
+            (Err(actual), Err(expected_err)) => prop_assert_eq!(actual, expected_err),
+            (actual, expected) => {
+                prop_assert!(false, "Correspondence::new={actual:?} disagreed with sequential check={expected:?}");
+            }
+        }
+    }
+
+    /// Valid bijections below and above the inline validation threshold sort by left id.
+    #[test]
+    fn test_correspondence_new_bijection(
+        (left_count, right_count, pairs, sorted_order) in (0usize..48, 0usize..48)
+            .prop_flat_map(|(left_count, right_count)| {
+                let max_pairs = left_count.min(right_count);
+                (
+                    Just(left_count),
+                    Just(right_count),
+                    Just((0..left_count).map(NodeId::from).collect::<Vec<_>>()).prop_shuffle(),
+                    Just((0..right_count).map(NodeId::from).collect::<Vec<_>>()).prop_shuffle(),
+                    0usize..=max_pairs,
+                    any::<bool>(),
+                )
+                    .prop_map(
+                        |(left_count, right_count, mut lefts, mut rights, count, sorted_order)| {
+                            lefts.truncate(count);
+                            rights.truncate(count);
+                            let mut pairs: Vec<(NodeId, NodeId)> =
+                                lefts.into_iter().zip(rights).collect();
+                            if sorted_order {
+                                pairs.sort_unstable_by_key(|&(left, _)| left);
+                            }
+                            (left_count, right_count, pairs, sorted_order)
+                        },
+                    )
+            }),
+    ) {
+        let mut expected = pairs.clone();
+        if !sorted_order {
+            expected.sort_unstable_by_key(|&(left, _)| left);
+        }
+        let correspondence = Correspondence::new(pairs, left_count, right_count).unwrap();
+        prop_assert_eq!(correspondence.matched_pairs(), expected.as_slice());
+        prop_assert_eq!(correspondence.left_count(), left_count);
+        prop_assert_eq!(correspondence.right_count(), right_count);
+    }
 
     #[test]
     fn test_correspondence_extend_right(

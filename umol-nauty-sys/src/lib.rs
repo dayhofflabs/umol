@@ -7,7 +7,7 @@ use std::error::Error;
 use std::ffi::c_void;
 use std::fmt::{self, Display, Formatter};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::slice;
+use std::{ptr, slice};
 
 /// Vendored upstream nauty version.
 pub const NAUTY_VERSION: &str = "2.9.3";
@@ -32,6 +32,7 @@ enum RawError {
     Killed = 11,
     Unknown = 12,
     InvalidPartition = 13,
+    InvalidWeight = 14,
 }
 
 unsafe extern "C" {
@@ -41,6 +42,22 @@ unsafe extern "C" {
         neighbors: *const u32,
         colors: *const u32,
         partition: *const u32,
+        canonical_labels: *mut u32,
+        orbits: *mut u32,
+        report_generator: Option<GeneratorCallback>,
+        callback_context: *mut c_void,
+        group_mantissa: *mut f64,
+        group_exponent: *mut i32,
+    ) -> RawError;
+
+    fn umol_nauty_run_weighted(
+        vertex_count: u32,
+        offsets: *const usize,
+        neighbors: *const u32,
+        weights: *const u32,
+        colors: *const u32,
+        partition: *const u32,
+        get_canon: bool,
         canonical_labels: *mut u32,
         orbits: *mut u32,
         report_generator: Option<GeneratorCallback>,
@@ -58,6 +75,8 @@ pub enum NautyError {
     NonmonotonicOffsets { vertex: usize },
     TerminalOffset { expected: usize, actual: usize },
     ColorCount { expected: usize, actual: usize },
+    WeightCount { expected: usize, actual: usize },
+    WeightOverflow { position: usize, weight: u32 },
     NeighborOutOfBounds { position: usize, neighbor: u32 },
     PartitionCount { expected: usize, actual: usize },
     PartitionVertexOutOfBounds { position: usize, vertex: u32 },
@@ -78,6 +97,7 @@ pub enum NautyError {
     Killed,
     Unknown,
     InvalidPartition,
+    InvalidWeight,
     GeneratorCallbackPanicked,
 }
 
@@ -106,6 +126,7 @@ impl RawError {
             Self::Killed => Err(NautyError::Killed),
             Self::Unknown => Err(NautyError::Unknown),
             Self::InvalidPartition => Err(NautyError::InvalidPartition),
+            Self::InvalidWeight => Err(NautyError::InvalidWeight),
         }
     }
 }
@@ -234,6 +255,80 @@ impl NautyInput {
     }
 }
 
+/// Owned CSR topology, non-negative edge weights, and ranked vertex colors
+/// accepted by weighted sparse nauty.
+///
+/// [`Self::try_new`] validates CSR structure, vertex/degree bounds, vertex
+/// partition ordering, weight count alignment, and the weight range
+/// `0..i32::MAX as u32`. Callers must supply a simple undirected graph whose
+/// opposite directed edges carry equal weights.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeightedNautyInput {
+    base: NautyInput,
+    weights: Vec<u32>,
+}
+
+impl WeightedNautyInput {
+    /// Validate CSR topology, edge weights, vertex colors, and initial
+    /// partition for weighted sparse nauty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NautyError`] if CSR offsets, neighbor indices, vertex/degree
+    /// bounds, partition ordering, weight count, or weight bounds
+    /// (`weight < i32::MAX as u32`) are invalid.
+    pub fn try_new(
+        vertex_count: usize,
+        offsets: Vec<usize>,
+        neighbors: Vec<u32>,
+        weights: Vec<u32>,
+        colors: Vec<u32>,
+        partition: Vec<u32>,
+    ) -> Result<Self, NautyError> {
+        let base = NautyInput::try_new(vertex_count, offsets, neighbors, colors, partition)?;
+        if weights.len() != base.directed_edge_count() {
+            return Err(NautyError::WeightCount {
+                expected: base.directed_edge_count(),
+                actual: weights.len(),
+            });
+        }
+        for (position, &weight) in weights.iter().enumerate() {
+            if weight >= i32::MAX as u32 {
+                return Err(NautyError::WeightOverflow { position, weight });
+            }
+        }
+        Ok(Self { base, weights })
+    }
+
+    pub fn vertex_count(&self) -> usize {
+        self.base.vertex_count()
+    }
+
+    pub fn directed_edge_count(&self) -> usize {
+        self.base.directed_edge_count()
+    }
+
+    pub fn offsets(&self) -> &[usize] {
+        self.base.offsets()
+    }
+
+    pub fn neighbors(&self) -> &[u32] {
+        self.base.neighbors()
+    }
+
+    pub fn weights(&self) -> &[u32] {
+        &self.weights
+    }
+
+    pub fn colors(&self) -> &[u32] {
+        self.base.colors()
+    }
+
+    pub fn partition(&self) -> &[u32] {
+        self.base.partition()
+    }
+}
+
 fn validate_vertex_count(count: usize) -> Result<(), NautyError> {
     if count > i32::MAX as usize {
         Err(NautyError::VertexCountOverflow { count })
@@ -258,6 +353,10 @@ pub struct NautyGroupOrder {
 }
 
 /// Owned output from one nauty invocation.
+///
+/// `canonical_labels` has length `vertex_count` when canonical labeling is
+/// requested (`run`, or `run_weighted` with `get_canon = true`), and is empty
+/// when `run_weighted` is called with `get_canon = false`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NautyOutput {
     pub canonical_labels: Vec<u32>,
@@ -344,9 +443,91 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
     })
 }
 
+/// Run weighted sparse nauty on an edge-colored simple undirected graph and
+/// return owned orbit, group-order, generator, and optional canonical-label
+/// output.
+///
+/// When `get_canon` is `true`, [`NautyOutput::canonical_labels`] contains a
+/// canonical vertex permutation of length `input.vertex_count()`. When
+/// `get_canon` is `false`, nauty skips canonical-graph construction and
+/// [`NautyOutput::canonical_labels`] is empty.
+///
+/// # Errors
+///
+/// Returns [`NautyError`] if the native shim reports an allocation, reentrancy,
+/// size, or internal nauty failure, or if the generator callback panics.
+pub fn run_weighted(
+    input: &WeightedNautyInput,
+    get_canon: bool,
+) -> Result<NautyOutput, NautyError> {
+    let vertex_count = input.vertex_count();
+    if vertex_count == 0 {
+        return Ok(NautyOutput {
+            canonical_labels: Vec::new(),
+            orbits: Vec::new(),
+            group_order: NautyGroupOrder {
+                mantissa: 1.0,
+                exponent: 0,
+            },
+            generators: Vec::new(),
+        });
+    }
+
+    let vertex_count =
+        u32::try_from(vertex_count).map_err(|_| NautyError::VertexCountOverflow {
+            count: input.vertex_count(),
+        })?;
+    let mut canonical_labels = if get_canon {
+        vec![0; vertex_count as usize]
+    } else {
+        Vec::new()
+    };
+    let canonical_labels_ptr = if get_canon {
+        canonical_labels.as_mut_ptr()
+    } else {
+        ptr::null_mut()
+    };
+    let mut orbits = vec![0; vertex_count as usize];
+    let mut group_mantissa = 0.0;
+    let mut group_exponent = 0;
+    let mut collector = GeneratorCollector::default();
+
+    let status = unsafe {
+        umol_nauty_run_weighted(
+            vertex_count,
+            input.offsets().as_ptr(),
+            input.neighbors().as_ptr(),
+            input.weights().as_ptr(),
+            input.colors().as_ptr(),
+            input.partition().as_ptr(),
+            get_canon,
+            canonical_labels_ptr,
+            orbits.as_mut_ptr(),
+            Some(collect_generator),
+            (&mut collector as *mut GeneratorCollector).cast(),
+            &mut group_mantissa,
+            &mut group_exponent,
+        )
+    };
+    status.into_result()?;
+    if collector.panicked {
+        return Err(NautyError::GeneratorCallbackPanicked);
+    }
+
+    Ok(NautyOutput {
+        canonical_labels,
+        orbits,
+        group_order: NautyGroupOrder {
+            mantissa: group_mantissa,
+            exponent: group_exponent,
+        },
+        generators: collector.generators,
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::{iter, thread};
 
     use rstest::*;
@@ -382,6 +563,78 @@ mod tests {
                 assert!(edges.contains(&(generator[source as usize], generator[target as usize])));
             }
         }
+    }
+
+    fn assert_weighted_output_semantics(
+        input: &WeightedNautyInput,
+        get_canon: bool,
+        output: &NautyOutput,
+    ) {
+        let vertex_count = input.vertex_count();
+        let expected_vertices: Vec<u32> = (0..vertex_count as u32).collect();
+        let edges: HashMap<(u32, u32), u32> = (0..vertex_count)
+            .flat_map(|vertex| {
+                let begin = input.offsets()[vertex];
+                let end = input.offsets()[vertex + 1];
+                input.neighbors()[begin..end]
+                    .iter()
+                    .zip(&input.weights()[begin..end])
+                    .map(move |(&neighbor, &weight)| ((vertex as u32, neighbor), weight))
+            })
+            .collect();
+
+        if get_canon {
+            let mut canonical_labels = output.canonical_labels.clone();
+            canonical_labels.sort_unstable();
+            assert_eq!(canonical_labels, expected_vertices);
+        } else {
+            assert!(output.canonical_labels.is_empty());
+        }
+        assert_eq!(output.orbits.len(), vertex_count);
+
+        for generator in &output.generators {
+            let mut image = generator.clone();
+            image.sort_unstable();
+            assert_eq!(image, expected_vertices);
+            for (source, &target) in generator.iter().enumerate() {
+                assert_eq!(input.colors()[source], input.colors()[target as usize]);
+            }
+            for (&(source, target), &weight) in &edges {
+                assert_eq!(
+                    edges.get(&(generator[source as usize], generator[target as usize])),
+                    Some(&weight)
+                );
+            }
+        }
+    }
+
+    fn canonical_colored_signature(
+        input: &WeightedNautyInput,
+        canonical_labels: &[u32],
+    ) -> (Vec<u32>, Vec<(u32, u32, u32)>) {
+        let vertex_count = input.vertex_count();
+        let mut position = vec![0u32; vertex_count];
+        for (rank, &vertex) in canonical_labels.iter().enumerate() {
+            position[vertex as usize] = rank as u32;
+        }
+        let colors: Vec<u32> = canonical_labels
+            .iter()
+            .map(|&vertex| input.colors()[vertex as usize])
+            .collect();
+        let mut edges: Vec<(u32, u32, u32)> = (0..vertex_count)
+            .flat_map(|vertex| {
+                let begin = input.offsets()[vertex];
+                let end = input.offsets()[vertex + 1];
+                let u = position[vertex];
+                let position = &position;
+                input.neighbors()[begin..end]
+                    .iter()
+                    .zip(&input.weights()[begin..end])
+                    .map(move |(&neighbor, &weight)| (u, position[neighbor as usize], weight))
+            })
+            .collect();
+        edges.sort_unstable();
+        (colors, edges)
     }
 
     #[rstest]
@@ -433,6 +686,116 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(0, vec![0], vec![], vec![], vec![], vec![])]
+    #[case::isolated(1, vec![0, 0], vec![], vec![], vec![7], vec![0])]
+    #[case::edge(2, vec![0, 1, 2], vec![1, 0], vec![5, 5], vec![3, 3], vec![0, 1])]
+    #[case::max_weight(
+        2,
+        vec![0, 1, 2],
+        vec![1, 0],
+        vec![i32::MAX as u32 - 1, i32::MAX as u32 - 1],
+        vec![0, 0],
+        vec![0, 1]
+    )]
+    fn test_weighted_nauty_input_try_new(
+        #[case] vertex_count: usize,
+        #[case] offsets: Vec<usize>,
+        #[case] neighbors: Vec<u32>,
+        #[case] weights: Vec<u32>,
+        #[case] colors: Vec<u32>,
+        #[case] partition: Vec<u32>,
+    ) {
+        let expected = WeightedNautyInput {
+            base: NautyInput {
+                offsets: offsets.clone(),
+                neighbors: neighbors.clone(),
+                colors: colors.clone(),
+                partition: partition.clone(),
+            },
+            weights: weights.clone(),
+        };
+        assert_eq!(
+            WeightedNautyInput::try_new(
+                vertex_count,
+                offsets,
+                neighbors,
+                weights,
+                colors,
+                partition
+            ),
+            Ok(expected)
+        );
+    }
+
+    #[rstest]
+    #[case::base_csr_error(
+        1,
+        vec![0, 1],
+        vec![1],
+        vec![0],
+        vec![0],
+        vec![0],
+        NautyError::NeighborOutOfBounds { position: 0, neighbor: 1 }
+    )]
+    #[case::base_partition_error(
+        2,
+        vec![0, 0, 0],
+        vec![],
+        vec![],
+        vec![1, 0],
+        vec![0, 1],
+        NautyError::NonmonotonicPartitionColors { position: 1 }
+    )]
+    #[case::weight_count(
+        2,
+        vec![0, 1, 2],
+        vec![1, 0],
+        vec![0],
+        vec![0, 0],
+        vec![0, 1],
+        NautyError::WeightCount { expected: 2, actual: 1 }
+    )]
+    #[case::weight_overflow_int_max(
+        2,
+        vec![0, 1, 2],
+        vec![1, 0],
+        vec![i32::MAX as u32, 0],
+        vec![0, 0],
+        vec![0, 1],
+        NautyError::WeightOverflow { position: 0, weight: i32::MAX as u32 }
+    )]
+    #[case::weight_overflow_u32_max(
+        2,
+        vec![0, 1, 2],
+        vec![1, 0],
+        vec![0, u32::MAX],
+        vec![0, 0],
+        vec![0, 1],
+        NautyError::WeightOverflow { position: 1, weight: u32::MAX }
+    )]
+    fn test_weighted_nauty_input_try_new_error(
+        #[case] vertex_count: usize,
+        #[case] offsets: Vec<usize>,
+        #[case] neighbors: Vec<u32>,
+        #[case] weights: Vec<u32>,
+        #[case] colors: Vec<u32>,
+        #[case] partition: Vec<u32>,
+        #[case] expected: NautyError,
+    ) {
+        assert_eq!(
+            WeightedNautyInput::try_new(
+                vertex_count,
+                offsets,
+                neighbors,
+                weights,
+                colors,
+                partition
+            ),
+            Err(expected)
+        );
+    }
+
+    #[rstest]
     #[case::maximum(i32::MAX as usize, Ok(()))]
     #[case::overflow(
         i32::MAX as usize + 1,
@@ -472,6 +835,7 @@ mod tests {
     #[case::killed(RawError::Killed, Err(NautyError::Killed))]
     #[case::unknown(RawError::Unknown, Err(NautyError::Unknown))]
     #[case::invalid_partition(RawError::InvalidPartition, Err(NautyError::InvalidPartition))]
+    #[case::invalid_weight(RawError::InvalidWeight, Err(NautyError::InvalidWeight))]
     fn test_raw_error_into_result(
         #[case] input: RawError,
         #[case] expected: Result<(), NautyError>,
@@ -660,6 +1024,326 @@ mod tests {
                     exponent: 0
                 }
             );
+            assert!(output
+                .generators
+                .iter()
+                .all(|generator| generator[site] == site as u32));
+        }
+    }
+
+    #[rstest]
+    #[case::empty(
+        WeightedNautyInput::try_new(0, vec![0], vec![], vec![], vec![], vec![]).unwrap(),
+        NautyGroupOrder { mantissa: 1.0, exponent: 0 },
+        vec![]
+    )]
+    #[case::singleton(
+        WeightedNautyInput::try_new(1, vec![0, 0], vec![], vec![], vec![0], vec![0]).unwrap(),
+        NautyGroupOrder { mantissa: 1.0, exponent: 0 },
+        vec![0]
+    )]
+    #[case::uniform_square(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![0, 0, 0, 0, 0, 0, 0, 0],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        NautyGroupOrder { mantissa: 8.0, exponent: 0 },
+        vec![0, 0, 0, 0]
+    )]
+    #[case::alternating_square(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![1, 0, 1, 0, 0, 1, 0, 1],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        NautyGroupOrder { mantissa: 4.0, exponent: 0 },
+        vec![0, 0, 0, 0]
+    )]
+    #[case::one_double_bond_square(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![1, 0, 1, 0, 0, 0, 0, 0],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        NautyGroupOrder { mantissa: 2.0, exponent: 0 },
+        vec![0, 0, 2, 2]
+    )]
+    #[case::three_color_path_4(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 1, 3, 5, 6],
+            vec![1, 0, 2, 1, 3, 2],
+            vec![0, 0, 1, 1, 2, 2],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        NautyGroupOrder { mantissa: 1.0, exponent: 0 },
+        vec![0, 1, 2, 3]
+    )]
+    #[case::max_weight_edge(
+        WeightedNautyInput::try_new(
+            2,
+            vec![0, 1, 2],
+            vec![1, 0],
+            vec![i32::MAX as u32 - 1, i32::MAX as u32 - 1],
+            vec![0, 0],
+            vec![0, 1]
+        ).unwrap(),
+        NautyGroupOrder { mantissa: 2.0, exponent: 0 },
+        vec![0, 0]
+    )]
+    #[case::two_color_k4(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 3, 6, 9, 12],
+            vec![1, 2, 3, 0, 2, 3, 0, 1, 3, 0, 1, 2],
+            vec![0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        NautyGroupOrder { mantissa: 8.0, exponent: 0 },
+        vec![0, 0, 0, 0]
+    )]
+    fn test_run_weighted(
+        #[case] input: WeightedNautyInput,
+        #[case] expected_order: NautyGroupOrder,
+        #[case] expected_orbits: Vec<u32>,
+    ) {
+        let canonical = run_weighted(&input, true).unwrap();
+        assert_eq!(canonical.group_order, expected_order);
+        assert_eq!(canonical.orbits, expected_orbits);
+        assert_weighted_output_semantics(&input, true, &canonical);
+
+        let autom_only = run_weighted(&input, false).unwrap();
+        assert_eq!(autom_only.group_order, expected_order);
+        assert_eq!(autom_only.orbits, expected_orbits);
+        assert_weighted_output_semantics(&input, false, &autom_only);
+    }
+
+    #[rstest]
+    #[case::one_double_bond_square(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![1, 0, 1, 0, 0, 0, 0, 0],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![0, 0, 0, 0, 0, 1, 0, 1],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap()
+    )]
+    #[case::alternating_square(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![1, 0, 1, 0, 0, 1, 0, 1],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 4, 6, 8],
+            vec![1, 3, 0, 2, 1, 3, 0, 2],
+            vec![0, 1, 0, 1, 1, 0, 1, 0],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap()
+    )]
+    #[case::three_color_path_4(
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 1, 3, 5, 6],
+            vec![1, 0, 2, 1, 3, 2],
+            vec![0, 0, 1, 1, 2, 2],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap(),
+        WeightedNautyInput::try_new(
+            4,
+            vec![0, 2, 3, 4, 6],
+            vec![2, 3, 3, 0, 0, 1],
+            vec![0, 1, 2, 0, 1, 2],
+            vec![0, 0, 0, 0],
+            vec![0, 1, 2, 3]
+        ).unwrap()
+    )]
+    fn test_run_weighted_canonical_relabeling(
+        #[case] first: WeightedNautyInput,
+        #[case] second: WeightedNautyInput,
+    ) {
+        let first_output = run_weighted(&first, true).unwrap();
+        let second_output = run_weighted(&second, true).unwrap();
+        assert_weighted_output_semantics(&first, true, &first_output);
+        assert_weighted_output_semantics(&second, true, &second_output);
+        assert_eq!(
+            canonical_colored_signature(&first, &first_output.canonical_labels),
+            canonical_colored_signature(&second, &second_output.canonical_labels)
+        );
+    }
+
+    #[rstest]
+    #[case::opposite_double_bonds_fix_2(
+        WeightedNautyInput::try_new(
+            6,
+            vec![0, 2, 4, 6, 8, 10, 12],
+            vec![1, 5, 0, 2, 1, 3, 2, 4, 3, 5, 0, 4],
+            vec![1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0],
+            vec![0, 0, 1, 0, 0, 0],
+            vec![0, 1, 3, 4, 5, 2]
+        ).unwrap(),
+        2,
+        NautyGroupOrder { mantissa: 2.0, exponent: 0 },
+        vec![0, 1, 2, 1, 0, 5]
+    )]
+    #[case::opposite_double_bonds_fix_0(
+        WeightedNautyInput::try_new(
+            6,
+            vec![0, 2, 4, 6, 8, 10, 12],
+            vec![1, 5, 0, 2, 1, 3, 2, 4, 3, 5, 0, 4],
+            vec![1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0],
+            vec![1, 0, 0, 0, 0, 0],
+            vec![1, 2, 3, 4, 5, 0]
+        ).unwrap(),
+        0,
+        NautyGroupOrder { mantissa: 1.0, exponent: 0 },
+        vec![0, 1, 2, 3, 4, 5]
+    )]
+    fn test_run_weighted_stabilizer(
+        #[case] input: WeightedNautyInput,
+        #[case] site: usize,
+        #[case] expected_order: NautyGroupOrder,
+        #[case] expected_orbits: Vec<u32>,
+    ) {
+        for get_canon in [true, false] {
+            let output = run_weighted(&input, get_canon).unwrap();
+            assert_eq!(output.group_order, expected_order);
+            assert_eq!(output.orbits, expected_orbits);
+            assert!(output
+                .generators
+                .iter()
+                .all(|generator| generator[site] == site as u32));
+            assert_weighted_output_semantics(&input, get_canon, &output);
+        }
+    }
+
+    #[rstest]
+    #[case::complete_15_uniform(15, 15, 130.7674368, 10)]
+    #[case::two_color_k10_bipartite(10, 5, 28_800.0, 0)]
+    fn test_run_weighted_group_order(
+        #[case] vertex_count: usize,
+        #[case] split: usize,
+        #[case] expected_mantissa: f64,
+        #[case] expected_exponent: i32,
+    ) {
+        let mut offsets = Vec::with_capacity(vertex_count + 1);
+        let mut neighbors = Vec::with_capacity(vertex_count * (vertex_count - 1));
+        let mut weights = Vec::with_capacity(vertex_count * (vertex_count - 1));
+        offsets.push(0);
+        for vertex in 0..vertex_count {
+            for neighbor in 0..vertex_count {
+                if neighbor != vertex {
+                    neighbors.push(neighbor as u32);
+                    let same_block = (vertex < split) == (neighbor < split);
+                    weights.push(u32::from(!same_block));
+                }
+            }
+            offsets.push(neighbors.len());
+        }
+        let input = WeightedNautyInput::try_new(
+            vertex_count,
+            offsets,
+            neighbors,
+            weights,
+            vec![0; vertex_count],
+            (0..vertex_count as u32).collect(),
+        )
+        .unwrap();
+
+        for get_canon in [true, false] {
+            let output = run_weighted(&input, get_canon).unwrap();
+            assert!(
+                (output.group_order.mantissa - expected_mantissa).abs()
+                    < GROUP_ORDER_MANTISSA_TOLERANCE
+            );
+            assert_eq!(output.group_order.exponent, expected_exponent);
+            assert_weighted_output_semantics(&input, get_canon, &output);
+        }
+    }
+
+    #[rstest]
+    #[case::parallel_colored_cycles(8)]
+    fn test_run_weighted_concurrency(#[case] thread_count: usize) {
+        let handles: Vec<_> = (0..thread_count)
+            .map(|worker| {
+                thread::spawn(move || {
+                    let site = worker % 6;
+                    let get_canon = worker % 2 == 0;
+                    let mut colors = vec![0; 6];
+                    colors[site] = 1;
+                    let edge_a = ((site + 1) % 6, (site + 2) % 6);
+                    let edge_b = ((site + 4) % 6, (site + 5) % 6);
+                    let mut offsets = Vec::with_capacity(7);
+                    let mut neighbors = Vec::with_capacity(12);
+                    let mut weights = Vec::with_capacity(12);
+                    offsets.push(0);
+                    for vertex in 0..6 {
+                        for neighbor in [(vertex + 1) % 6, (vertex + 5) % 6] {
+                            let is_double = (vertex == edge_a.0 && neighbor == edge_a.1)
+                                || (vertex == edge_a.1 && neighbor == edge_a.0)
+                                || (vertex == edge_b.0 && neighbor == edge_b.1)
+                                || (vertex == edge_b.1 && neighbor == edge_b.0);
+                            neighbors.push(neighbor as u32);
+                            weights.push(u32::from(is_double));
+                        }
+                        offsets.push(neighbors.len());
+                    }
+                    let input = WeightedNautyInput::try_new(
+                        6,
+                        offsets,
+                        neighbors,
+                        weights,
+                        colors,
+                        (0..6)
+                            .filter(|&vertex| vertex != site as u32)
+                            .chain(iter::once(site as u32))
+                            .collect(),
+                    )
+                    .unwrap();
+                    let output = run_weighted(&input, get_canon).unwrap();
+                    assert_weighted_output_semantics(&input, get_canon, &output);
+                    (site, get_canon, output)
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            let (site, get_canon, output) = handle.join().expect("weighted nauty worker succeeds");
+            assert_eq!(
+                output.group_order,
+                NautyGroupOrder {
+                    mantissa: 2.0,
+                    exponent: 0
+                }
+            );
+            assert_eq!(output.canonical_labels.is_empty(), !get_canon);
             assert!(output
                 .generators
                 .iter()

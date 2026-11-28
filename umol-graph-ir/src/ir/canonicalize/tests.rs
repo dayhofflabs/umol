@@ -11,20 +11,20 @@ use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 
 use super::*;
+use crate::ir::incidence::{Incidence, StereoVirtualLigands};
 use crate::ir::{
     AromaticSystemConstraintForm, AromaticSystemDelta, AromaticSystemFieldChange,
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm,
     AtomId, BondConstraintForm, BondDelta, BondFieldChange, BondForm, BondId, BooleanForm,
     Constraint, ConstraintDelta, DativeBondConstraintForm, DativeBondDelta, DativeBondFieldChange,
-    DativeBondForm, DativeBondId, Deltas, EntitySpan, Incidence, MoleculeConstraint,
-    MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondDelta,
-    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId,
-    NoncovalentBondConstraintForm, NoncovalentBondDelta, NoncovalentBondFieldChange,
-    NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NumForm,
-    ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomDelta, StereoAtomFieldChange,
-    StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondDelta, StereoBondFieldChange,
-    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoKind, StereoLigand,
-    StereoLigandKind, Stereogenicity, StereogenicityForm,
+    DativeBondForm, DativeBondId, Deltas, EntitySpan, MoleculeConstraint, MoleculeEntries,
+    MulticenterBondConstraintForm, MulticenterBondDelta, MulticenterBondFieldChange,
+    MulticenterBondForm, MulticenterBondId, NoncovalentBondConstraintForm, NoncovalentBondDelta,
+    NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindForm, NumForm, ReactionSpanEntries, StereoAtomConstraintForm,
+    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondDelta, StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm,
+    StereoKind, StereoLigand, StereoLigandKind, Stereogenicity, StereogenicityForm,
 };
 
 #[fixture]
@@ -600,16 +600,19 @@ pub(crate) fn explicitly_dense_equivalent(
 #[rstest]
 fn test_incidence_cmp() {
     let incidences = [
-        Incidence::BondEndpoint,
         Incidence::DativeDonor,
         Incidence::DativeAcceptor,
         Incidence::AromaticAtom,
         Incidence::MulticenterAtom,
         Incidence::NoncovalentEndpoint,
-        Incidence::StereoSite,
-        Incidence::StereoLigand(StereoLigandKind::Atom),
-        Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
-        Incidence::StereoLigand(StereoLigandKind::LonePair),
+        Incidence::StereoAnchor(StereoVirtualLigands::empty()),
+        Incidence::StereoAnchor(StereoVirtualLigands::IMPLICIT_HYDROGEN),
+        Incidence::StereoAnchor(StereoVirtualLigands::LONE_PAIR),
+        Incidence::StereoAnchor(
+            StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
+        ),
+        Incidence::StereoAnchor(StereoVirtualLigands::VIRTUAL),
+        Incidence::StereoLigand,
     ];
 
     for pair in incidences.windows(2) {

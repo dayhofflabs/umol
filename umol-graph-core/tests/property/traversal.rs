@@ -1,5 +1,5 @@
 //! Depth-first event order is checked against recursive DFS using sets over
-//! generated undirected multigraphs of at most eight nodes and twenty edges.
+//! generated simple undirected graphs of at most eight nodes and twenty edges.
 //! Ordered candidate roots include subsets and duplicates; callback adjacency
 //! can reverse incidence order and retain sparse edge ids. Graph's CSR adapter
 //! is checked separately. Early breaks must produce the reference prefix.
@@ -7,7 +7,7 @@
 //! traversal for inconsistent connectivity.
 //!
 //! Breadth-first events use a layer-by-layer reference over the same bounded
-//! multigraph domain. Independent edge relaxation checks shortest distances and
+//! simple-graph domain. Independent edge relaxation checks shortest distances and
 //! reached sets for sequential roots, excluding previous trees. Depth limits,
 //! reversed incidence order, sparse edge ids, and early breaks are included.
 //! Event collectors must equal both the complete visitor sequence and its
@@ -25,7 +25,7 @@ use umol_graph_core::{
     NeighborhoodAlgorithm, NodeId,
 };
 
-use super::strategy::graph_with_edge_multiset;
+use super::strategy::graph_with_simple_edges;
 
 fn reference_depth_first(adjacency: &[Vec<Neighbor>], roots: &[NodeId]) -> Vec<DepthFirstEvent> {
     let mut nodes = HashSet::new();
@@ -147,7 +147,7 @@ fn reference_distances(
 #[rstest]
 fn test_visit_depth_first() {
     proptest!(|(
-        (graph, edges) in graph_with_edge_multiset(8, 20),
+        (graph, edges) in graph_with_simple_edges(8, 20),
         candidates in prop::collection::vec(0u32..8, 0..16),
         reverse in any::<bool>(),
         stop in 0usize..64,
@@ -223,7 +223,7 @@ fn test_visit_depth_first_partial() {
 #[rstest]
 fn test_graph_visit_depth_first() {
     proptest!(|(
-        (graph, _) in graph_with_edge_multiset(8, 20),
+        (graph, _) in graph_with_simple_edges(8, 20),
         candidates in prop::collection::vec(0u32..8, 0..16),
     )| {
         let roots: Vec<_> = candidates.into_iter()
@@ -243,7 +243,7 @@ fn test_graph_visit_depth_first() {
 #[rstest]
 fn test_graph_enumerate_depth_first_events() {
     proptest!(|(
-        (graph, _) in graph_with_edge_multiset(8, 20),
+        (graph, _) in graph_with_simple_edges(8, 20),
         candidates in prop::collection::vec(0u32..8, 0..16),
     )| {
         let roots: Vec<_> = candidates.into_iter()
@@ -265,7 +265,7 @@ fn test_graph_enumerate_depth_first_events() {
 #[rstest]
 fn test_visit_breadth_first() {
     proptest!(|(
-        (graph, edges) in graph_with_edge_multiset(8, 20),
+        (graph, edges) in graph_with_simple_edges(8, 20),
         candidates in prop::collection::vec(0u32..8, 0..16),
         reverse in any::<bool>(),
         max_depth in prop::option::of(prop_oneof![0usize..10, Just(usize::MAX)]),
@@ -341,7 +341,7 @@ fn test_visit_breadth_first_partial() {
 #[rstest]
 fn test_graph_visit_breadth_first() {
     proptest!(|(
-        (graph, edges) in graph_with_edge_multiset(8, 20),
+        (graph, edges) in graph_with_simple_edges(8, 20),
         candidates in prop::collection::vec(0u32..8, 0..16),
         max_depth in prop::option::of(prop_oneof![0usize..10, Just(usize::MAX)]),
     )| {
@@ -391,7 +391,7 @@ fn test_graph_visit_breadth_first() {
 #[rstest]
 fn test_graph_enumerate_breadth_first_events() {
     proptest!(|(
-        (graph, _) in graph_with_edge_multiset(8, 20),
+        (graph, _) in graph_with_simple_edges(8, 20),
         candidates in prop::collection::vec(0u32..8, 0..16),
         max_depth in prop::option::of(prop_oneof![0usize..10, Just(usize::MAX)]),
     )| {
@@ -414,7 +414,7 @@ fn test_graph_enumerate_breadth_first_events() {
 #[rstest]
 fn test_graph_neighborhood() {
     proptest!(|(
-        (graph, edges) in graph_with_edge_multiset(8, 20),
+        (graph, edges) in graph_with_simple_edges(8, 20),
         max_depth in prop_oneof![0usize..10, Just(usize::MAX)],
     )| {
         let adjacency: Vec<_> = graph.node_ids().map(|node| graph.neighbors(node).to_vec()).collect();

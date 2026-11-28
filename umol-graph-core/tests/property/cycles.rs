@@ -1,7 +1,7 @@
 //! Cycle properties use definition-level exhaustive enumeration for bounded
-//! random multigraphs and the simple corpus through order six. `captured` and
+//! random simple graphs and the simple corpus through order six. `captured` and
 //! `families` independently compare the production operations with captured
-//! results over the larger simple and non-simple corpora. `literature` preserves
+//! results over the larger simple corpus. `literature` preserves
 //! source-stated results for selected chemical and graph-theoretic examples;
 //! its intentional overlap with the exhaustive corpus records provenance, while
 //! the para-bridged macrocycle extends coverage to a larger chemical topology.
@@ -22,9 +22,8 @@ use num_bigint::BigUint;
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{
-    Cycle, EdgeId, Graph, MinimumCycleBasisAlgorithm, NonSimpleGraphError,
-    RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm, SubdivisionNodeSource,
-    UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
+    EdgeId, Graph, MinimumCycleBasisAlgorithm, RelevantCycleEnumerationAlgorithm,
+    SimpleCycleEnumerationAlgorithm, UniqueRingFamilyAlgorithm, UniqueRingFamilyId,
 };
 
 use self::exhaustive::{
@@ -32,7 +31,7 @@ use self::exhaustive::{
     relevant_cycles, unique_ring_families,
 };
 use super::corpus::simple_graphs;
-use super::strategy::multigraph;
+use super::strategy::simple_graph;
 
 const SIMPLE_CYCLE_ALGORITHM: SimpleCycleEnumerationAlgorithm =
     SimpleCycleEnumerationAlgorithm::ReadTarjan;
@@ -42,14 +41,6 @@ fn test_graph_enumerate_simple_cycles_corpus() {
     let mut graph_count = 0;
     for graph in simple_graphs().take_while(|graph| graph.node_count() <= 6) {
         let cycles = graph.enumerate_simple_cycles(usize::MAX, SIMPLE_CYCLE_ALGORITHM);
-        assert_eq!(
-            graph.try_enumerate_simple_cycles(usize::MAX, SIMPLE_CYCLE_ALGORITHM),
-            Ok(cycles.clone()),
-        );
-        assert_eq!(
-            graph.enumerate_simple_cycles_fallback(usize::MAX, SIMPLE_CYCLE_ALGORITHM),
-            cycles,
-        );
 
         let mut actual: Vec<Vec<EdgeId>> = cycles
             .into_iter()
@@ -67,37 +58,10 @@ fn test_graph_enumerate_simple_cycles_corpus() {
     assert_eq!(graph_count, 208);
 }
 
-#[rstest]
-fn test_graph_enumerate_relevant_cycles_paths() {
-    let mut graph_count = 0;
-    for graph in simple_graphs().take_while(|graph| graph.node_count() <= 6) {
-        let cycles =
-            graph.enumerate_relevant_cycles(usize::MAX, RelevantCycleEnumerationAlgorithm::Vismara);
-        assert_eq!(
-            graph.try_enumerate_relevant_cycles(
-                usize::MAX,
-                RelevantCycleEnumerationAlgorithm::Vismara,
-            ),
-            Ok(cycles.clone()),
-        );
-
-        let fallback = graph.enumerate_relevant_cycles_fallback(
-            usize::MAX,
-            RelevantCycleEnumerationAlgorithm::Vismara,
-        );
-        assert_eq!(
-            fallback.into_iter().collect::<HashSet<_>>(),
-            cycles.into_iter().collect::<HashSet<_>>(),
-        );
-        graph_count += 1;
-    }
-    assert_eq!(graph_count, 208);
-}
-
 proptest! {
     #[test]
     fn test_graph_enumerate_simple_cycles(
-        graph in multigraph(5, 7),
+        graph in simple_graph(5, 10),
         max_cycle_size in 0usize..=5,
     ) {
         let cycles = graph.enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
@@ -125,13 +89,10 @@ proptest! {
 
     #[test]
     fn test_graph_visit_simple_cycles(
-        graph in multigraph(5, 7),
+        graph in simple_graph(5, 10),
         max_cycle_size in 0usize..=5,
     ) {
         let expected = graph.enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
-        let fallback = graph
-            .enumerate_simple_cycles_fallback(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
-        prop_assert_eq!(&fallback, &expected);
 
         let mut visited = Vec::new();
         let result = graph.visit_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM, |cycle| {
@@ -140,43 +101,11 @@ proptest! {
         });
         prop_assert_eq!(result, ControlFlow::Continue(()));
         prop_assert_eq!(&visited, &expected);
-
-        let mut fallback_visited = Vec::new();
-        let fallback_result = graph.visit_simple_cycles_fallback(
-            max_cycle_size,
-            SIMPLE_CYCLE_ALGORITHM,
-            |cycle| {
-                fallback_visited.push(cycle);
-                ControlFlow::<()>::Continue(())
-            },
-        );
-        prop_assert_eq!(fallback_result, ControlFlow::Continue(()));
-        prop_assert_eq!(&fallback_visited, &fallback);
-
-        let mut direct_visited = Vec::new();
-        let direct_result = graph.try_visit_simple_cycles(
-            max_cycle_size,
-            SIMPLE_CYCLE_ALGORITHM,
-            |cycle| {
-                direct_visited.push(cycle);
-                ControlFlow::<()>::Continue(())
-            },
-        );
-        let direct = graph.try_enumerate_simple_cycles(max_cycle_size, SIMPLE_CYCLE_ALGORITHM);
-        if graph.is_simple() {
-            prop_assert_eq!(direct_result, Ok(ControlFlow::Continue(())));
-            prop_assert_eq!(direct.as_ref(), Ok(&expected));
-            prop_assert_eq!(direct_visited, expected);
-        } else {
-            prop_assert_eq!(direct_result, Err(NonSimpleGraphError));
-            prop_assert_eq!(direct, Err(NonSimpleGraphError));
-            prop_assert_eq!(direct_visited, Vec::<Cycle>::new());
-        }
     }
 
     #[test]
     fn test_graph_enumerate_simple_cycles_relabeling(
-        graph in multigraph(5, 7),
+        graph in simple_graph(5, 10),
         max_cycle_size in 0usize..=5,
     ) {
         let node_count = graph.node_count();
@@ -210,7 +139,7 @@ proptest! {
     }
 
     #[test]
-    fn test_graph_minimum_cycle_basis(graph in multigraph(5, 5)) {
+    fn test_graph_minimum_cycle_basis(graph in simple_graph(5, 10)) {
         let result = graph.minimum_cycle_basis(MinimumCycleBasisAlgorithm::Horton);
         let cycles = result
             .iter()
@@ -232,14 +161,10 @@ proptest! {
 
     #[test]
     fn test_graph_visit_relevant_cycles(
-        graph in multigraph(5, 5),
+        graph in simple_graph(5, 10),
         max_cycle_size in 0usize..=5,
     ) {
         let expected = graph.enumerate_relevant_cycles(
-            max_cycle_size,
-            RelevantCycleEnumerationAlgorithm::Vismara,
-        );
-        let fallback = graph.enumerate_relevant_cycles_fallback(
             max_cycle_size,
             RelevantCycleEnumerationAlgorithm::Vismara,
         );
@@ -255,50 +180,11 @@ proptest! {
         );
         prop_assert_eq!(result, ControlFlow::Continue(()));
         prop_assert_eq!(&visited, &expected);
-
-        let mut fallback_visited = Vec::new();
-        let fallback_result = graph.visit_relevant_cycles_fallback(
-            max_cycle_size,
-            RelevantCycleEnumerationAlgorithm::Vismara,
-            |cycle| {
-                fallback_visited.push(cycle);
-                ControlFlow::<()>::Continue(())
-            },
-        );
-        prop_assert_eq!(fallback_result, ControlFlow::Continue(()));
-        prop_assert_eq!(&fallback_visited, &fallback);
-
-        let mut direct_visited = Vec::new();
-        let direct_result = graph.try_visit_relevant_cycles(
-            max_cycle_size,
-            RelevantCycleEnumerationAlgorithm::Vismara,
-            |cycle| {
-                direct_visited.push(cycle);
-                ControlFlow::<()>::Continue(())
-            },
-        );
-        let direct = graph.try_enumerate_relevant_cycles(
-            max_cycle_size,
-            RelevantCycleEnumerationAlgorithm::Vismara,
-        );
-        if graph.is_simple() {
-            let expected_set: HashSet<_> = expected.iter().cloned().collect();
-            let fallback_set: HashSet<_> = fallback.iter().cloned().collect();
-            prop_assert_eq!(fallback_set, expected_set);
-            prop_assert_eq!(direct_result, Ok(ControlFlow::Continue(())));
-            prop_assert_eq!(direct.as_ref(), Ok(&expected));
-            prop_assert_eq!(direct_visited, expected);
-        } else {
-            prop_assert_eq!(fallback, expected);
-            prop_assert_eq!(direct_result, Err(NonSimpleGraphError));
-            prop_assert_eq!(direct, Err(NonSimpleGraphError));
-            prop_assert_eq!(direct_visited, Vec::<Cycle>::new());
-        }
     }
 
     #[test]
     fn test_graph_enumerate_relevant_cycles(
-        graph in multigraph(5, 5),
+        graph in simple_graph(5, 10),
         max_cycle_size in 0usize..=5,
     ) {
         let mut actual = graph
@@ -328,7 +214,7 @@ proptest! {
 
     #[test]
     fn test_graph_unique_ring_families(
-        graph in multigraph(5, 5),
+        graph in simple_graph(5, 10),
         prefix in any::<usize>(),
     ) {
         let result = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
@@ -391,7 +277,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unique_ring_families_families_containing_node(graph in multigraph(5, 5)) {
+    fn test_unique_ring_families_families_containing_node(graph in simple_graph(5, 10)) {
         let families = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
         for node in graph.node_ids() {
             let expected = families
@@ -409,7 +295,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unique_ring_families_families_containing_edge(graph in multigraph(5, 5)) {
+    fn test_unique_ring_families_families_containing_edge(graph in simple_graph(5, 10)) {
         let families = graph.unique_ring_families(UniqueRingFamilyAlgorithm::Kolodzik);
         for edge in graph.edge_ids() {
             let expected = families
@@ -427,7 +313,7 @@ proptest! {
     }
 
     #[test]
-    fn test_graph_unique_ring_families_relabeling(graph in multigraph(5, 5)) {
+    fn test_graph_unique_ring_families_relabeling(graph in simple_graph(5, 10)) {
         let node_count = graph.node_count();
         let relabeled_edges = graph
             .edge_ids()
@@ -470,7 +356,7 @@ proptest! {
     }
 
     #[test]
-    fn test_unique_ring_families(graph in multigraph(5, 5)) {
+    fn test_unique_ring_families(graph in simple_graph(5, 10)) {
         let relevant = relevant_cycles(&graph);
         let families = unique_ring_families(&graph);
 
@@ -487,49 +373,5 @@ proptest! {
                 .then_with(|| left.cmp(right))
         });
         prop_assert_eq!(partition, relevant);
-    }
-
-    #[test]
-    fn test_graph_subdivide_edges(source in multigraph(8, 12)) {
-        let subdivision = source.subdivide_edges();
-        let graph = subdivision.graph();
-
-        prop_assert_eq!(
-            graph.node_count(),
-            source.node_count() + source.edge_count()
-        );
-        prop_assert_eq!(graph.edge_count(), 2 * source.edge_count());
-
-        for node in graph.node_ids() {
-            let node_source = subdivision.node_source(node);
-            prop_assert_eq!(subdivision.node_of(node_source), node);
-        }
-
-        for incidence in graph.edge_ids() {
-            let edge = subdivision.edge_source(incidence);
-            prop_assert!(source.contains_edge(edge));
-            prop_assert!(subdivision.incidence_edges_of(edge).contains(&incidence));
-        }
-
-        for edge in source.edge_ids() {
-            let [first, second] = source.edge_endpoints(edge);
-            let inserted = subdivision.node_of(SubdivisionNodeSource::Edge(edge));
-            let [first_incidence, second_incidence] = subdivision.incidence_edges_of(edge);
-
-            prop_assert_eq!(
-                subdivision.node_source(inserted),
-                SubdivisionNodeSource::Edge(edge)
-            );
-            prop_assert_eq!(
-                graph.edge_endpoints(first_incidence),
-                [first, inserted]
-            );
-            prop_assert_eq!(
-                graph.edge_endpoints(second_incidence),
-                [second, inserted]
-            );
-            prop_assert_eq!(subdivision.edge_source(first_incidence), edge);
-            prop_assert_eq!(subdivision.edge_source(second_incidence), edge);
-        }
     }
 }

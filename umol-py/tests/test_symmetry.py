@@ -340,20 +340,26 @@ def test_molecule_stereogenic_site_kinds_mixed(kindless):
 def test_graph_symmetry_config_default():
     config = GraphSymmetryConfig.default()
     assert config == GraphSymmetryConfig()
-    assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert config.automorphism_algorithm == AutomorphismAlgorithm.TrailIr()
     assert config.max_classification_trials == 4096
     assert config.include_constraints is False
 
 
+@pytest.mark.parametrize(
+    "automorphism_algorithm",
+    [AutomorphismAlgorithm.TrailIr(), AutomorphismAlgorithm.Nauty()],
+)
 @pytest.mark.parametrize("include_constraints", [False, True])
 @pytest.mark.parametrize("max_classification_trials", [0, 16])
-def test_graph_symmetry_config_new(include_constraints, max_classification_trials):
+def test_graph_symmetry_config_new(
+    automorphism_algorithm, include_constraints, max_classification_trials
+):
     config = GraphSymmetryConfig(
-        automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
+        automorphism_algorithm=automorphism_algorithm,
         max_classification_trials=max_classification_trials,
         include_constraints=include_constraints,
     )
-    assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert config.automorphism_algorithm == automorphism_algorithm
     assert config.max_classification_trials == max_classification_trials
     assert config.include_constraints is include_constraints
     assert eval(repr(config), {
@@ -368,7 +374,11 @@ def test_graph_symmetry_config_copy():
     copied.automorphism_algorithm = AutomorphismAlgorithm.Nauty()
     copied.max_classification_trials = 16
     copied.include_constraints = True
-    assert copied == GraphSymmetryConfig(max_classification_trials=16, include_constraints=True)
+    assert copied == GraphSymmetryConfig(
+        automorphism_algorithm=AutomorphismAlgorithm.Nauty(),
+        max_classification_trials=16,
+        include_constraints=True,
+    )
     assert config == GraphSymmetryConfig()
     with pytest.raises(TypeError):
         hash(config)

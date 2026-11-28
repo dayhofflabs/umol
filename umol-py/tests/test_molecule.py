@@ -101,8 +101,14 @@ def test_canonicalization_config():
     config = CanonicalizeConfig()
 
     assert config == CanonicalizeConfig.default()
-    assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert config.automorphism_algorithm == AutomorphismAlgorithm.TrailIr()
     assert repr(config) == "CanonicalizeConfig.default()"
+    nauty = CanonicalizeConfig(automorphism_algorithm=AutomorphismAlgorithm.Nauty())
+    assert nauty.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert (
+        repr(nauty)
+        == "CanonicalizeConfig(automorphism_algorithm=AutomorphismAlgorithm.Nauty())"
+    )
     with pytest.raises(AttributeError):
         config.automorphism_algorithm = AutomorphismAlgorithm.Nauty()
 

@@ -19,13 +19,16 @@ use umol_graph_ir::ir::{
 use crate::strategies::*;
 
 const MATCH_ALGORITHM: SubstructureMatchAlgorithm = SubstructureMatchAlgorithm::GraphAndOverlays;
-const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::Vf2;
+const SUBISO_ALGORITHM: SubgraphIsomorphismAlgorithm = SubgraphIsomorphismAlgorithm::BitsetRi;
 const RELEVANT_CYCLE_ALGORITHM: RelevantCycleEnumerationAlgorithm =
     RelevantCycleEnumerationAlgorithm::Vismara;
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: MATCH_ALGORITHM,
     subgraph_isomorphism_algorithm: SUBISO_ALGORITHM,
     relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
+    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+    reduce_pattern_symmetry: false,
+    reduce_host_symmetry: false,
 };
 
 proptest! {
@@ -668,11 +671,7 @@ proptest! {
         (reaction, host, _) in matchable_reaction_application_strategy(),
     ) {
         let mut expected = Vec::new();
-        for correspondence in reaction
-            .lhs()
-            .substructure_matches(&host, MATCH_CONFIG)
-            .expect("generated patterns carry no molecule-scope constraints")
-        {
+        for correspondence in reaction.lhs().substructure_matches(&host, MATCH_CONFIG) {
             match reaction.tracked_apply_at(&host, &correspondence) {
                 Ok(Some(result)) => expected.push(Ok(result)),
                 Ok(None) => {}

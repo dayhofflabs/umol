@@ -2,7 +2,9 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+use umol_graph_core::{
+    AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
 use umol_graph_ir::ir::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     Contradiction, DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, React,
@@ -14,8 +16,11 @@ use crate::strategies::*;
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+    reduce_pattern_symmetry: false,
+    reduce_host_symmetry: false,
 };
 
 fn unavailable_entity_strategy() -> impl Strategy<
@@ -540,8 +545,11 @@ proptest! {
                 &host,
                 SubstructureMatchConfig {
                     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                    automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+                    reduce_pattern_symmetry: false,
+                    reduce_host_symmetry: false,
                 },
             )
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?;

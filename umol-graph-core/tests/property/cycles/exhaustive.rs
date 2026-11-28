@@ -269,21 +269,6 @@ mod tests {
     #[rstest]
     #[case::empty(0, &[], vec![])]
     #[case::isolated(2, &[], vec![])]
-    #[case::loop_edge(1, &[[0, 0]], vec![vec![EdgeId(0)]])]
-    #[case::parallel_pair(
-        2,
-        &[[0, 1], [0, 1]],
-        vec![vec![EdgeId(0), EdgeId(1)]],
-    )]
-    #[case::parallel_triple(
-        2,
-        &[[0, 1], [0, 1], [0, 1]],
-        vec![
-            vec![EdgeId(0), EdgeId(1)],
-            vec![EdgeId(0), EdgeId(2)],
-            vec![EdgeId(1), EdgeId(2)],
-        ],
-    )]
     #[case::triangle(
         3,
         &[[0, 1], [1, 2], [0, 2]],
@@ -297,11 +282,6 @@ mod tests {
             vec![EdgeId(2), EdgeId(3), EdgeId(4)],
             vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
         ],
-    )]
-    #[case::disconnected_loops(
-        2,
-        &[[0, 0], [1, 1]],
-        vec![vec![EdgeId(0)], vec![EdgeId(1)]],
     )]
     fn test_enumerate_cycles(
         #[case] node_count: usize,
@@ -317,9 +297,7 @@ mod tests {
     #[case::path(3, &[[0, 1], [1, 2]], 0)]
     #[case::triangle(3, &[[0, 1], [1, 2], [0, 2]], 1)]
     #[case::square_with_diagonal(4, &[[0, 1], [1, 2], [2, 3], [0, 3], [0, 2]], 2)]
-    #[case::loop_edge(1, &[[0, 0]], 1)]
-    #[case::parallel_triple(2, &[[0, 1], [0, 1], [0, 1]], 2)]
-    #[case::disconnected(4, &[[0, 1], [1, 2], [0, 2], [3, 3]], 2)]
+    #[case::disconnected(6, &[[0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5]], 2)]
     fn test_cycle_space_rank(
         #[case] node_count: usize,
         #[case] edges: &[[u32; 2]],
@@ -382,24 +360,6 @@ mod tests {
             vec![
                 vec![EdgeId(2), EdgeId(3), EdgeId(4)],
                 vec![EdgeId(0), EdgeId(1), EdgeId(2), EdgeId(3)],
-            ],
-        ],
-    )]
-    #[case::parallel_triple(
-        2,
-        &[[0, 1], [0, 1], [0, 1]],
-        vec![
-            vec![
-                vec![EdgeId(0), EdgeId(1)],
-                vec![EdgeId(0), EdgeId(2)],
-            ],
-            vec![
-                vec![EdgeId(0), EdgeId(1)],
-                vec![EdgeId(1), EdgeId(2)],
-            ],
-            vec![
-                vec![EdgeId(0), EdgeId(2)],
-                vec![EdgeId(1), EdgeId(2)],
             ],
         ],
     )]
@@ -494,23 +454,6 @@ mod tests {
 
     #[rstest]
     #[case::path(3, &[[0, 1], [1, 2]], vec![])]
-    #[case::disconnected_loops(
-        2,
-        &[[0, 0], [1, 1]],
-        vec![
-            vec![vec![EdgeId(0)]],
-            vec![vec![EdgeId(1)]],
-        ],
-    )]
-    #[case::parallel_triple(
-        2,
-        &[[0, 1], [0, 1], [0, 1]],
-        vec![
-            vec![vec![EdgeId(0), EdgeId(1)]],
-            vec![vec![EdgeId(0), EdgeId(2)]],
-            vec![vec![EdgeId(1), EdgeId(2)]],
-        ],
-    )]
     #[case::square_with_diagonal(
         4,
         &[[0, 1], [1, 2], [2, 3], [0, 3], [0, 2]],

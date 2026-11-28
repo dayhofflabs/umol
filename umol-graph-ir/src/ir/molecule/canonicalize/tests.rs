@@ -1,25 +1,30 @@
 //! Unit and bounded-exhaustive tests for molecule canonicalization.
 
+use std::ops::RangeInclusive;
+
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
-use umol_graph_core::AutomorphismAlgorithm;
+use umol_graph_core::{AutomorphismAlgorithm, CanonicalLabeling, Graph};
 use umol_perm::Permutation;
 
 use super::*;
 use crate::ir::canonicalize::tests::{
     canonicalize_context, explicitly_dense_equivalent, permutations,
 };
-use crate::ir::symmetry::{same_cells, AutomorphismAdapterOutput, CanonicalSearchStats};
+use crate::ir::incidence::{
+    Incidence, IncidenceEdge, IncidenceEdgeId, IncidenceLevel, IncidenceNodeId,
+    StereoVirtualLigands,
+};
+use crate::ir::symmetry::{same_cells, CanonicalSearchStats};
 use crate::ir::{
     ArithExpr, AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId,
     BondForm, BondId, Constraint, Contradiction, DativeBondForm, DativeBondId, ElementForm, Entity,
-    Incidence, IncidenceLevel, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
-    MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
-    NoncovalentBondKind, NoncovalentBondKindForm, NumForm, StereoAtomConstraintForm,
-    StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
-    TopicityForm, TopicityRelationForm,
+    MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
+    MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindForm, NumForm, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId,
+    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, Topicity, TopicityForm, TopicityRelationForm,
 };
 use crate::mol_dsl;
 
@@ -398,14 +403,12 @@ fn reverse_remapping(molecule: &Molecule) -> MoleculeRemapping {
 }
 
 impl AutomorphismAdapter {
-    pub(super) fn automorphisms(
-        &self,
-        algorithm: AutomorphismAlgorithm,
-    ) -> AutomorphismAdapterOutput {
-        let output = self
-            .graph()
-            .automorphisms(|node| self.color(node), algorithm);
-        self.project_automorphisms(&output)
+    pub(super) fn canonical_labeling(&self, algorithm: AutomorphismAlgorithm) -> CanonicalLabeling {
+        self.graph().canonical_labeling(
+            |node| self.node_color(node),
+            |edge| self.edge_color(edge),
+            algorithm,
+        )
     }
 }
 
@@ -786,14 +789,13 @@ fn test_canonicalize_structure_stereo_bond(
 }
 
 #[rstest]
-#[case::stereo_atom(stereo_atom_canonicalization_molecule(), 1)]
-#[case::stereo_bond(stereo_bond_canonicalization_molecule(), 1)]
-#[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule(), 24)]
-#[case::para_stereo(para_stereo_canonicalization_molecule(), 8)]
+#[case::stereo_atom(stereo_atom_canonicalization_molecule(), 1..=1)]
+#[case::stereo_bond(stereo_bond_canonicalization_molecule(), 1..=1)]
+#[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule(), 2..=24)]
+#[case::para_stereo(para_stereo_canonicalization_molecule(), 1..=8)]
 fn test_canonicalize_structure_visited_leaves(
-    canonicalize_context: CanonicalizeContext,
     #[case] molecule: Molecule,
-    #[case] expected_visited_leaves: usize,
+    #[case] expected_visited_leaves: RangeInclusive<usize>,
 ) {
     let molecule = molecule.normalize().expect("fixed molecule normalizes");
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -820,15 +822,24 @@ fn test_canonicalize_structure_visited_leaves(
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
-    let search = canonical_search_with_generator_filter(
+    let nauty = canonical_search_with_generator_filter(
         &adapter,
-        &adapter.colors,
-        canonicalize_context.automorphism_algorithm,
+        adapter.node_colors(),
+        AutomorphismAlgorithm::Nauty,
+        &leaf_candidate,
+        &filter_generators,
+    );
+    let trail_ir = canonical_search_with_generator_filter(
+        &adapter,
+        adapter.node_colors(),
+        AutomorphismAlgorithm::TrailIr,
         &leaf_candidate,
         &filter_generators,
     );
 
-    assert_eq!(search.stats.visited_leaves, expected_visited_leaves);
+    assert!(expected_visited_leaves.contains(&nauty.stats.visited_leaves));
+    assert!(expected_visited_leaves.contains(&trail_ir.stats.visited_leaves));
+    assert_eq!(trail_ir.candidate.key, nauty.candidate.key);
 }
 
 #[rstest]
@@ -912,7 +923,7 @@ fn test_canonicalize_structure_orbit_pruning(
     };
     let actual = canonical_search_with_generator_filter(
         &adapter,
-        &adapter.colors,
+        adapter.node_colors(),
         algorithm,
         &leaf_candidate,
         &filter_generators,
@@ -929,7 +940,7 @@ fn test_canonicalize_structure_orbit_pruning(
     assert_eq!(
         actual.stats,
         CanonicalSearchStats {
-            initial_residual_cell_sizes: vec![2; 10],
+            initial_residual_cell_sizes: vec![2; 6],
             refinement_calls: 2,
             branch_order_calls: 1,
             backend_calls: 1,
@@ -1153,98 +1164,6 @@ fn test_same_colors(#[case] source: Molecule, #[case] target: Molecule, #[case] 
 }
 
 #[rstest]
-#[case::incomplete_order_one(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-        ..Default::default()
-    }),
-    Graph::new(2, &[[0, 1]]),
-    vec![AutomorphismColor::Entity(0); 2],
-    vec![
-        SubdivisionNodeSource::Node(NodeId(0)),
-        SubdivisionNodeSource::Node(NodeId(1)),
-    ],
-    vec![vec![NodeId(0), NodeId(1)]],
-)]
-#[case::modal_majority(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(2).into_concrete()),
-            (AtomId(1), AtomId(2), BondForm::from_order(2).into_concrete()),
-            (AtomId(0), AtomId(2), BondForm::from_order(1).into_concrete()),
-        ],
-        ..Default::default()
-    }),
-    Graph::new(4, &[[0, 1], [1, 2], [0, 3], [3, 2]]),
-    vec![
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(1),
-    ],
-    vec![
-        SubdivisionNodeSource::Node(NodeId(0)),
-        SubdivisionNodeSource::Node(NodeId(1)),
-        SubdivisionNodeSource::Node(NodeId(2)),
-        SubdivisionNodeSource::Node(NodeId(3)),
-    ],
-    vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
-)]
-#[case::modal_tie(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(2).into_concrete()),
-            (AtomId(1), AtomId(2), BondForm::from_order(1).into_concrete()),
-        ],
-        ..Default::default()
-    }),
-    Graph::new(4, &[[0, 3], [3, 1], [1, 2]]),
-    vec![
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(0),
-        AutomorphismColor::Entity(2),
-    ],
-    vec![
-        SubdivisionNodeSource::Node(NodeId(0)),
-        SubdivisionNodeSource::Node(NodeId(1)),
-        SubdivisionNodeSource::Node(NodeId(2)),
-        SubdivisionNodeSource::Node(NodeId(3)),
-    ],
-    vec![vec![NodeId(0), NodeId(1), NodeId(2)], vec![NodeId(3)]],
-)]
-fn test_topology_search_input(
-    #[case] molecule: Molecule,
-    #[case] expected_graph: Graph,
-    #[case] expected_colors: Vec<AutomorphismColor>,
-    #[case] expected_node_sources: Vec<SubdivisionNodeSource>,
-    #[case] expected_partition: Vec<Vec<NodeId>>,
-) {
-    let molecule = molecule.normalize().unwrap();
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let colors = initial_colors(
-        &molecule,
-        &incidence_graph,
-        DescriptionLevel::Topology,
-        true,
-    )
-    .unwrap();
-    let input = topology_search_input(&molecule, &incidence_graph, &colors.entities);
-
-    assert_eq!(input.adapter.graph, expected_graph);
-    assert_eq!(input.adapter.colors, expected_colors);
-    assert_eq!(input.adapter.node_sources, expected_node_sources);
-    assert_eq!(
-        input.adapter.source_node_count,
-        incidence_graph.entity_count(EntityKind::Atom),
-    );
-    assert_eq!(input.initial_partition.cells, expected_partition);
-}
-
-#[rstest]
 #[case::dative(Entity::DativeBond(DativeBondId(0)))]
 #[case::aromatic(Entity::AromaticSystem(AromaticSystemId(0)))]
 #[case::multicenter(Entity::MulticenterBond(MulticenterBondId(0)))]
@@ -1253,7 +1172,7 @@ fn test_topology_search_input(
 #[case::stereo_bond(Entity::StereoBond(StereoBondId(0)))]
 fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded: Entity) {
     let incidence_graph = initial_color_molecule.incidence_graph(IncidenceLevel::Topology);
-    let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+    let order = incidence_graph.raw_graph().node_ids().collect::<Vec<_>>();
     let remapping = remapping_from_order(&initial_color_molecule, &incidence_graph, &order);
 
     assert_eq!(
@@ -1272,7 +1191,7 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
         ],
         ..Default::default()
     }),
-    [0, 1, 2, 3, 4].map(NodeId).into(),
+    [0, 1, 2].map(NodeId).into(),
     molecule_remapping(&[
         vec![0, 1, 2],
         vec![0, 1],
@@ -1293,7 +1212,7 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
         ],
         ..Default::default()
     }),
-    [2, 1, 0, 4, 3].map(NodeId).into(),
+    [2, 1, 0].map(NodeId).into(),
     molecule_remapping(&[
         vec![2, 1, 0],
         vec![1, 0],
@@ -1307,7 +1226,7 @@ fn test_remapping_from_order(initial_color_molecule: Molecule, #[case] excluded:
 )]
 #[case::stereo_site_exchange(
     stereo_site_exchange_canonicalization_molecule(),
-    [5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 14, 15, 16, 17, 10, 11, 12, 13, 19, 18].map(NodeId).into(),
+    [5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 11, 10].map(NodeId).into(),
     molecule_remapping(&[
         vec![5, 6, 7, 8, 9, 0, 1, 2, 3, 4],
         vec![4, 5, 6, 7, 0, 1, 2, 3],
@@ -1347,8 +1266,6 @@ fn test_remapping_from_generator(
         Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
-        Entity::Bond(BondId(1)),
-        Entity::Bond(BondId(0)),
     ],
 )]
 #[case::dative_bond(
@@ -1481,8 +1398,6 @@ fn test_remapping_from_generator(
         Entity::Atom(AtomId(2)),
         Entity::Atom(AtomId(1)),
         Entity::Atom(AtomId(0)),
-        Entity::Bond(BondId(1)),
-        Entity::Bond(BondId(0)),
         Entity::StereoBond(StereoBondId(1)),
         Entity::StereoBond(StereoBondId(0)),
     ],
@@ -1511,13 +1426,13 @@ fn test_entity_order(
         DescriptionLevel::Constitution => IncidenceLevel::Constitution,
         DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     });
-    let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+    let mut order = incidence_graph.raw_graph().node_ids().collect::<Vec<_>>();
     order.reverse();
 
     assert_eq!(
         entity_order(&molecule, &incidence_graph, level, &order)
             .into_iter()
-            .map(|node| incidence_graph.entity(node))
+            .map(|node| incidence_graph.entity(IncidenceNodeId::from(node)))
             .collect::<Vec<_>>(),
         expected,
     );
@@ -1525,54 +1440,49 @@ fn test_entity_order(
 
 #[rstest]
 #[case::localized_bond(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 2],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-            ..Default::default()
-        }),
-        vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
-        0,
-    )]
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    }),
+    vec![IncidenceEdge::Bond(BondId(0))],
+)]
 #[case::mixed_virtual_ligand_anchor(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::F),
-                AtomForm::from_element(Element::Cl),
-            ],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            ],
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            )],
-            ..Default::default()
-        }),
-        vec![
-            Incidence::BondEndpoint,
-            Incidence::BondEndpoint,
-            Incidence::BondEndpoint,
-            Incidence::BondEndpoint,
-            Incidence::StereoSite,
-            Incidence::StereoLigand(StereoLigandKind::Atom),
-            Incidence::StereoLigand(StereoLigandKind::Atom),
-            Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
-            Incidence::StereoLigand(StereoLigandKind::LonePair),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
         ],
-        5,
-    )]
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        )],
+        ..Default::default()
+    }),
+    vec![
+        IncidenceEdge::Bond(BondId(0)),
+        IncidenceEdge::Bond(BondId(1)),
+        IncidenceEdge::Incidence(Incidence::StereoAnchor(
+            StereoVirtualLigands::IMPLICIT_HYDROGEN | StereoVirtualLigands::LONE_PAIR,
+        )),
+        IncidenceEdge::Incidence(Incidence::StereoLigand),
+        IncidenceEdge::Incidence(Incidence::StereoLigand),
+    ],
+)]
 fn test_automorphism_adapter_new(
     #[case] molecule: Molecule,
-    #[case] expected_incidences: Vec<Incidence>,
-    #[case] expected_occurrence_nodes: usize,
+    #[case] expected_edges: Vec<IncidenceEdge>,
 ) {
     let molecule = molecule.normalize().unwrap();
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -1584,46 +1494,24 @@ fn test_automorphism_adapter_new(
     )
     .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let source = incidence_graph.graph();
+    let source = incidence_graph.raw_graph();
 
     assert_eq!(
-        incidence_graph
-            .incidences()
-            .map(|(_, incidence)| incidence.clone())
+        (0..incidence_graph.edge_count() as u32)
+            .map(|index| incidence_graph.edge(IncidenceEdgeId(index)))
             .collect::<Vec<_>>(),
-        expected_incidences,
+        expected_edges,
     );
-    assert_eq!(
-        adapter.graph().node_count(),
-        source.node_count() + expected_occurrence_nodes,
-    );
-    assert_eq!(
-        adapter.graph().edge_count(),
-        source.edge_count() + expected_occurrence_nodes,
-    );
-    assert!(adapter.graph().is_simple());
-
-    for node in source.node_ids() {
-        assert_eq!(adapter.node_source(node), SubdivisionNodeSource::Node(node));
-        assert_eq!(
-            adapter.color(node),
-            AutomorphismColor::Entity(colors.entities[node.index()]),
-        );
-    }
-    for adapter_node in adapter.graph().node_ids().skip(source.node_count()) {
-        let SubdivisionNodeSource::Edge(edge) = adapter.node_source(adapter_node) else {
-            panic!("a node after the source nodes subdivides an incidence");
-        };
-        assert_eq!(
-            adapter.color(adapter_node),
-            AutomorphismColor::Incidence(colors.incidences[edge.index()]),
-        );
-        assert_eq!(adapter.graph().degree(adapter_node), 2);
-    }
+    assert_eq!(adapter.graph(), source);
+    assert_eq!(adapter.node_colors(), colors.entities.as_slice());
+    assert_eq!(adapter.edge_colors(), colors.edges.as_slice());
 }
 
 #[rstest]
-fn test_automorphism_adapter_automorphisms() {
+fn test_automorphism_adapter_canonical_labeling(
+    #[values(AutomorphismAlgorithm::Nauty, AutomorphismAlgorithm::TrailIr)]
+    algorithm: AutomorphismAlgorithm,
+) {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),
@@ -1641,47 +1529,53 @@ fn test_automorphism_adapter_automorphisms() {
     )
     .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let labeling = adapter.canonical_labeling(algorithm);
+    let orbits = adapter
+        .graph()
+        .node_ids()
+        .map(|node| labeling.automorphisms().orbit_of(node))
+        .collect::<Vec<_>>();
 
+    assert_eq!(orbits, vec![NodeId(0), NodeId(0)]);
     assert_eq!(
-        adapter.automorphisms(AutomorphismAlgorithm::Nauty),
-        AutomorphismAdapterOutput {
-            source_orbits: vec![NodeId(0), NodeId(0), NodeId(2)],
-            source_canonical_labels: vec![NodeId(0), NodeId(1), NodeId(2)],
-            source_generators: vec![vec![NodeId(1), NodeId(0), NodeId(2)]],
-        },
+        labeling.automorphisms().generators(),
+        &[vec![NodeId(1), NodeId(0)]],
     );
+    let mut sorted_labels = labeling.labels().to_vec();
+    sorted_labels.sort_unstable();
+    assert_eq!(sorted_labels, vec![NodeId(0), NodeId(1)]);
 }
 
 #[rstest]
 #[case::whole_molecule(
     None,
     vec![
-        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
-        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+        [1, 2, 3, 4, 5, 0].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1].map(NodeId).into(),
     ],
     vec![
-        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
-        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+        [1, 2, 3, 4, 5, 0].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1].map(NodeId).into(),
     ]
 )]
 #[case::one_atom(
     Some(vec![AtomId(0)]),
     vec![
-        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
-        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+        [1, 2, 3, 4, 5, 0].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1].map(NodeId).into(),
     ],
-    vec![[0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into()]
+    vec![[0, 5, 4, 3, 2, 1].map(NodeId).into()]
 )]
 #[case::two_opposite_atoms(
     Some(vec![AtomId(0), AtomId(3)]),
     vec![
-        [1, 2, 3, 4, 5, 0, 8, 6, 9, 10, 11, 7].map(NodeId).into(),
-        [3, 4, 5, 0, 1, 2, 10, 9, 11, 7, 6, 8].map(NodeId).into(),
-        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+        [1, 2, 3, 4, 5, 0].map(NodeId).into(),
+        [3, 4, 5, 0, 1, 2].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1].map(NodeId).into(),
     ],
     vec![
-        [3, 4, 5, 0, 1, 2, 10, 9, 11, 7, 6, 8].map(NodeId).into(),
-        [0, 5, 4, 3, 2, 1, 7, 6, 11, 10, 9, 8].map(NodeId).into(),
+        [3, 4, 5, 0, 1, 2].map(NodeId).into(),
+        [0, 5, 4, 3, 2, 1].map(NodeId).into(),
     ]
 )]
 fn test_retain_preserving_generators(
@@ -1725,12 +1619,16 @@ fn test_ordered_partition_refine_exhaustive_domain(
         graph: &Graph,
         renumbered_graph: &Graph,
     ) {
-        let reference = partition.clone().refine_by_all_cells(graph);
-        let active = partition.clone().refine_by_active_cells(graph);
-        let actual = partition.refine(graph);
+        let edge_colors = vec![0_u32; graph.edge_count()];
+        let renumbered_edge_colors = vec![0_u32; renumbered_graph.edge_count()];
+        let reference = partition.clone().refine_by_all_cells(graph, &edge_colors);
+        let active = partition
+            .clone()
+            .refine_by_active_cells(graph, &edge_colors);
+        let actual = partition.refine(graph, &edge_colors);
         assert_eq!(active, reference);
         assert_eq!(actual, reference);
-        let renumbered = renumbered_partition.refine(renumbered_graph);
+        let renumbered = renumbered_partition.refine(renumbered_graph, &renumbered_edge_colors);
         let node_count = graph.node_count();
         let transported = OrderedPartition {
             cells: renumbered
@@ -1748,7 +1646,7 @@ fn test_ordered_partition_refine_exhaustive_domain(
         };
         assert_eq!(actual, transported);
 
-        let Some(cell_index) = actual.first_non_singleton_entity_cell(graph.node_count()) else {
+        let Some(cell_index) = actual.first_non_singleton_cell() else {
             return;
         };
         for node in actual.cells[cell_index].clone() {
@@ -1862,10 +1760,10 @@ fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] e
         )
         .unwrap(),
     );
-    let source_partition =
-        OrderedPartition::from_descriptors(&source_adapter.colors).refine(source_adapter.graph());
-    let target_partition =
-        OrderedPartition::from_descriptors(&target_adapter.colors).refine(target_adapter.graph());
+    let source_partition = OrderedPartition::from_descriptors(source_adapter.node_colors())
+        .refine(source_adapter.graph(), source_adapter.edge_colors());
+    let target_partition = OrderedPartition::from_descriptors(target_adapter.node_colors())
+        .refine(target_adapter.graph(), target_adapter.edge_colors());
 
     assert_eq!(
         same_cells(
@@ -1902,7 +1800,7 @@ fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] e
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    vec![0, 1, 2, 3, 4, 5],
     true
 )]
 #[case::electron_counts_moved(
@@ -1916,13 +1814,13 @@ fn test_same_cells(#[case] source: Molecule, #[case] target: Molecule, #[case] e
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [0 4 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,2,1,1,1]"}]}"#
     ),
-    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    vec![0, 1, 2, 3, 4, 5],
     false
 )]
 #[case::bond_moved(
     mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
     mol_dsl!(r#"{:atoms ["C" "O" "N"] :bonds [[0 2 "1"] [2 1 "1"]]}"#),
-    vec![0, 1, 2, 3, 4],
+    vec![0, 1, 2],
     false
 )]
 fn test_remapping_preserves_incidences(
@@ -1992,13 +1890,15 @@ fn test_canonical_search_color_labels() {
     .unwrap();
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let mut relabeled = adapter.clone();
-    relabeled.colors.iter_mut().for_each(|color| {
-        *color = match *color {
-            AutomorphismColor::Entity(value) => AutomorphismColor::Entity(u32::MAX - value),
-            AutomorphismColor::Incidence(value) => AutomorphismColor::Incidence(u32::MAX - value),
-        }
-    });
-    let descriptors = adapter.colors.clone();
+    relabeled
+        .node_colors
+        .iter_mut()
+        .for_each(|color| *color = u32::MAX - *color);
+    relabeled
+        .edge_colors
+        .iter_mut()
+        .for_each(|color| *color = u32::MAX - *color);
+    let descriptors = adapter.node_colors().to_vec();
     let leaf_candidate = |order: &[NodeId]| {
         let entity_order = entity_order(
             &molecule,
@@ -2086,14 +1986,10 @@ fn test_remapping_exists(
         initial_colors(&source, &source_incidence, DescriptionLevel::Topology, true).unwrap();
     let target_colors =
         initial_colors(&target, &target_incidence, DescriptionLevel::Topology, true).unwrap();
-    let TopologySearchInput {
-        adapter: source_adapter,
-        initial_partition: source_partition,
-    } = topology_search_input(&source, &source_incidence, &source_colors.entities);
-    let TopologySearchInput {
-        adapter: target_adapter,
-        initial_partition: target_partition,
-    } = topology_search_input(&target, &target_incidence, &target_colors.entities);
+    let source_adapter = AutomorphismAdapter::new(&source_incidence, &source_colors);
+    let target_adapter = AutomorphismAdapter::new(&target_incidence, &target_colors);
+    let source_partition = OrderedPartition::from_descriptors(source_adapter.node_colors());
+    let target_partition = OrderedPartition::from_descriptors(target_adapter.node_colors());
 
     assert_eq!(
         remapping_exists(
@@ -3465,4 +3361,86 @@ fn test_molecule_canonical_eq_contradiction(
     #[case] expected: bool,
 ) {
     assert_eq!(left.canonical_eq(&right, &canonicalize_context), expected);
+}
+
+#[rstest]
+#[case::mixed_bond_orders(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(2)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    })
+)]
+#[case::overlays(initial_color_molecule())]
+#[case::stereo_atom(stereo_atom_canonicalization_molecule())]
+#[case::stereo_bond(stereo_bond_canonicalization_molecule())]
+#[case::symmetric_stereo(symmetric_stereo_canonicalization_molecule())]
+#[case::para_stereo(para_stereo_canonicalization_molecule())]
+#[case::stereo_site_exchange(stereo_site_exchange_canonicalization_molecule())]
+#[case::asymmetric_constraint(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0)]),
+            sum: NumForm::Lit(0),
+        })
+        .into(),
+        ..Default::default()
+    })
+)]
+fn test_molecule_canonicalize_algorithm_parity(#[case] molecule: Molecule) {
+    let nauty = CanonicalizeContext {
+        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    };
+    let trail_ir = CanonicalizeContext {
+        automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+    };
+    let renumbered = molecule.clone().remap(&reverse_remapping(&molecule));
+
+    for level in [
+        DescriptionLevel::Topology,
+        DescriptionLevel::Constitution,
+        DescriptionLevel::Structure,
+        DescriptionLevel::Full,
+    ] {
+        let (canonical_nauty, _) = molecule
+            .clone()
+            .tracked_canonicalize_at(level, &nauty)
+            .expect("fixture canonicalizes under Nauty");
+        let (canonical_trail_ir, _) = molecule
+            .clone()
+            .tracked_canonicalize_at(level, &trail_ir)
+            .expect("fixture canonicalizes under TrailIr");
+        assert_eq!(canonical_trail_ir, canonical_nauty);
+    }
+
+    assert_eq!(
+        molecule.clone().canonicalize(&trail_ir),
+        molecule.clone().canonicalize(&nauty),
+    );
+    assert_eq!(
+        renumbered.clone().canonicalize(&trail_ir),
+        molecule.clone().canonicalize(&nauty),
+    );
+    assert_eq!(
+        molecule.canonical_hash(&trail_ir),
+        molecule.canonical_hash(&nauty),
+    );
+    assert!(molecule.canonical_eq(&renumbered, &nauty));
+    assert!(molecule.canonical_eq(&renumbered, &trail_ir));
 }

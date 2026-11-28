@@ -27,6 +27,7 @@ use crate::ir::edit::{
     StereoAtomFieldChange, StereoAtomHandle, StereoBondFieldChange, StereoBondHandle, Undo,
 };
 use crate::ir::entity::EntityKind;
+use crate::ir::error::MoleculeApplyError;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -471,7 +472,7 @@ impl Molecule {
         &mut self,
         edit: Edit,
         state: &mut ApplicationState,
-    ) -> Result<(), TransactionError> {
+    ) -> Result<(), MoleculeApplyError> {
         let cascading = matches!(edit, Edit::RemoveTopologyCascading { .. });
         match edit {
             Edit::AddAtoms { atoms } => {
@@ -492,7 +493,7 @@ impl Molecule {
                         },
                     )
                     .collect::<Result<_, TransactionError>>()?;
-                for id in self.add_bonds(bonds) {
+                for id in self.try_add_bonds(bonds)? {
                     state.push_bond(id);
                 }
                 Ok(())
@@ -527,7 +528,7 @@ impl Molecule {
                     let mut view = self.atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.element.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.element = new;
                 }
@@ -539,7 +540,7 @@ impl Molecule {
                     let mut view = self.atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.isotope_mass.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.isotope_mass = new;
                 }
@@ -551,7 +552,7 @@ impl Molecule {
                     let mut view = self.atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.charge.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.charge = new;
                 }
@@ -563,7 +564,7 @@ impl Molecule {
                     let mut view = self.atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.implicit_hydrogens.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.implicit_hydrogens = new;
                 }
@@ -575,7 +576,7 @@ impl Molecule {
                     let mut view = self.atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.lone_pairs.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.lone_pairs = new;
                 }
@@ -587,7 +588,7 @@ impl Molecule {
                     let mut view = self.atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.unpaired_electrons.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.unpaired_electrons = new;
                 }
@@ -600,37 +601,37 @@ impl Molecule {
                 match change {
                     AtomFieldChange::Element { old, new } => {
                         if !attributes.element.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.element = new;
                     }
                     AtomFieldChange::IsotopeMass { old, new } => {
                         if !attributes.isotope_mass.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.isotope_mass = new;
                     }
                     AtomFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new;
                     }
                     AtomFieldChange::ImplicitHydrogens { old, new } => {
                         if !attributes.implicit_hydrogens.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.implicit_hydrogens = new;
                     }
                     AtomFieldChange::LonePairs { old, new } => {
                         if !attributes.lone_pairs.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.lone_pairs = new;
                     }
                     AtomFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new;
                     }
@@ -643,7 +644,7 @@ impl Molecule {
                     let mut view = self.bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.order.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.order = new;
                 }
@@ -655,7 +656,7 @@ impl Molecule {
                     let mut view = self.bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.charge.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.charge = new;
                 }
@@ -667,7 +668,7 @@ impl Molecule {
                     let mut view = self.bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.unpaired_electrons.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.unpaired_electrons = new;
                 }
@@ -680,19 +681,19 @@ impl Molecule {
                 match change {
                     BondFieldChange::Order { old, new } => {
                         if !attributes.order.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.order = new;
                     }
                     BondFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new;
                     }
                     BondFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new;
                     }
@@ -729,7 +730,7 @@ impl Molecule {
                         attributes: Cow::Borrowed(&attributes),
                     };
                     if !set.is_coincident(id, acceptor, &donors) || !set.entry(id).framed_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     ids.push(id);
                 }
@@ -763,7 +764,7 @@ impl Molecule {
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut view = self.dative_bond_view_mut(id);
                 if !view.donor_ids().eq(old.iter().copied()) {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_donors(&new);
                 Ok(())
@@ -774,7 +775,7 @@ impl Molecule {
                 let new = state.atom(new)?;
                 let mut view = self.dative_bond_view_mut(id);
                 if view.acceptor_id() != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_acceptor(new);
                 Ok(())
@@ -785,7 +786,7 @@ impl Molecule {
                     let mut view = self.dative_bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.order.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.order = new;
                 }
@@ -798,7 +799,7 @@ impl Molecule {
                 match change {
                     DativeBondFieldChange::Order { old, new } => {
                         if !attributes.order.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.order = new;
                     }
@@ -829,7 +830,7 @@ impl Molecule {
                         attributes: Cow::Borrowed(&attributes),
                     };
                     if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     ids.push(id);
                 }
@@ -863,7 +864,7 @@ impl Molecule {
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut view = self.aromatic_system_view_mut(id);
                 if !view.atom_ids().eq(old.iter().copied()) {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_atoms(&new);
                 Ok(())
@@ -874,7 +875,7 @@ impl Molecule {
                     let mut view = self.aromatic_system_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.electrons.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.electrons = new;
                 }
@@ -886,7 +887,7 @@ impl Molecule {
                     let mut view = self.aromatic_system_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.charge.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.charge = new;
                 }
@@ -898,7 +899,7 @@ impl Molecule {
                     let mut view = self.aromatic_system_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.unpaired_electrons.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.unpaired_electrons = new;
                 }
@@ -911,19 +912,19 @@ impl Molecule {
                 match change {
                     AromaticSystemFieldChange::Electrons { old, new } => {
                         if !attributes.electrons.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.electrons = new;
                     }
                     AromaticSystemFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new;
                     }
                     AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new;
                     }
@@ -954,7 +955,7 @@ impl Molecule {
                         attributes: Cow::Borrowed(&attributes),
                     };
                     if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     ids.push(id);
                 }
@@ -988,7 +989,7 @@ impl Molecule {
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut view = self.multicenter_bond_view_mut(id);
                 if !view.atom_ids().eq(old.iter().copied()) {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_atoms(&new);
                 Ok(())
@@ -999,7 +1000,7 @@ impl Molecule {
                     let mut view = self.multicenter_bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.electrons.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.electrons = new;
                 }
@@ -1011,7 +1012,7 @@ impl Molecule {
                     let mut view = self.multicenter_bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.charge.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.charge = new;
                 }
@@ -1023,7 +1024,7 @@ impl Molecule {
                     let mut view = self.multicenter_bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.unpaired_electrons.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.unpaired_electrons = new;
                 }
@@ -1036,19 +1037,19 @@ impl Molecule {
                 match change {
                     MulticenterBondFieldChange::Electrons { old, new } => {
                         if !attributes.electrons.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.electrons = new;
                     }
                     MulticenterBondFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new;
                     }
                     MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new;
                     }
@@ -1076,7 +1077,7 @@ impl Molecule {
                     if !set.is_coincident(id, saved_atoms[0], saved_atoms[1])
                         || !set.entry(id).framed_eq(&old)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     ids.push(id);
                 }
@@ -1104,7 +1105,7 @@ impl Molecule {
                 let new = [state.atom(new[0].clone())?, state.atom(new[1].clone())?];
                 let mut view = self.noncovalent_bond_view_mut(id);
                 if view.atom_ids() != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_atoms(new);
                 Ok(())
@@ -1115,7 +1116,7 @@ impl Molecule {
                     let mut view = self.noncovalent_bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.kind.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.kind = new;
                 }
@@ -1128,7 +1129,7 @@ impl Molecule {
                 match change {
                     NoncovalentBondFieldChange::Kind { old, new } => {
                         if !attributes.kind.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.kind = new;
                     }
@@ -1164,7 +1165,7 @@ impl Molecule {
                         || Permutation::between(&ligands, set.ligands(id)).is_none()
                         || !set.entry(id).framed_eq(&old)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     ids.push(id);
                 }
@@ -1192,7 +1193,7 @@ impl Molecule {
                 let new = state.atom(new)?;
                 let mut view = self.stereo_atom_view_mut(id);
                 if view.site_id() != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_site(new);
                 Ok(())
@@ -1203,7 +1204,7 @@ impl Molecule {
                 let new = state.stereo_ligands(new)?;
                 let mut view = self.stereo_atom_view_mut(id);
                 if view.ligand_ids() != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_ligands(&new);
                 Ok(())
@@ -1214,7 +1215,7 @@ impl Molecule {
                     let mut view = self.stereo_atom_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.configuration.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.configuration = new;
                 }
@@ -1227,7 +1228,7 @@ impl Molecule {
                 match change {
                     StereoAtomFieldChange::Configuration { old, new } => {
                         if !attributes.configuration.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.configuration = new;
                     }
@@ -1264,7 +1265,7 @@ impl Molecule {
                             .is_some_and(|action| ClassKey::CisTrans.space().allows(action))
                         || !set.entry(id).framed_eq(&old)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     ids.push(id);
                 }
@@ -1292,7 +1293,7 @@ impl Molecule {
                 let new = state.bond(new)?;
                 let mut view = self.stereo_bond_view_mut(id);
                 if view.site_id() != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_site(new);
                 Ok(())
@@ -1303,7 +1304,7 @@ impl Molecule {
                 let new = state.stereo_ligands(new)?;
                 let mut view = self.stereo_bond_view_mut(id);
                 if view.ligand_ids() != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_ligands(&new);
                 Ok(())
@@ -1314,7 +1315,7 @@ impl Molecule {
                     let mut view = self.stereo_bond_mut(id);
                     let attributes = view.attributes_mut();
                     if !attributes.configuration.normalized_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     attributes.configuration = new;
                 }
@@ -1327,7 +1328,7 @@ impl Molecule {
                 match change {
                     StereoBondFieldChange::Configuration { old, new } => {
                         if !attributes.configuration.normalized_eq(&old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.configuration = new;
                     }
@@ -1340,7 +1341,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1350,7 +1351,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1365,7 +1366,7 @@ impl Molecule {
                 let id = state.atom(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1375,7 +1376,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1391,7 +1392,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1401,7 +1402,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1416,7 +1417,7 @@ impl Molecule {
                 let id = state.bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1426,7 +1427,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1442,7 +1443,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1452,7 +1453,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1467,7 +1468,7 @@ impl Molecule {
                 let id = state.dative_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1477,7 +1478,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1493,7 +1494,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1503,7 +1504,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1518,7 +1519,7 @@ impl Molecule {
                 let id = state.aromatic_system(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1528,7 +1529,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1544,7 +1545,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1554,7 +1555,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1569,7 +1570,7 @@ impl Molecule {
                 let id = state.multicenter_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1579,7 +1580,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1595,7 +1596,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1605,7 +1606,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1620,7 +1621,7 @@ impl Molecule {
                 let id = state.noncovalent_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1630,7 +1631,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1650,7 +1651,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1660,7 +1661,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1680,7 +1681,7 @@ impl Molecule {
                 let id = state.stereo_atom(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1690,7 +1691,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1710,7 +1711,7 @@ impl Molecule {
                     if old.as_ref().is_some_and(|value| value.key() != key)
                         || new.as_ref().is_some_and(|value| value.key() != key)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     if old.is_none() && new.is_none() {
                         continue;
@@ -1720,7 +1721,7 @@ impl Molecule {
                     match (constraints.get(key), old.as_ref()) {
                         (None, None) => {}
                         (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                        _ => return Err(TransactionError::OldStateMismatch),
+                        _ => return Err(TransactionError::OldStateMismatch.into()),
                     }
                     match new {
                         Some(value) => constraints.set(value),
@@ -1740,7 +1741,7 @@ impl Molecule {
                 let id = state.stereo_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(()),
@@ -1750,7 +1751,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -1776,7 +1777,7 @@ impl Molecule {
                     .map(|(position, _)| position)
                     .collect::<Vec<_>>();
                 if positions.is_empty() {
-                    return Err(TransactionError::MissingEntry);
+                    return Err(TransactionError::MissingEntry.into());
                 }
                 for &position in positions.iter().rev() {
                     self.remove_constraint_at(position);
@@ -1790,7 +1791,7 @@ impl Molecule {
         &mut self,
         edit: Edit,
         state: &mut ApplicationState,
-    ) -> Result<Option<Undo>, TransactionError> {
+    ) -> Result<Option<Undo>, MoleculeApplyError> {
         let cascading = matches!(edit, Edit::RemoveTopologyCascading { .. });
         match edit {
             Edit::AddAtoms { atoms } => {
@@ -1822,7 +1823,7 @@ impl Molecule {
                     )
                     .collect::<Result<_, TransactionError>>()?;
                 let added = self
-                    .add_bonds(bonds)
+                    .try_add_bonds(bonds)?
                     .map(|id| {
                         state.push_bond(id);
                         let view = self.bond(id);
@@ -1890,7 +1891,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.atom_mut(id).attributes_mut().element = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -1914,7 +1915,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.atom_mut(id).attributes_mut().isotope_mass = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -1938,7 +1939,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.atom_mut(id).attributes_mut().charge = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -1962,7 +1963,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.atom_mut(id).attributes_mut().implicit_hydrogens = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -1986,7 +1987,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.atom_mut(id).attributes_mut().lone_pairs = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2010,7 +2011,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.atom_mut(id).attributes_mut().unpaired_electrons = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2023,37 +2024,37 @@ impl Molecule {
                 match &change {
                     AtomFieldChange::Element { old, new } => {
                         if !attributes.element.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.element = new.clone();
                     }
                     AtomFieldChange::IsotopeMass { old, new } => {
                         if !attributes.isotope_mass.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.isotope_mass = new.clone();
                     }
                     AtomFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new.clone();
                     }
                     AtomFieldChange::ImplicitHydrogens { old, new } => {
                         if !attributes.implicit_hydrogens.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.implicit_hydrogens = new.clone();
                     }
                     AtomFieldChange::LonePairs { old, new } => {
                         if !attributes.lone_pairs.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.lone_pairs = new.clone();
                     }
                     AtomFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new.clone();
                     }
@@ -2081,7 +2082,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.bond_mut(id).attributes_mut().order = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2105,7 +2106,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.bond_mut(id).attributes_mut().charge = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2129,7 +2130,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.bond_mut(id).attributes_mut().unpaired_electrons = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2142,19 +2143,19 @@ impl Molecule {
                 match &change {
                     BondFieldChange::Order { old, new } => {
                         if !attributes.order.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.order = new.clone();
                     }
                     BondFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new.clone();
                     }
                     BondFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new.clone();
                     }
@@ -2201,7 +2202,7 @@ impl Molecule {
                         attributes: Cow::Borrowed(&attributes),
                     };
                     if !set.is_coincident(id, acceptor, &donors) || !set.entry(id).framed_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     let view = self.dative_bond(id);
                     removed.push(RemovedDativeBond {
@@ -2249,7 +2250,7 @@ impl Molecule {
                 let mut view = self.dative_bond_view_mut(id);
                 let donors = view.donor_ids().collect::<Vec<_>>();
                 if donors != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_donors(&new);
                 Ok(Undo::RestoreDativeBondDonors { id, donors })
@@ -2261,7 +2262,7 @@ impl Molecule {
                 let mut view = self.dative_bond_view_mut(id);
                 let acceptor = view.acceptor_id();
                 if acceptor != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_acceptor(new);
                 Ok(Undo::RestoreDativeBondAcceptor { id, acceptor })
@@ -2284,7 +2285,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.dative_bond_mut(id).attributes_mut().order = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2297,7 +2298,7 @@ impl Molecule {
                 match &change {
                     DativeBondFieldChange::Order { old, new } => {
                         if !attributes.order.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.order = new.clone();
                     }
@@ -2339,7 +2340,7 @@ impl Molecule {
                         attributes: Cow::Borrowed(&attributes),
                     };
                     if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     let view = self.aromatic_system(id);
                     let current_atoms: Vec<AtomId> = view.atom_ids().collect();
@@ -2387,7 +2388,7 @@ impl Molecule {
                 let mut view = self.aromatic_system_view_mut(id);
                 let atoms = view.atom_ids().collect::<Vec<_>>();
                 if atoms != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_atoms(&new);
                 Ok(Undo::RestoreAromaticSystemAtoms { id, atoms })
@@ -2410,7 +2411,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.aromatic_system_mut(id).attributes_mut().electrons = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2434,7 +2435,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.aromatic_system_mut(id).attributes_mut().charge = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2460,7 +2461,7 @@ impl Molecule {
                                     .attributes_mut()
                                     .unpaired_electrons = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2473,19 +2474,19 @@ impl Molecule {
                 match &change {
                     AromaticSystemFieldChange::Electrons { old, new } => {
                         if !attributes.electrons.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.electrons = new.clone();
                     }
                     AromaticSystemFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new.clone();
                     }
                     AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new.clone();
                     }
@@ -2527,7 +2528,7 @@ impl Molecule {
                         attributes: Cow::Borrowed(&attributes),
                     };
                     if !set.is_coincident(id, &saved_atoms) || !set.entry(id).framed_eq(&old) {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     let view = self.multicenter_bond(id);
                     let current_atoms: Vec<AtomId> = view.atom_ids().collect();
@@ -2575,7 +2576,7 @@ impl Molecule {
                 let mut view = self.multicenter_bond_view_mut(id);
                 let atoms = view.atom_ids().collect::<Vec<_>>();
                 if atoms != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_atoms(&new);
                 Ok(Undo::RestoreMulticenterBondAtoms { id, atoms })
@@ -2598,7 +2599,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.multicenter_bond_mut(id).attributes_mut().electrons = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2622,7 +2623,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.multicenter_bond_mut(id).attributes_mut().charge = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2648,7 +2649,7 @@ impl Molecule {
                                     .attributes_mut()
                                     .unpaired_electrons = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2661,19 +2662,19 @@ impl Molecule {
                 match &change {
                     MulticenterBondFieldChange::Electrons { old, new } => {
                         if !attributes.electrons.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.electrons = new.clone();
                     }
                     MulticenterBondFieldChange::Charge { old, new } => {
                         if !attributes.charge.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.charge = new.clone();
                     }
                     MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
                         if !attributes.unpaired_electrons.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.unpaired_electrons = new.clone();
                     }
@@ -2710,7 +2711,7 @@ impl Molecule {
                     if !set.is_coincident(id, saved_atoms[0], saved_atoms[1])
                         || !set.entry(id).framed_eq(&old)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     let view = self.noncovalent_bond(id);
                     removed.push(RemovedNoncovalentBond {
@@ -2751,7 +2752,7 @@ impl Molecule {
                 let mut view = self.noncovalent_bond_view_mut(id);
                 let atoms = view.atom_ids();
                 if atoms != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_atoms(new);
                 Ok(Undo::RestoreNoncovalentBondAtoms { id, atoms })
@@ -2774,7 +2775,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.noncovalent_bond_mut(id).attributes_mut().kind = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2787,7 +2788,7 @@ impl Molecule {
                 match &change {
                     NoncovalentBondFieldChange::Kind { old, new } => {
                         if !attributes.kind.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.kind = new.clone();
                     }
@@ -2833,7 +2834,7 @@ impl Molecule {
                         || Permutation::between(&ligands, set.ligands(id)).is_none()
                         || !set.entry(id).framed_eq(&old)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     let view = self.stereo_atom(id);
                     removed.push(RemovedStereoAtom {
@@ -2875,7 +2876,7 @@ impl Molecule {
                 let mut view = self.stereo_atom_view_mut(id);
                 let site = view.site_id();
                 if site != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_site(new);
                 Ok(Undo::RestoreStereoAtomSite { id, site })
@@ -2887,7 +2888,7 @@ impl Molecule {
                 let mut view = self.stereo_atom_view_mut(id);
                 let ligands = view.ligand_ids().to_vec();
                 if ligands != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_ligands(&new);
                 Ok(Undo::RestoreStereoAtomLigands { id, ligands })
@@ -2910,7 +2911,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.stereo_atom_mut(id).attributes_mut().configuration = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -2923,7 +2924,7 @@ impl Molecule {
                 match &change {
                     StereoAtomFieldChange::Configuration { old, new } => {
                         if !attributes.configuration.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.configuration = new.clone();
                     }
@@ -2970,7 +2971,7 @@ impl Molecule {
                             .is_some_and(|action| ClassKey::CisTrans.space().allows(action))
                         || !set.entry(id).framed_eq(&old)
                     {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     let view = self.stereo_bond(id);
                     removed.push(RemovedStereoBond {
@@ -3012,7 +3013,7 @@ impl Molecule {
                 let mut view = self.stereo_bond_view_mut(id);
                 let site = view.site_id();
                 if site != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_site(new);
                 Ok(Undo::RestoreStereoBondSite { id, site })
@@ -3024,7 +3025,7 @@ impl Molecule {
                 let mut view = self.stereo_bond_view_mut(id);
                 let ligands = view.ligand_ids().to_vec();
                 if ligands != old {
-                    return Err(TransactionError::OldStateMismatch);
+                    return Err(TransactionError::OldStateMismatch.into());
                 }
                 view.replace_ligands(&new);
                 Ok(Undo::RestoreStereoBondLigands { id, ligands })
@@ -3047,7 +3048,7 @@ impl Molecule {
                             for (id, _, old) in inverse.into_iter().rev() {
                                 self.stereo_bond_mut(id).attributes_mut().configuration = old;
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3060,7 +3061,7 @@ impl Molecule {
                 match &change {
                     StereoBondFieldChange::Configuration { old, new } => {
                         if !attributes.configuration.normalized_eq(old) {
-                            return Err(TransactionError::OldStateMismatch);
+                            return Err(TransactionError::OldStateMismatch.into());
                         }
                         attributes.configuration = new.clone();
                     }
@@ -3112,7 +3113,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3125,7 +3126,7 @@ impl Molecule {
                 let id = state.atom(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3135,7 +3136,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3191,7 +3192,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3204,7 +3205,7 @@ impl Molecule {
                 let id = state.bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3214,7 +3215,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3270,7 +3271,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3283,7 +3284,7 @@ impl Molecule {
                 let id = state.dative_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3293,7 +3294,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3349,7 +3350,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3362,7 +3363,7 @@ impl Molecule {
                 let id = state.aromatic_system(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3372,7 +3373,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3428,7 +3429,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3441,7 +3442,7 @@ impl Molecule {
                 let id = state.multicenter_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3451,7 +3452,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3507,7 +3508,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3520,7 +3521,7 @@ impl Molecule {
                 let id = state.noncovalent_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3530,7 +3531,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3590,7 +3591,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3608,7 +3609,7 @@ impl Molecule {
                 let id = state.stereo_atom(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3618,7 +3619,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3678,7 +3679,7 @@ impl Molecule {
                                     }
                                 }
                             }
-                            return Err(error);
+                            return Err(error.into());
                         }
                     }
                 }
@@ -3696,7 +3697,7 @@ impl Molecule {
                 let id = state.stereo_bond(id)?;
                 let key = match (&old, &new) {
                     (Some(old), Some(new)) if old.key() != new.key() => {
-                        return Err(TransactionError::OldStateMismatch);
+                        return Err(TransactionError::OldStateMismatch.into());
                     }
                     (Some(constraint), _) | (_, Some(constraint)) => constraint.key(),
                     (None, None) => return Ok(None),
@@ -3706,7 +3707,7 @@ impl Molecule {
                 match (constraints.get(key), old.as_ref()) {
                     (None, None) => {}
                     (Some(current), Some(old)) if current.normalized_eq(old) => {}
-                    _ => return Err(TransactionError::OldStateMismatch),
+                    _ => return Err(TransactionError::OldStateMismatch.into()),
                 }
                 match new {
                     Some(constraint) => constraints.set(constraint),
@@ -3737,7 +3738,7 @@ impl Molecule {
                     .map(|(position, _)| position)
                     .collect::<Vec<_>>();
                 if positions.is_empty() {
-                    return Err(TransactionError::MissingEntry);
+                    return Err(TransactionError::MissingEntry.into());
                 }
                 let mut removed = positions
                     .into_iter()

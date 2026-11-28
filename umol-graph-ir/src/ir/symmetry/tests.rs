@@ -9,9 +9,8 @@ use super::*;
 fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
     AutomorphismAdapter {
         graph: source.clone(),
-        colors: vec![AutomorphismColor::Entity(0); source.node_count()],
-        node_sources: source.node_ids().map(SubdivisionNodeSource::Node).collect(),
-        source_node_count: source.node_count(),
+        node_colors: vec![0; source.node_count()],
+        edge_colors: vec![0; source.edge_count()],
     }
 }
 
@@ -34,15 +33,12 @@ fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
     ],
     vec![NodeId(0), NodeId(0), NodeId(0), NodeId(3)],
 )]
-fn test_source_orbits_from_generators(
-    #[case] source_node_count: usize,
+fn test_orbits_from_generators(
+    #[case] node_count: usize,
     #[case] generators: Vec<Vec<NodeId>>,
     #[case] expected: Vec<NodeId>,
 ) {
-    assert_eq!(
-        source_orbits_from_generators(source_node_count, &generators),
-        expected,
-    );
+    assert_eq!(orbits_from_generators(node_count, &generators), expected);
 }
 
 #[rstest]
@@ -64,34 +60,10 @@ fn test_ordered_partition_from_descriptors(
 }
 
 #[rstest]
-#[case::empty(Vec::new(), OrderedPartition { cells: Vec::new() })]
-#[case::repeated(
-    vec![2, 0, 2, 1, 0],
-    OrderedPartition {
-        cells: vec![
-            vec![NodeId(1), NodeId(4)],
-            vec![NodeId(3)],
-            vec![NodeId(0), NodeId(2)],
-        ],
-    },
-)]
-#[case::ordered_distinct(
-    vec![0, 1, 2],
-    OrderedPartition {
-        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
-    },
-)]
-fn test_ordered_partition_from_color_ranks(
-    #[case] colors: Vec<u32>,
-    #[case] expected: OrderedPartition,
-) {
-    assert_eq!(OrderedPartition::from_color_ranks(colors), expected);
-}
-
-#[rstest]
 #[case::empty(
     OrderedPartition { cells: Vec::new() },
     Graph::new(0, &[]),
+    Vec::new(),
     OrderedPartition { cells: Vec::new() },
 )]
 #[case::discrete(
@@ -99,6 +71,7 @@ fn test_ordered_partition_from_color_ranks(
         cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
     },
     Graph::new(3, &[[0, 1], [1, 2]]),
+    vec![0, 0],
     OrderedPartition {
         cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
     },
@@ -108,8 +81,55 @@ fn test_ordered_partition_from_color_ranks(
         cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)]],
     },
     Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+    vec![0, 0, 0, 0],
     OrderedPartition {
         cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)]],
+    },
+)]
+#[case::edge_color_square(
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)]],
+    },
+    Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+    vec![1, 0, 0, 0],
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(2), NodeId(3)],
+            vec![NodeId(0), NodeId(1)],
+        ],
+    },
+)]
+#[case::edge_color_cascade(
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4), NodeId(5)]],
+    },
+    Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+    vec![1, 0, 0, 0, 0, 0],
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(3), NodeId(4)],
+            vec![NodeId(2), NodeId(5)],
+            vec![NodeId(0), NodeId(1)],
+        ],
+    },
+)]
+#[case::edge_color_multiplicity(
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0), NodeId(1)],
+            vec![NodeId(2), NodeId(3), NodeId(4)],
+        ],
+    },
+    Graph::new(5, &[[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]]),
+    vec![0, 0, 1, 0, 1, 1],
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0)],
+            vec![NodeId(1)],
+            vec![NodeId(2)],
+            vec![NodeId(3)],
+            vec![NodeId(4)],
+        ],
     },
 )]
 #[case::multiply_split(
@@ -117,6 +137,7 @@ fn test_ordered_partition_from_color_ranks(
         cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)]],
     },
     Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]),
+    vec![0, 0, 0, 0],
     OrderedPartition {
         cells: vec![
             vec![NodeId(2)],
@@ -130,6 +151,7 @@ fn test_ordered_partition_from_color_ranks(
         cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)]],
     },
     Graph::new(5, &[[0, 1], [2, 3]]),
+    vec![0, 0],
     OrderedPartition {
         cells: vec![
             vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
@@ -145,6 +167,7 @@ fn test_ordered_partition_from_color_ranks(
         ],
     },
     Graph::new(4, &[[0, 1], [0, 2], [0, 3]]),
+    vec![0, 0, 0],
     OrderedPartition {
         cells: vec![
             vec![NodeId(2)],
@@ -156,10 +179,20 @@ fn test_ordered_partition_from_color_ranks(
 fn test_ordered_partition_refine(
     #[case] partition: OrderedPartition,
     #[case] graph: Graph,
+    #[case] edge_colors: Vec<u32>,
     #[case] expected: OrderedPartition,
 ) {
-    assert_eq!(partition.clone().refine(&graph), expected);
-    assert_eq!(partition.refine_by_active_cells(&graph), expected);
+    assert_eq!(partition.clone().refine(&graph, &edge_colors), expected);
+    assert_eq!(
+        partition
+            .clone()
+            .refine_by_active_cells(&graph, &edge_colors),
+        expected,
+    );
+    assert_eq!(
+        partition.refine_by_all_cells(&graph, &edge_colors),
+        expected,
+    );
 }
 
 #[rstest]
@@ -169,6 +202,15 @@ fn test_ordered_partition_refine(
         (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
         (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
     ],
+    vec![0; 11],
+)]
+#[case::naphthalene_kekule(
+    10,
+    &[
+        (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
+        (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
+    ],
+    vec![2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1],
 )]
 #[case::disconnected_rings(
     12,
@@ -176,16 +218,26 @@ fn test_ordered_partition_refine(
         (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
         (6, 7), (7, 8), (8, 9), (9, 10), (10, 11), (11, 6),
     ],
+    vec![0; 12],
 )]
 #[case::long_path(
     77,
     &(0_u32..76)
         .map(|first| (first, first + 1))
         .collect::<Vec<_>>(),
+    vec![0; 76],
+)]
+#[case::long_colored_path(
+    77,
+    &(0_u32..76)
+        .map(|first| (first, first + 1))
+        .collect::<Vec<_>>(),
+    (0_u32..76).map(|index| (index * 3 + 1) % 5).collect(),
 )]
 fn test_ordered_partition_refine_active_cell_equivalence(
     #[case] atom_count: usize,
     #[case] edges: &[(u32, u32)],
+    #[case] edge_colors: Vec<u32>,
 ) {
     let graph = Graph::new(
         atom_count,
@@ -197,12 +249,14 @@ fn test_ordered_partition_refine_active_cell_equivalence(
     let partition = OrderedPartition::from_descriptors(&vec![0_u32; atom_count]);
 
     assert_eq!(
-        partition.clone().refine(&graph),
-        partition.clone().refine_by_all_cells(&graph),
+        partition.clone().refine(&graph, &edge_colors),
+        partition.clone().refine_by_all_cells(&graph, &edge_colors),
     );
     assert_eq!(
-        partition.clone().refine_by_active_cells(&graph),
-        partition.refine_by_all_cells(&graph),
+        partition
+            .clone()
+            .refine_by_active_cells(&graph, &edge_colors),
+        partition.refine_by_all_cells(&graph, &edge_colors),
     );
 }
 
@@ -264,7 +318,7 @@ fn test_canonical_search_stats(#[case] node_count: usize, #[case] expected: Cano
     };
     let actual = canonical_search(
         &adapter,
-        &adapter.colors,
+        adapter.node_colors(),
         AutomorphismAlgorithm::Nauty,
         &leaf_candidate,
     );
@@ -288,11 +342,8 @@ fn test_visit_remapping_candidates(
 ) {
     let adapter = AutomorphismAdapter {
         graph: Graph::new(source_colors.len(), &[]),
-        colors: vec![AutomorphismColor::Entity(0); source_colors.len()],
-        node_sources: (0..source_colors.len() as u32)
-            .map(|node| SubdivisionNodeSource::Node(NodeId(node)))
-            .collect(),
-        source_node_count: source_colors.len(),
+        node_colors: vec![0; source_colors.len()],
+        edge_colors: Vec::new(),
     };
     let mut actual = Vec::new();
     let flow: ControlFlow<()> = visit_remapping_candidates(
@@ -320,11 +371,8 @@ fn test_visit_remapping_candidates(
 fn test_visit_remapping_candidates_termination(#[case] accepted: Vec<NodeId>) {
     let adapter = AutomorphismAdapter {
         graph: Graph::new(3, &[]),
-        colors: vec![AutomorphismColor::Entity(0); 3],
-        node_sources: (0..3)
-            .map(|node| SubdivisionNodeSource::Node(NodeId(node)))
-            .collect(),
-        source_node_count: 3,
+        node_colors: vec![0; 3],
+        edge_colors: Vec::new(),
     };
     let partition = OrderedPartition {
         cells: vec![vec![NodeId(0), NodeId(1), NodeId(2)]],

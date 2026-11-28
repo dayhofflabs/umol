@@ -115,60 +115,13 @@ pub(super) fn cycle_space_rank(graph: &Graph) -> usize {
         - graph.node_count()
 }
 
-pub(super) fn minimum_cycle_basis_horton(source: &Graph) -> MinimumCycleBasis {
-    let mut loops = Vec::new();
-    let mut loopless_edges = Vec::new();
-    let mut edge_sources = Vec::new();
-    let mut endpoint_pairs = HashSet::new();
-    let mut has_parallel_edges = false;
-
-    for edge in source.edge_ids() {
-        let [first, second] = source.edge_endpoints(edge);
-        if first == second {
-            loops.push(Cycle::normalized(source, vec![first], vec![edge]));
-            continue;
-        }
-        has_parallel_edges |= !endpoint_pairs.insert([first, second]);
-        loopless_edges.push([first.0, second.0]);
-        edge_sources.push(edge);
-    }
-
-    let mut cycles = if loops.is_empty() && !has_parallel_edges {
-        minimum_cycle_basis_simple(source)
-    } else {
-        let loopless = Graph::new(source.node_count(), &loopless_edges);
-        if has_parallel_edges {
-            let subdivision = loopless.subdivide_edges();
-            minimum_cycle_basis_simple(subdivision.graph())
-                .into_iter()
-                .map(|cycle| cycle.map_subdivision(source, &subdivision, &edge_sources))
-                .collect()
-        } else {
-            minimum_cycle_basis_simple(&loopless)
-                .into_iter()
-                .map(|cycle| cycle.map_edges(source, &edge_sources))
-                .collect()
-        }
-    };
-    cycles.extend(loops);
-    cycles.sort_by(compare_cycles);
-
-    assert_eq!(
-        cycles.len(),
-        cycle_space_rank(source),
-        "Horton candidates must span the source cycle space"
-    );
-    let total_length = cycles.iter().map(Cycle::length).sum();
-    MinimumCycleBasis {
-        cycles,
-        total_length,
-    }
-}
-
-fn minimum_cycle_basis_simple(graph: &Graph) -> Vec<Cycle> {
+pub(super) fn minimum_cycle_basis_horton(graph: &Graph) -> MinimumCycleBasis {
     let target_rank = cycle_space_rank(graph);
     if target_rank == 0 {
-        return Vec::new();
+        return MinimumCycleBasis {
+            cycles: Vec::new(),
+            total_length: 0,
+        };
     }
 
     let mut candidates = HashSet::new();
@@ -204,7 +157,11 @@ fn minimum_cycle_basis_simple(graph: &Graph) -> Vec<Cycle> {
         target_rank,
         "Horton candidates must span the cycle space"
     );
-    cycles
+    let total_length = cycles.iter().map(Cycle::length).sum();
+    MinimumCycleBasis {
+        cycles,
+        total_length,
+    }
 }
 
 fn compare_cycles(first: &Cycle, second: &Cycle) -> Ordering {
@@ -217,6 +174,8 @@ fn compare_cycles(first: &Cycle, second: &Cycle) -> Ordering {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use bitvec::prelude::{bitvec, Lsb0};
     use proptest::prelude::*;
     use rstest::rstest;
@@ -357,7 +316,6 @@ mod tests {
         Graph::new(6, &[[0, 1], [1, 2], [0, 2], [3, 4], [4, 5], [3, 5]]),
         2,
     )]
-    #[case::loop_and_digon(Graph::new(2, &[[0, 0], [0, 1], [0, 1]]), 2)]
     fn test_cycle_space_rank(#[case] graph: Graph, #[case] expected: usize) {
         assert_eq!(cycle_space_rank(&graph), expected);
     }
@@ -367,14 +325,16 @@ mod tests {
         fn test_cycle_vector_basis_rank(
             (node_count, endpoints) in (
                 0usize..=5,
-                prop::collection::vec((0..5u32, 0..5u32), 0..=7),
+                prop::collection::vec((0..5u32, 0..5u32), 0..=10),
             ),
         ) {
+            let mut seen = HashSet::new();
             let edges = endpoints
                 .into_iter()
                 .filter(|&(first, second)| {
-                    first < node_count as u32 && second < node_count as u32
+                    first < node_count as u32 && second < node_count as u32 && first != second
                 })
+                .filter(|&(first, second)| seen.insert((first.min(second), first.max(second))))
                 .map(|(first, second)| [first, second])
                 .collect::<Vec<_>>();
             let graph = Graph::new(

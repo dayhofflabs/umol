@@ -39,8 +39,9 @@ mod transact;
 ///
 /// Bulk additions move attributes and copy supplied atom/ligand slices into storage.
 /// Mutation completes before return; the exact-size id iterators retain no receiver
-/// or input borrow. These are direct mutations, without an undo journal or integrity
-/// checks at addition.
+/// or input borrow. These are direct mutations without an undo journal. Localized-bond
+/// simplicity (in-range distinct endpoints and unique unordered endpoint pairs) is enforced
+/// when mutating the underlying graph; overlay and stereo integrity is checked at publication.
 ///
 /// # Semantic properties
 ///
@@ -101,8 +102,12 @@ impl MoleculeEditor {
 
     /// Append a localized bond directly to the editor.
     ///
-    /// This is a low-level, non-transactional construction primitive. It
-    /// assumes `first` and `second` are valid atom ids in the current dense layout.
+    /// This is a low-level, non-transactional construction primitive.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an endpoint is outside the current atom space, if `first == second`, or if a
+    /// localized bond already exists between `first` and `second`.
     pub fn add_bond(&mut self, first: AtomId, second: AtomId, bond: BondForm) -> BondId {
         self.molecule.add_bond(first, second, bond)
     }
@@ -113,7 +118,8 @@ impl MoleculeEditor {
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside the current atom space.
+    /// Panics if an endpoint is outside the current atom space, if any bond is a self-loop, or if
+    /// any bond duplicates an existing bond or an earlier bond in the batch.
     pub fn add_bonds(&mut self, bonds: Vec<([AtomId; 2], BondForm)>) -> IdRange<BondId> {
         self.molecule.add_bonds(bonds)
     }
@@ -125,7 +131,8 @@ impl MoleculeEditor {
     ///
     /// # Panics
     ///
-    /// Panics if an endpoint is outside the resulting atom space.
+    /// Panics if an endpoint is outside the resulting atom space, if any bond is a self-loop, or
+    /// if any bond duplicates an existing bond or an earlier bond in the batch.
     pub fn add_topology(
         &mut self,
         atoms: Vec<AtomForm>,
@@ -1865,7 +1872,6 @@ mod tests {
                     .molecule
                     .apply_edit_with_undo(edit, &mut state)
                     .map(|_| ())
-                    .map_err(MoleculeApplyError::from)
             }
         };
         assert_eq!(
@@ -2012,7 +2018,6 @@ mod tests {
                     .molecule
                     .apply_edit_with_undo(edit, &mut state)
                     .map(|_| ())
-                    .map_err(MoleculeApplyError::from)
             }
         };
         assert_eq!(
@@ -2157,18 +2162,57 @@ mod tests {
     }
 
     #[rstest]
-    #[case::parallel_bond(MoleculeIntegrityError::ParallelBonds {
-        atoms: [AtomId(0), AtomId(1)],
+    #[case::self_loop(AtomId(0), AtomId(0))]
+    #[case::parallel_bond(AtomId(0), AtomId(1))]
+    #[case::reverse_parallel_bond(AtomId(1), AtomId(0))]
+    #[should_panic]
+    fn test_molecule_editor_add_bond_error(
+        #[from(triatomic)] mut editor: MoleculeEditor,
+        #[case] first: AtomId,
+        #[case] second: AtomId,
+    ) {
+        editor.add_bond(first, second, BondForm::from_order(1));
+    }
+
+    #[rstest]
+    #[case::self_loop(vec![([AtomId(0), AtomId(0)], BondForm::from_order(1))])]
+    #[case::parallel_existing(vec![([AtomId(1), AtomId(0)], BondForm::from_order(1))])]
+    #[case::parallel_in_batch(vec![([AtomId(0), AtomId(2)], BondForm::from_order(1)), ([AtomId(2), AtomId(0)], BondForm::from_order(2))])]
+    #[should_panic]
+    fn test_molecule_editor_add_bonds_error(
+        #[from(triatomic)] mut editor: MoleculeEditor,
+        #[case] bonds: Vec<([AtomId; 2], BondForm)>,
+    ) {
+        editor.add_bonds(bonds);
+    }
+
+    #[rstest]
+    #[case::self_loop(vec![AtomForm::from_element(Element::F)], vec![([AtomId(3), AtomId(3)], BondForm::from_order(1))])]
+    #[case::parallel_existing(vec![AtomForm::from_element(Element::F)], vec![([AtomId(0), AtomId(1)], BondForm::from_order(1))])]
+    #[should_panic]
+    fn test_molecule_editor_add_topology_error(
+        #[from(triatomic)] mut editor: MoleculeEditor,
+        #[case] atoms: Vec<AtomForm>,
+        #[case] bonds: Vec<([AtomId; 2], BondForm)>,
+    ) {
+        editor.add_topology(atoms, bonds);
+    }
+
+    #[rstest]
+    #[case::self_loop_noncovalent(MoleculeIntegrityError::DuplicateAtom {
+        entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
+        atom: AtomId(0),
     })]
     fn test_molecule_editor_probe_error(
         #[from(triatomic)] mut editor: MoleculeEditor,
         #[case] expected: MoleculeIntegrityError,
     ) {
-        let duplicate = editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+        let invalid =
+            editor.add_noncovalent_bond([AtomId(0), AtomId(0)], NoncovalentBondForm::default());
 
         assert_eq!(editor.probe(), Err(expected));
 
-        editor.remove_topology(&[], &[duplicate]).unwrap();
+        editor.remove_noncovalent_bonds(&[invalid]);
         assert_eq!(
             editor.finish(),
             Ok(mol_dsl!(
@@ -2191,8 +2235,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::parallel_bond(AtomId(0), AtomId(1), MoleculeIntegrityError::ParallelBonds {
-        atoms: [AtomId(0), AtomId(1)],
+    #[case::self_loop_noncovalent(AtomId(0), AtomId(0), MoleculeIntegrityError::DuplicateAtom {
+        entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
+        atom: AtomId(0),
     })]
     fn test_molecule_editor_finish_error(
         #[from(triatomic)] mut editor: MoleculeEditor,
@@ -2200,7 +2245,7 @@ mod tests {
         #[case] second: AtomId,
         #[case] expected: MoleculeIntegrityError,
     ) {
-        editor.add_bond(first, second, BondForm::from_order(1));
+        editor.add_noncovalent_bond([first, second], NoncovalentBondForm::default());
 
         let entries = MoleculeEntries {
             atoms: vec![
@@ -2211,8 +2256,8 @@ mod tests {
             bonds: vec![
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(1), AtomId(2), BondForm::from_order(2)),
-                (first, second, BondForm::from_order(1)),
             ],
+            noncovalent: vec![([first, second], NoncovalentBondForm::default())],
             ..Default::default()
         };
         assert_eq!(Molecule::try_from_entries(entries), Err(expected.clone()));

@@ -56,12 +56,19 @@ Boundary adapters translate the checked error into their own parse, conversion, 
 they do not reproduce the checks.
 
 MoleculeEditor::apply checks each edit's preconditions and mutates transient state without rollback;
-failure retains completed edits for further inspection and mutation. Its probe
-checks integrity before lending a molecule; failure retains the editor. Its finish checks integrity
-before returning the owned molecule; failure drops the editor. Molecule::apply and tracked_apply
-include finish. Transaction::apply also permits intermediate states that violate integrity;
-commit checks integrity and restores transaction-entry state on failure. Molecule::transact and
-tracked_transact include commit. A failed transaction probe leaves the transaction active.
+failure retains completed edits for further inspection and mutation. Localized-bond simplicity
+(in-range distinct endpoints and unique unordered endpoint pairs) is enforced by the underlying
+simple `Graph` when adding localized bonds: `MoleculeEditor::{add_bond, add_bonds, add_topology}`
+panic on self-loops or parallel bonds, while `Edit::AddBonds` rejects them before mutating the
+graph with `MoleculeApplyError::Integrity` (`DuplicateAtom` or `ParallelBonds`). Overlay and
+stereo-frame integrity remains deferred to publication: `probe` checks integrity before lending a
+molecule (retaining the editor on failure), and `finish` checks integrity before returning the
+owned molecule (dropping the editor on failure). `Molecule::apply` and `tracked_apply` include
+`finish`. `Transaction::apply` and `TrackedTransaction::apply` likewise permit intermediate
+overlay and stereo integrity violations until a later batch repairs them, while rejecting
+self-loop or parallel localized bonds immediately with rollback and abort; `commit` checks full
+integrity and restores transaction-entry state on failure. `Molecule::transact` and
+`tracked_transact` include `commit`. A failed transaction probe leaves the transaction active.
 
 Exact topology removal has an earlier, narrower boundary: stored overlay references must be in
 the current atom or bond domain, and every retained stored reference must survive the removal.
@@ -170,6 +177,7 @@ results.
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
 | `InvalidReference` | A union-frame participant, site, ligand, or constraint refers outside the union namespace. | Projection uses dense union-to-side maps and indexes them by stored ids. A missing union id would panic during map indexing before either molecule projection could report its own integrity error. |
+| `ParallelBonds` | Two union-frame bonds have the same unordered endpoint pair, including a removed bond and an added bond on the same atoms. | Localized bond identity is the unordered endpoint pair, and the union graph is simple. Allowing parallel union edges would violate graph simplicity for topology, incidence, and automorphism operations and make bond lookup and correspondence induction ambiguous. |
 | `Lhs` | The lhs projection fails any `Molecule` integrity check. | `ReactionSpan::lhs` uses the asserted `Molecule::from_entries` path. Establishing the projection at span publication prevents that infallible accessor and every lhs-consuming operation from panicking or receiving an incoherent molecule. |
 | `Rhs` | The rhs projection fails any `Molecule` integrity check. | `ReactionSpan::rhs` uses the asserted `Molecule::from_entries` path. Establishing the projection at span publication prevents that infallible accessor and every rhs-consuming operation from panicking or receiving an incoherent molecule. |
 | `StereoKindModified` | The two determined sides of one stereo entity assert different kinds against their shared participant frame. | One preserved stereo entity has one kind on both sides of a span. Equal frame degrees or compatible actions do not make distinct kinds the same entity; a kind change uses removal plus addition. |

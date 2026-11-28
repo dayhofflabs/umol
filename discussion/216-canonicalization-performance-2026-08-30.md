@@ -6,7 +6,8 @@ Relates: [109](109-permutation-infrastructure-2026-06-09.md),
 [110](110-molecular-symmetry-structure-2026-06-11.md),
 [186](186-molecule-canonicalization-2026-08-05.md),
 [207](207-reaction-network-spike-2026-08-24.md),
-[208](208-canonicalization-scaling-2026-08-24.md)
+[208](208-canonicalization-scaling-2026-08-24.md),
+[254](254-edge-colored-automorphisms-2026-11-26.md)
 
 ## Purpose
 

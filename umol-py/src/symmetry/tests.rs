@@ -30,7 +30,7 @@ fn test_graph_symmetry_config_default() {
     assert_eq!(
         GraphSymmetryConfig::default().to_rust(),
         GraphIrGraphSymmetryConfig {
-            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
             max_classification_trials: 4096,
             include_constraints: false,
         }
@@ -39,11 +39,11 @@ fn test_graph_symmetry_config_default() {
 
 #[rstest]
 #[case::without_constraints(GraphIrGraphSymmetryConfig {
-    automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+    automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
     max_classification_trials: 4096,
     include_constraints: false,
 })]
-#[case::with_constraints(GraphIrGraphSymmetryConfig {
+#[case::with_constraints_nauty(GraphIrGraphSymmetryConfig {
     automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
     max_classification_trials: 16,
     include_constraints: true,

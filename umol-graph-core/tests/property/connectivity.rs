@@ -1,6 +1,6 @@
 //! Component visitation and enumeration must partition nodes into maximal
 //! connected sets, with sorted members and component order by least node id.
-//! Generated multigraphs have at most eight nodes and twenty edges. The reference
+//! Generated simple graphs have at most eight nodes and twenty edges. The reference
 //! computes reachability by repeatedly closing a node set under edge incidence,
 //! independently of the production BFS. Early termination must preserve prefixes.
 
@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use rstest::rstest;
 use umol_graph_core::{ConnectedComponentsAlgorithm, NodeId};
 
-use super::strategy::graph_with_edge_multiset;
+use super::strategy::graph_with_simple_edges;
 
 fn reference_components(node_count: usize, edges: &[[u32; 2]]) -> Vec<Vec<NodeId>> {
     let mut reached = BTreeSet::new();
@@ -41,7 +41,7 @@ fn reference_components(node_count: usize, edges: &[[u32; 2]]) -> Vec<Vec<NodeId
 #[rstest]
 fn test_graph_visit_connected_components() {
     proptest!(|(
-        (graph, edges) in graph_with_edge_multiset(8, 20),
+        (graph, edges) in graph_with_simple_edges(8, 20),
         stop in 0usize..10,
     )| {
         let expected = reference_components(graph.node_count(), &edges);

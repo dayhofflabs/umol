@@ -143,12 +143,14 @@ impl Transaction<'_> {
     ///
     /// Each call starts a separate handle namespace. Id handles name entities at this
     /// batch's entry; New handles name entities created within this batch. Intermediate
-    /// state may violate integrity until a later batch repairs it.
+    /// state may violate overlay or stereo integrity until a later batch repairs it;
+    /// localized-bond simplicity is enforced when adding bonds.
     ///
     /// # Errors
     ///
-    /// An invalid handle, old value, or edit shape restores the whole transaction and
-    /// aborts it. Later apply or commit calls return TransactionError::Aborted.
+    /// An invalid handle, old value, edit shape, self-loop bond, or parallel localized bond
+    /// restores the whole transaction and aborts it. Later apply or commit calls return
+    /// TransactionError::Aborted.
     pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
         let mut state = ApplicationState::new(self.molecule());
         if *self.status == TransactionStatus::Aborted {
@@ -163,7 +165,7 @@ impl Transaction<'_> {
                         Err(error) => {
                             self.storage.rollback(self.molecule);
                             *self.status = TransactionStatus::Aborted;
-                            return Err(error.into());
+                            return Err(error);
                         }
                     }
                 }
@@ -173,7 +175,7 @@ impl Transaction<'_> {
                     if let Err(error) = working.apply_edit(edit, &mut state) {
                         self.storage.rollback(self.molecule);
                         *self.status = TransactionStatus::Aborted;
-                        return Err(error.into());
+                        return Err(error);
                     }
                 }
             }
@@ -295,13 +297,15 @@ impl TrackedTransaction<'_> {
     /// Apply one batch immediately and update the accumulated correspondence.
     ///
     /// Each call starts a separate handle namespace. Id handles name entities at batch entry;
-    /// New handles name creations within that batch. Intermediate state may violate integrity
-    /// until a later batch repairs it.
+    /// New handles name creations within that batch. Intermediate state may violate overlay or
+    /// stereo integrity until a later batch repairs it; localized-bond simplicity is enforced when
+    /// adding bonds.
     ///
     /// # Errors
     ///
-    /// An invalid handle, old value or edit shape restores the whole transaction and aborts it.
-    /// Later apply or commit calls return TransactionError::Aborted.
+    /// An invalid handle, old value, edit shape, self-loop bond, or parallel localized bond
+    /// restores the whole transaction and aborts it. Later apply or commit calls return
+    /// TransactionError::Aborted.
     pub fn apply(&mut self, edits: Edits) -> Result<(), MoleculeApplyError> {
         let transaction = &mut self.transaction;
         let mut state = ApplicationState::new(transaction.molecule());
@@ -317,7 +321,7 @@ impl TrackedTransaction<'_> {
                         Err(error) => {
                             transaction.storage.rollback(transaction.molecule);
                             *transaction.status = TransactionStatus::Aborted;
-                            return Err(error.into());
+                            return Err(error);
                         }
                     }
                 }
@@ -327,7 +331,7 @@ impl TrackedTransaction<'_> {
                     if let Err(error) = working.apply_edit(edit, &mut state) {
                         transaction.storage.rollback(transaction.molecule);
                         *transaction.status = TransactionStatus::Aborted;
-                        return Err(error.into());
+                        return Err(error);
                     }
                 }
             }
@@ -767,21 +771,24 @@ mod lifecycle_tests {
         let original = molecule.clone();
         Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut first = Edits::new();
-            first.add_bond(
-                AtomHandle::Id(AtomId(0)),
-                AtomHandle::Id(AtomId(0)),
-                BondForm::from_order(1),
+            first.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+                NoncovalentBondForm::default(),
             );
             transaction.apply(first)?;
             assert_eq!(
                 transaction.probe(),
                 Err(MoleculeIntegrityError::DuplicateAtom {
-                    entity: Entity::Bond(BondId(0)),
+                    entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
                     atom: AtomId(0),
                 })
             );
             let mut second = Edits::new();
-            second.remove_bond(BondHandle::Id(BondId(0)));
+            second.remove_noncovalent_bonds(vec![(
+                NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+                NoncovalentBondForm::default(),
+            )]);
             transaction.apply(second)?;
             assert_eq!(transaction.probe()?, &original);
             transaction.commit()
@@ -798,10 +805,9 @@ mod lifecycle_tests {
         let original = molecule.clone();
         let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut edits = Edits::new();
-            edits.add_bond(
-                AtomHandle::Id(AtomId(0)),
-                AtomHandle::Id(AtomId(0)),
-                BondForm::from_order(1),
+            edits.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+                NoncovalentBondForm::default(),
             );
             transaction.apply(edits)?;
             let commit = transaction.commit();
@@ -809,11 +815,65 @@ mod lifecycle_tests {
                 commit,
                 Err(MoleculeApplyError::Integrity(
                     MoleculeIntegrityError::DuplicateAtom {
-                        entity: Entity::Bond(BondId(0)),
+                        entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
                         atom: AtomId(0),
                     }
                 ))
             );
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::self_loop(
+        AtomId(0),
+        AtomId(0),
+        MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::Bond(BondId(1)),
+            atom: AtomId(0),
+        }
+    )]
+    #[case::parallel_bond(
+        AtomId(1),
+        AtomId(0),
+        MoleculeIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        }
+    )]
+    fn test_transaction_apply_bond_integrity_error(
+        #[case] first: AtomId,
+        #[case] second: AtomId,
+        #[case] expected: MoleculeIntegrityError,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..MoleculeEntries::default()
+        });
+        let original = molecule.clone();
+        let result = Transaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut prefix = Edits::new();
+            prefix.add_atom(AtomForm::from_element(Element::O));
+            transaction.apply(prefix)?;
+
+            let mut invalid = Edits::new();
+            invalid.add_bond(
+                AtomHandle::Id(first),
+                AtomHandle::Id(second),
+                BondForm::from_order(2),
+            );
+            assert_eq!(
+                transaction.apply(invalid),
+                Err(MoleculeApplyError::Integrity(expected.clone()))
+            );
+            assert_eq!(transaction.probe(), Ok(&original));
+            assert_eq!(transaction.commit(), Err(TransactionError::Aborted.into()));
             Ok::<_, MoleculeApplyError>(())
         });
         assert_eq!(result, Err(TransactionError::Aborted.into()));
@@ -1071,21 +1131,24 @@ mod lifecycle_tests {
         let original = molecule.clone();
         TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut first = Edits::new();
-            first.add_bond(
-                AtomHandle::Id(AtomId(0)),
-                AtomHandle::Id(AtomId(0)),
-                BondForm::from_order(1),
+            first.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+                NoncovalentBondForm::default(),
             );
             transaction.apply(first)?;
             assert_eq!(
                 transaction.probe(),
                 Err(MoleculeIntegrityError::DuplicateAtom {
-                    entity: Entity::Bond(BondId(0)),
+                    entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
                     atom: AtomId(0),
                 })
             );
             let mut second = Edits::new();
-            second.remove_bond(BondHandle::Id(BondId(0)));
+            second.remove_noncovalent_bonds(vec![(
+                NoncovalentBondHandle::Id(NoncovalentBondId(0)),
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+                NoncovalentBondForm::default(),
+            )]);
             transaction.apply(second)?;
             assert_eq!(transaction.probe()?, &original);
             transaction.commit()
@@ -1489,21 +1552,74 @@ mod lifecycle_tests {
         let original = molecule.clone();
         let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
             let mut edits = Edits::new();
-            edits.add_bond(
-                AtomHandle::Id(AtomId(0)),
-                AtomHandle::Id(AtomId(0)),
-                BondForm::from_order(1),
+            edits.add_noncovalent_bond(
+                [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(0))],
+                NoncovalentBondForm::default(),
             );
             transaction.apply(edits)?;
             assert_eq!(
                 transaction.commit(),
                 Err(MoleculeApplyError::Integrity(
                     MoleculeIntegrityError::DuplicateAtom {
-                        entity: Entity::Bond(BondId(0)),
+                        entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
                         atom: AtomId(0),
                     }
                 ))
             );
+            Ok::<_, MoleculeApplyError>(())
+        });
+        assert_eq!(result, Err(TransactionError::Aborted.into()));
+        assert_eq!(molecule, original);
+    }
+
+    #[rstest]
+    #[case::self_loop(
+        AtomId(0),
+        AtomId(0),
+        MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::Bond(BondId(1)),
+            atom: AtomId(0),
+        }
+    )]
+    #[case::parallel_bond(
+        AtomId(1),
+        AtomId(0),
+        MoleculeIntegrityError::ParallelBonds {
+            atoms: [AtomId(0), AtomId(1)],
+        }
+    )]
+    fn test_tracked_transaction_apply_bond_integrity_error(
+        #[case] first: AtomId,
+        #[case] second: AtomId,
+        #[case] expected: MoleculeIntegrityError,
+        #[values(RollbackMethod::Clone, RollbackMethod::Journal)] rollback_method: RollbackMethod,
+    ) {
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..MoleculeEntries::default()
+        });
+        let original = molecule.clone();
+        let result = TrackedTransaction::run(&mut molecule, rollback_method, |mut transaction| {
+            let mut prefix = Edits::new();
+            prefix.add_atom(AtomForm::from_element(Element::O));
+            transaction.apply(prefix)?;
+
+            let mut invalid = Edits::new();
+            invalid.add_bond(
+                AtomHandle::Id(first),
+                AtomHandle::Id(second),
+                BondForm::from_order(2),
+            );
+            assert_eq!(
+                transaction.apply(invalid),
+                Err(MoleculeApplyError::Integrity(expected.clone()))
+            );
+            assert_eq!(transaction.probe(), Ok(&original));
+            assert_eq!(transaction.commit(), Err(TransactionError::Aborted.into()));
             Ok::<_, MoleculeApplyError>(())
         });
         assert_eq!(result, Err(TransactionError::Aborted.into()));

@@ -13,13 +13,14 @@ use crate::ir::edit::{
     BondHandle, DativeBondHandle, Edit, MulticenterBondHandle, NoncovalentBondHandle,
     StereoAtomHandle, StereoBondHandle, Undo,
 };
-use crate::ir::entity::EntityKind;
+use crate::ir::entity::{Entity, EntityKind};
+use crate::ir::error::MoleculeApplyError;
 use crate::ir::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 use crate::ir::ligand::{StereoLigand, StereoLigandKind};
-use crate::ir::molecule::MoleculeEntries;
+use crate::ir::molecule::{MoleculeEntries, MoleculeIntegrityError};
 use crate::ir::multicenter::MulticenterBondForm;
 use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
 use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoKind};
@@ -330,12 +331,84 @@ fn test_molecule_apply_edit_add_bonds_error(
 
     assert_eq!(
         error,
-        TransactionError::HandleOutOfRange {
+        MoleculeApplyError::Transaction(TransactionError::HandleOutOfRange {
             kind: EntityKind::Atom,
             index: 3,
             count: 3
-        }
+        })
     );
+    assert_eq!(molecule, initial);
+    assert_eq!(
+        state.bond(BondHandle::New(0)),
+        Err(TransactionError::HandleOutOfRange {
+            kind: EntityKind::Bond,
+            index: 0,
+            count: 0
+        })
+    );
+}
+
+#[rstest]
+#[case::self_loop(
+    vec![
+        AddBond {
+            endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+            attributes: BondForm::from_order(1),
+        },
+        AddBond {
+            endpoints: [AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(2))],
+            attributes: BondForm::from_order(1),
+        },
+    ],
+    MoleculeIntegrityError::DuplicateAtom {
+        entity: Entity::Bond(BondId(2)),
+        atom: AtomId(2),
+    }
+)]
+#[case::parallel_existing(
+    vec![AddBond {
+        endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(0))],
+        attributes: BondForm::from_order(2),
+    }],
+    MoleculeIntegrityError::ParallelBonds {
+        atoms: [AtomId(0), AtomId(1)],
+    }
+)]
+#[case::parallel_in_batch(
+    vec![
+        AddBond {
+            endpoints: [AtomHandle::Id(AtomId(1)), AtomHandle::Id(AtomId(2))],
+            attributes: BondForm::from_order(1),
+        },
+        AddBond {
+            endpoints: [AtomHandle::Id(AtomId(2)), AtomHandle::Id(AtomId(1))],
+            attributes: BondForm::from_order(2),
+        },
+    ],
+    MoleculeIntegrityError::ParallelBonds {
+        atoms: [AtomId(1), AtomId(2)],
+    }
+)]
+fn test_molecule_apply_edit_add_bonds_integrity_error(
+    #[case] bonds: Vec<AddBond>,
+    #[case] expected: MoleculeIntegrityError,
+    #[values(false, true)] journaled: bool,
+) {
+    let initial = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    });
+    let mut molecule = initial.clone();
+    let mut state = ApplicationState::new(&molecule);
+    let edit = Edit::AddBonds { bonds };
+    let error = if journaled {
+        molecule.apply_edit_with_undo(edit, &mut state).unwrap_err()
+    } else {
+        molecule.apply_edit(edit, &mut state).unwrap_err()
+    };
+
+    assert_eq!(error, MoleculeApplyError::Integrity(expected));
     assert_eq!(molecule, initial);
     assert_eq!(
         state.bond(BondHandle::New(0)),

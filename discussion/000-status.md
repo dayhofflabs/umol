@@ -299,3 +299,6 @@ the statuses recorded here remain authoritative.
 | [248-explicit-import-repair-2026-11-16.md](248-explicit-import-repair-2026-11-16.md)                           | Proposed      | 2026-11-16   | Deferred beyond 0.11; settle repair interfaces and fix semantics before planning. |
 | [249-release-0-11-preparation-2026-11-16.md](249-release-0-11-preparation-2026-11-16.md)                         | Completed     | 2026-11-16   | |
 | [253-resolver-undetermined-elements-2026-11-23.md](253-resolver-undetermined-elements-2026-11-23.md)             | Completed     | 2026-11-23   | |
+| [254-edge-colored-automorphisms-2026-11-26.md](254-edge-colored-automorphisms-2026-11-26.md)                     | Completed     | 2026-11-27   | |
+| [255-reaction-span-bond-normalization-2026-11-26.md](255-reaction-span-bond-normalization-2026-11-26.md)         | Proposed      | 2026-11-26   | Follow-up after 233 and 254: reconcile participant-key structural identity vs. 238 same-key Remove+Add across bonds and overlays, and revisit ReactionSpanIntegrityError::ParallelBonds. |
+| [256-subgraph-isomorphism-performance-2026-11-27.md](256-subgraph-isomorphism-performance-2026-11-27.md)         | Completed     | 2026-11-27   | |

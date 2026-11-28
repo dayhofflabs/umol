@@ -1,22 +1,170 @@
-//! Properties of the core graph representation and its predicates.
+//! Properties of the core simple-graph representations (`Graph` and `DiGraph`).
 //!
-//! Exact removal uses complete deletion lists derived from generated multigraph endpoints;
-//! cascading and checked removal also exercise incomplete lists. Expected survivors and
-//! correspondences come from the input endpoints, independently of the removal implementation.
+//! Checked constructors and extensions verify agreement with an independent simplicity check
+//! and non-mutation on error across unique and shared storage. Exact removal uses complete
+//! deletion lists derived from generated simple-graph endpoints; cascading and checked removal
+//! also exercise incomplete lists. Expected survivors and correspondences come from the input
+//! endpoints, independently of the removal implementation.
 
 use std::collections::HashSet;
 
 use proptest::prelude::*;
-use umol_graph_core::{Correspondence, EdgeId, Graph, GraphCorrespondence, Neighbor, NodeId};
+use umol_graph_core::{
+    Correspondence, DiGraph, EdgeId, Graph, GraphCorrespondence, GraphError, Neighbor, NodeId,
+};
 
-use super::strategy::graph_with_edge_multiset;
+use super::strategy::graph_with_simple_edges;
 
 proptest! {
-    /// The selected edge IDs equal the endpoint-membership definition, including multigraphs.
+    /// Checked undirected construction accepts exactly simple in-bounds edge lists and matches
+    /// the error classification on invalid inputs.
+    #[test]
+    fn test_graph_try_new(
+        node_count in 0usize..10,
+        edges in prop::collection::vec((0u32..12, 0u32..12), 0..24),
+    ) {
+        let edges: Vec<[u32; 2]> = edges.into_iter().map(|(a, b)| [a, b]).collect();
+        let mut expected_err = None;
+        for &[a, b] in &edges {
+            if a as usize >= node_count {
+                expected_err = Some(GraphError::NodeOutOfBounds { node: a, node_count });
+                break;
+            }
+            if b as usize >= node_count {
+                expected_err = Some(GraphError::NodeOutOfBounds { node: b, node_count });
+                break;
+            }
+            if a == b {
+                expected_err = Some(GraphError::SelfLoop { node: a });
+                break;
+            }
+        }
+        let mut has_parallel = false;
+        if expected_err.is_none() {
+            let mut seen = HashSet::new();
+            for &[a, b] in &edges {
+                let pair = [a.min(b), a.max(b)];
+                if !seen.insert(pair) {
+                    has_parallel = true;
+                    break;
+                }
+            }
+        }
+
+        match (Graph::try_new(node_count, &edges), expected_err, has_parallel) {
+            (Ok(graph), None, false) => {
+                prop_assert_eq!(graph.node_count(), node_count);
+                prop_assert_eq!(graph.edge_count(), edges.len());
+                for (index, &[a, b]) in edges.iter().enumerate() {
+                    prop_assert_eq!(graph.edge_endpoints(EdgeId::from(index)), [NodeId(a.min(b)), NodeId(a.max(b))]);
+                }
+            }
+            (Err(actual), Some(expected), _) => prop_assert_eq!(actual, expected),
+            (Err(GraphError::ParallelEdge { endpoints: [lo, hi] }), None, true) => {
+                prop_assert!(lo < hi);
+                let count = edges.iter().filter(|&&[a, b]| [a.min(b), a.max(b)] == [lo, hi]).count();
+                prop_assert!(count >= 2);
+            }
+            (other, expected_err, has_parallel) => {
+                prop_assert!(false, "unexpected result {other:?} for expected_err={expected_err:?}, has_parallel={has_parallel}");
+            }
+        }
+    }
+
+    /// Checked directed construction accepts exactly simple in-bounds directed edge lists,
+    /// permits opposite arcs, preserves successor input order, and rejects loops and duplicates.
+    #[test]
+    fn test_digraph_try_new(
+        node_count in 0usize..10,
+        edges in prop::collection::vec((0u32..12, 0u32..12), 0..24),
+    ) {
+        let edges: Vec<[u32; 2]> = edges.into_iter().map(|(a, b)| [a, b]).collect();
+        let mut expected_err = None;
+        for &[from, to] in &edges {
+            if from as usize >= node_count {
+                expected_err = Some(GraphError::NodeOutOfBounds { node: from, node_count });
+                break;
+            }
+            if to as usize >= node_count {
+                expected_err = Some(GraphError::NodeOutOfBounds { node: to, node_count });
+                break;
+            }
+            if from == to {
+                expected_err = Some(GraphError::SelfLoop { node: from });
+                break;
+            }
+        }
+        let mut has_parallel = false;
+        if expected_err.is_none() {
+            let mut seen = HashSet::new();
+            for &edge in &edges {
+                if !seen.insert(edge) {
+                    has_parallel = true;
+                    break;
+                }
+            }
+        }
+
+        match (DiGraph::try_new(node_count, &edges), expected_err, has_parallel) {
+            (Ok(graph), None, false) => {
+                prop_assert_eq!(graph.node_count(), node_count);
+                for node in 0..node_count as u32 {
+                    let expected: Vec<NodeId> = edges.iter()
+                        .filter(|&&[from, _]| from == node)
+                        .map(|&[_, to]| NodeId(to))
+                        .collect();
+                    prop_assert_eq!(graph.successors(NodeId(node)), expected.as_slice());
+                }
+            }
+            (Err(actual), Some(expected), _) => prop_assert_eq!(actual, expected),
+            (Err(GraphError::ParallelEdge { endpoints }), None, true) => {
+                let count = edges.iter().filter(|&&edge| edge == endpoints).count();
+                prop_assert!(count >= 2);
+            }
+            (other, expected_err, has_parallel) => {
+                prop_assert!(false, "unexpected result {other:?} for expected_err={expected_err:?}, has_parallel={has_parallel}");
+            }
+        }
+    }
+
+    /// Checked extension agrees with `Graph::try_new` on the combined edge list and leaves the
+    /// graph unchanged on error for both unique and shared storage.
+    #[test]
+    fn test_graph_try_extend(
+        (original, edges) in graph_with_simple_edges(8, 16),
+        count in 0usize..6,
+        added in prop::collection::vec((0u32..16, 0u32..16), 0..16),
+        shared in any::<bool>(),
+    ) {
+        let mut graph = if shared { original.clone() } else { Graph::new(original.node_count(), &edges) };
+        let added_nodes: Vec<[NodeId; 2]> = added.iter().map(|&(a, b)| [NodeId(a), NodeId(b)]).collect();
+        let mut combined = edges.clone();
+        combined.extend(added.iter().map(|&(a, b)| [a, b]));
+        let expected = Graph::try_new(original.node_count() + count, &combined);
+
+        match (graph.try_extend(count, &added_nodes), expected) {
+            (Ok((nodes, edge_ids)), Ok(expected_graph)) => {
+                prop_assert_eq!(nodes.len(), count);
+                prop_assert_eq!(edge_ids.len(), added.len());
+                prop_assert_eq!(graph, expected_graph);
+                prop_assert_eq!(&original, &Graph::new(original.node_count(), &edges));
+            }
+            (Err(actual), Err(expected_err)) => {
+                prop_assert_eq!(actual, expected_err);
+                prop_assert_eq!(graph, Graph::new(original.node_count(), &edges));
+                prop_assert_eq!(&original, &Graph::new(original.node_count(), &edges));
+            }
+            (actual, expected) => {
+                prop_assert!(false, "try_extend={actual:?} disagreed with try_new={expected:?}");
+            }
+        }
+    }
+
+    /// The selected edge IDs equal the endpoint-membership definition.
     /// Reversing or repeating the node sequence preserves that edge set without repeating IDs.
     #[test]
     fn test_graph_induced_edges(
-        (graph, edges) in graph_with_edge_multiset(16, 40),
+        (graph, edges) in graph_with_simple_edges(16, 40),
         nodes in prop::collection::vec(0u32..16, 0..32),
     ) {
         let mut nodes: Vec<NodeId> = nodes.into_iter()
@@ -38,25 +186,8 @@ proptest! {
     }
 
     #[test]
-    fn test_graph_is_simple(
-        (graph, edges) in graph_with_edge_multiset(8, 16),
-    ) {
-        let mut endpoint_pairs = HashSet::with_capacity(edges.len());
-        let expected = edges.into_iter().all(|[first, second]| {
-            let endpoints = if first <= second {
-                [first, second]
-            } else {
-                [second, first]
-            };
-            first != second && endpoint_pairs.insert(endpoints)
-        });
-
-        prop_assert_eq!(graph.is_simple(), expected);
-    }
-
-    #[test]
     fn test_graph_id_iterators_exact_size(
-        (graph, _) in graph_with_edge_multiset(8, 16),
+        (graph, _) in graph_with_simple_edges(8, 16),
         prefix in any::<usize>(),
     ) {
         let node_count = graph.node_count();
@@ -99,7 +230,7 @@ proptest! {
     /// Bulk node addition preserves the original topology and appends isolated nodes.
     #[test]
     fn test_graph_extend_nodes(
-        (original, edges) in graph_with_edge_multiset(16, 40),
+        (original, edges) in graph_with_simple_edges(16, 40),
         count in 0usize..16,
         shared in any::<bool>(),
     ) {
@@ -114,13 +245,15 @@ proptest! {
     /// Bulk edge addition agrees with constructing the complete ordered edge list.
     #[test]
     fn test_graph_extend_edges(
-        (original, mut edges) in graph_with_edge_multiset(16, 40),
+        (original, mut edges) in graph_with_simple_edges(16, 40),
         added in prop::collection::vec((0u32..16, 0u32..16), 0..32),
         shared in any::<bool>(),
     ) {
         let mut graph = if shared { original.clone() } else { Graph::new(original.node_count(), &edges) };
+        let mut seen: HashSet<[u32; 2]> = edges.iter().map(|&[a, b]| [a.min(b), a.max(b)]).collect();
         let added: Vec<_> = added.into_iter()
-            .filter(|&(a, b)| (a as usize) < original.node_count() && (b as usize) < original.node_count())
+            .filter(|&(a, b)| (a as usize) < original.node_count() && (b as usize) < original.node_count() && a != b)
+            .filter(|&(a, b)| seen.insert([a.min(b), a.max(b)]))
             .map(|(a, b)| [NodeId(a), NodeId(b)]).collect();
         let ids = graph.extend_edges(&added);
         prop_assert_eq!(ids.len(), added.len());
@@ -130,19 +263,21 @@ proptest! {
         prop_assert_eq!(graph, Graph::new(original.node_count(), &edges));
     }
 
-    /// Combined extension preserves edge order and both incidences of each edge, including loops.
+    /// Combined extension preserves edge order and both incidences of each edge.
     /// Neighbors are derived directly from endpoints, independently of CSR construction.
     #[test]
     fn test_graph_extend(
-        (original, mut edges) in graph_with_edge_multiset(16, 40),
+        (original, mut edges) in graph_with_simple_edges(16, 40),
         count in 0usize..16,
         added in prop::collection::vec((0u32..32, 0u32..32), 0..32),
         shared in any::<bool>(),
     ) {
         let mut graph = if shared { original.clone() } else { Graph::new(original.node_count(), &edges) };
         let node_count = original.node_count() + count;
+        let mut seen: HashSet<[u32; 2]> = edges.iter().map(|&[a, b]| [a.min(b), a.max(b)]).collect();
         let added: Vec<_> = added.into_iter()
-            .filter(|&(a, b)| (a as usize) < node_count && (b as usize) < node_count)
+            .filter(|&(a, b)| (a as usize) < node_count && (b as usize) < node_count && a != b)
+            .filter(|&(a, b)| seen.insert([a.min(b), a.max(b)]))
             .map(|(a, b)| [NodeId(a), NodeId(b)]).collect();
         let (nodes, edge_ids) = graph.extend(count, &added);
         prop_assert_eq!(nodes.len(), count);
@@ -163,16 +298,15 @@ proptest! {
                 if b == node { expected.push(Neighbor { node: NodeId(a), edge: EdgeId::from(index) }); }
             }
             expected.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
-            let mut actual = graph.neighbors(NodeId(node)).to_vec();
-            prop_assert!(actual.windows(2).all(|pair| pair[0].node <= pair[1].node));
-            actual.sort_unstable_by_key(|neighbor| (neighbor.node, neighbor.edge));
-            prop_assert_eq!(actual, expected);
+            let actual = graph.neighbors(NodeId(node));
+            prop_assert!(actual.windows(2).all(|pair| pair[0].node < pair[1].node));
+            prop_assert_eq!(actual, expected.as_slice());
         }
     }
 
     #[test]
     fn test_graph_tracked_remove(
-        (original, endpoints) in graph_with_edge_multiset(8, 16),
+        (original, endpoints) in graph_with_simple_edges(8, 16),
         node_mask in any::<u8>(),
         edge_mask in any::<u16>(),
         shared in any::<bool>(),
@@ -216,7 +350,7 @@ proptest! {
 
     #[test]
     fn test_graph_tracked_remove_cascading(
-        (graph, edges) in graph_with_edge_multiset(8, 16),
+        (graph, edges) in graph_with_simple_edges(8, 16),
         node_mask in any::<u8>(),
         edge_mask in any::<u16>(),
     ) {
@@ -287,5 +421,74 @@ proptest! {
         let expected = if dangling { graph } else { expected };
         prop_assert_eq!(plain, expected.clone());
         prop_assert_eq!(witnessed, expected);
+    }
+
+    /// Cached `max_degree` equals the maximum endpoint-incidence count across construction,
+    /// extension, cascading removal, and restoration.
+    #[test]
+    fn test_graph_max_degree(
+        (mut graph, edges) in graph_with_simple_edges(16, 40),
+        extra_nodes in 0usize..6,
+        added in prop::collection::vec((0u32..22, 0u32..22), 0..16),
+        node_mask in any::<u16>(),
+    ) {
+        let endpoint_max_degree = |node_count: usize, edge_list: &[[u32; 2]]| -> usize {
+            let mut degrees = vec![0usize; node_count];
+            for &[a, b] in edge_list {
+                degrees[a as usize] += 1;
+                degrees[b as usize] += 1;
+            }
+            degrees.into_iter().max().unwrap_or(0)
+        };
+
+        prop_assert_eq!(graph.max_degree(), endpoint_max_degree(graph.node_count(), &edges));
+
+        graph.extend_nodes(extra_nodes);
+        prop_assert_eq!(graph.max_degree(), endpoint_max_degree(graph.node_count(), &edges));
+
+        let mut all_edges = edges;
+        let mut seen: HashSet<[u32; 2]> = all_edges
+            .iter()
+            .map(|&[a, b]| [a.min(b), a.max(b)])
+            .collect();
+        let node_count = graph.node_count();
+        let valid_added: Vec<[NodeId; 2]> = added
+            .into_iter()
+            .filter(|&(a, b)| (a as usize) < node_count && (b as usize) < node_count && a != b)
+            .filter(|&(a, b)| seen.insert([a.min(b), a.max(b)]))
+            .map(|(a, b)| [NodeId(a), NodeId(b)])
+            .collect();
+        graph.extend_edges(&valid_added);
+        all_edges.extend(valid_added.iter().map(|&[a, b]| [a.0, b.0]));
+        let before_remove_max = endpoint_max_degree(node_count, &all_edges);
+        prop_assert_eq!(graph.max_degree(), before_remove_max);
+
+        let removed_nodes: Vec<NodeId> = (0..node_count.min(16))
+            .filter(|&i| node_mask & (1u16 << i) != 0)
+            .map(NodeId::from)
+            .collect();
+        let compaction = graph.tracked_remove_cascading(removed_nodes.clone(), vec![]);
+        let surviving_nodes: Vec<u32> = (0..node_count as u32)
+            .filter(|&i| !removed_nodes.contains(&NodeId(i)))
+            .collect();
+        let mut surviving_degrees = vec![0usize; surviving_nodes.len()];
+        let mut saved_edges = Vec::new();
+        for (edge_idx, &[a, b]) in all_edges.iter().enumerate() {
+            if removed_nodes.contains(&NodeId(a)) || removed_nodes.contains(&NodeId(b)) {
+                saved_edges.push((EdgeId::from(edge_idx), [NodeId(a), NodeId(b)]));
+            } else {
+                let na = surviving_nodes.iter().position(|&id| id == a).unwrap();
+                let nb = surviving_nodes.iter().position(|&id| id == b).unwrap();
+                surviving_degrees[na] += 1;
+                surviving_degrees[nb] += 1;
+            }
+        }
+        prop_assert_eq!(
+            graph.max_degree(),
+            surviving_degrees.into_iter().max().unwrap_or(0),
+        );
+
+        graph.restore(&compaction, &saved_edges);
+        prop_assert_eq!(graph.max_degree(), before_remove_max);
     }
 }

@@ -83,7 +83,8 @@ fn test_molecule_apply_edit_constraint_target_error(
             kind,
             index: 0,
             count: 0
-        })
+        }
+        .into())
     );
     assert_eq!(molecule, Molecule::default());
 }

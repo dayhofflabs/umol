@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
-use umol_graph_core::{Compaction, Correspondence, CorrespondenceComposeError};
+use umol_graph_core::{Compaction, Correspondence, CorrespondenceComposeError, NodeId};
 
 use super::compact::MoleculeCompaction;
 use super::entity::{Entity, EntityKind};
@@ -979,21 +979,47 @@ pub(crate) fn induced_bonds(
     right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<BondId>> {
-    induce_by_key(
-        left.bonds().iter().filter_map(|bond| {
-            let [first, second] = bond.atom_ids();
-            Some((
-                bond.id(),
-                ordered_pair(atoms.right_of(first)?, atoms.right_of(second)?),
-            ))
-        }),
-        left.bonds().count(),
-        right
-            .bonds()
-            .iter()
-            .map(|bond| (bond.id(), ordered_pair_from(bond.atom_ids()))),
-        right.bonds().count(),
-    )
+    let left_graph = left.raw_graph();
+    let right_graph = right.raw_graph();
+    if atoms.left_count() != left_graph.node_count()
+        || atoms.right_count() != right_graph.node_count()
+    {
+        return None;
+    }
+    let left_bond_count = left_graph.edge_count();
+    let right_bond_count = right_graph.edge_count();
+    if left_bond_count == 0 || right_bond_count == 0 {
+        return Correspondence::new(Vec::new(), left_bond_count, right_bond_count).ok();
+    }
+
+    let mut matched_pairs = Vec::with_capacity(left_bond_count);
+    if atoms.is_total_on_left() {
+        let atom_pairs = atoms.matched_pairs();
+        for left_edge in left_graph.edge_ids() {
+            let [left_first, left_second] = left_graph.edge_endpoints(left_edge);
+            let right_first = NodeId::from(atom_pairs[left_first.index()].1);
+            let right_second = NodeId::from(atom_pairs[left_second.index()].1);
+            if let Some(right_edge) = right_graph.find_edge(right_first, right_second) {
+                matched_pairs.push((BondId::from(left_edge), BondId::from(right_edge)));
+            }
+        }
+    } else {
+        for left_edge in left_graph.edge_ids() {
+            let [left_first, left_second] = left_graph.edge_endpoints(left_edge);
+            let (Some(right_first), Some(right_second)) = (
+                atoms.right_of(AtomId::from(left_first)),
+                atoms.right_of(AtomId::from(left_second)),
+            ) else {
+                continue;
+            };
+            if let Some(right_edge) =
+                right_graph.find_edge(NodeId::from(right_first), NodeId::from(right_second))
+            {
+                matched_pairs.push((BondId::from(left_edge), BondId::from(right_edge)));
+            }
+        }
+    }
+    Correspondence::new(matched_pairs, left_bond_count, right_bond_count).ok()
 }
 
 /// The dative-bond correspondence induced by an atom correspondence: each left dative bond whose
@@ -1131,6 +1157,9 @@ where
     Id: Copy + Ord + From<usize>,
     Key: Ord,
 {
+    if left_count == 0 || right_count == 0 {
+        return Correspondence::new(Vec::new(), left_count, right_count).ok();
+    }
     let mut right_by_key = BTreeMap::new();
     for (id, key) in right {
         right_by_key
@@ -1180,7 +1209,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_core::{Compaction, EdgeId, GraphCompaction, NodeId};
+    use umol_graph_core::{Compaction, EdgeId, GraphCompaction};
 
     use super::*;
     use crate::ir::aromatic::AromaticSystemForm;
@@ -2809,5 +2838,108 @@ mod tests {
             ],
             [(false, false, false); 8],
         );
+    }
+
+    #[rstest]
+    #[case::total_embedding(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::default()),
+                (AtomId(1), AtomId(2), BondForm::default()),
+            ],
+            ..Default::default()
+        }),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::default()),
+                (AtomId(3), AtomId(2), BondForm::default()),
+                (AtomId(2), AtomId(1), BondForm::default()),
+            ],
+            ..Default::default()
+        }),
+        Correspondence::from_images(&[AtomId(3), AtomId(2), AtomId(1)], 4),
+        Some(Correspondence::new(vec![(BondId(0), BondId(1)), (BondId(1), BondId(2))], 2, 3).unwrap()),
+    )]
+    #[case::partial_atoms(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::default()),
+                (AtomId(1), AtomId(2), BondForm::default()),
+                (AtomId(0), AtomId(2), BondForm::default()),
+            ],
+            ..Default::default()
+        }),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![(AtomId(0), AtomId(2), BondForm::default())],
+            ..Default::default()
+        }),
+        Correspondence::new(vec![(AtomId(0), AtomId(2)), (AtomId(1), AtomId(0))], 3, 3).unwrap(),
+        Some(Correspondence::new(vec![(BondId(0), BondId(0))], 3, 1).unwrap()),
+    )]
+    #[case::empty_left_bonds(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            ..Default::default()
+        }),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
+        Some(Correspondence::new(vec![], 0, 1).unwrap()),
+    )]
+    #[case::empty_right_bonds(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            ..Default::default()
+        }),
+        Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
+        Some(Correspondence::new(vec![], 1, 0).unwrap()),
+    )]
+    #[case::mismatched_left_count(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        Correspondence::from_images(&[AtomId(0)], 2),
+        None,
+    )]
+    #[case::mismatched_right_count(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        Correspondence::from_images(&[AtomId(0), AtomId(1)], 3),
+        None,
+    )]
+    fn test_induced_bonds(
+        #[case] left: Molecule,
+        #[case] right: Molecule,
+        #[case] atoms: Correspondence<AtomId>,
+        #[case] expected: Option<Correspondence<BondId>>,
+    ) {
+        assert_eq!(induced_bonds(&left, &right, &atoms), expected);
     }
 }

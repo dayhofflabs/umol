@@ -3918,18 +3918,23 @@ fn test_molecule_enumerate_perfect_matchings(#[case] molecule: Molecule, #[case]
 fn test_molecule_automorphisms(#[case] molecule: Molecule, #[case] expected_orbits: usize) {
     let auto = molecule
         .graph()
-        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
+        .automorphisms(|_| 0u8, |_| 0u8, AutomorphismAlgorithm::Nauty);
     assert_eq!(auto.orbit_count(), expected_orbits);
     assert_eq!(auto.atom_count(), molecule.atoms().count());
 }
 
-#[test]
-fn test_atom_automorphism_same_orbit() {
-    let molecule = ring(6);
+#[rstest]
+#[case::ring_6_opposite(ring(6), AtomId(0), AtomId(3), true)]
+fn test_atom_automorphism_group_same_orbit(
+    #[case] molecule: Molecule,
+    #[case] first: AtomId,
+    #[case] second: AtomId,
+    #[case] expected: bool,
+) {
     let auto = molecule
         .graph()
-        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
-    assert!(auto.same_orbit(AtomId(0), AtomId(3)));
+        .automorphisms(|_| 0u8, |_| 0u8, AutomorphismAlgorithm::Nauty);
+    assert_eq!(auto.same_orbit(first, second), expected);
 }
 
 #[rstest]
@@ -3941,7 +3946,7 @@ fn test_graph_view_visit_subgraph_isomorphisms() {
         &query.graph(),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
         |embedding| {
             matches.push(embedding.to_vec());
             ControlFlow::Continue(())
@@ -3976,7 +3981,7 @@ fn test_molecule_enumerate_subgraph_isomorphisms() {
         &query.graph(),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
     );
     matches.sort_unstable();
     assert_eq!(
@@ -4008,7 +4013,7 @@ fn test_graph_view_visit_subgraph_isomorphisms_at() {
         (AtomId(0), AtomId(0)),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
         |embedding| {
             matches.push(embedding.to_vec());
             ControlFlow::Continue(())
@@ -4031,7 +4036,7 @@ fn test_molecule_enumerate_subgraph_isomorphisms_at() {
         (AtomId(0), AtomId(0)),
         &mut |_, _| true,
         &mut |_, _| true,
-        SubgraphIsomorphismAlgorithm::Vf2,
+        SubgraphIsomorphismAlgorithm::BitsetRi,
     );
     matches.sort_unstable();
     assert_eq!(
@@ -5640,7 +5645,7 @@ fn test_molecule_edit_into_integrity_error() {
     let mut molecule = original.clone();
     let error = molecule
         .edit_into(|editor| -> Result<(), Box<dyn Error>> {
-            editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(2));
+            editor.add_noncovalent_bond([AtomId(0), AtomId(0)], NoncovalentBondForm::default());
             Ok(())
         })
         .unwrap_err()
@@ -5648,8 +5653,9 @@ fn test_molecule_edit_into_integrity_error() {
         .unwrap();
     assert_eq!(
         *error,
-        MoleculeApplyError::Integrity(MoleculeIntegrityError::ParallelBonds {
-            atoms: [AtomId(0), AtomId(1)],
+        MoleculeApplyError::Integrity(MoleculeIntegrityError::DuplicateAtom {
+            entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
+            atom: AtomId(0),
         })
     );
     assert_eq!(molecule, original);
@@ -5676,13 +5682,13 @@ fn test_molecule_edit_into_unwind(#[from(rich_molecule)] mut molecule: Molecule)
 
 #[rstest]
 fn test_molecule_edit_into_repair() {
-    let mut molecule = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let mut molecule =
+        mol_dsl!(r#"{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#);
     let result = molecule.edit_into(|editor| -> Result<_, MoleculeApplyError> {
         let mut edits = Edits::new();
-        edits.add_bond(
-            AtomHandle::Id(AtomId(0)),
-            AtomHandle::Id(AtomId(1)),
-            BondForm::from_order(2),
+        edits.add_noncovalent_bond(
+            [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
         );
         edits.remove_atom(AtomHandle::Id(AtomId(7)));
         assert_eq!(
@@ -5697,20 +5703,27 @@ fn test_molecule_edit_into_repair() {
         );
         assert_eq!(
             editor.probe(),
-            Err(MoleculeIntegrityError::ParallelBonds {
+            Err(MoleculeIntegrityError::ParallelNoncovalentBonds {
                 atoms: [AtomId(0), AtomId(1)]
             })
         );
-        editor.remove_topology(&[], &[BondId(0)]).unwrap();
+        editor.remove_noncovalent_bonds(&[NoncovalentBondId(0)]);
         let mut next = Edits::new();
         next.add_atom(AtomForm::from_element(Element::O));
         editor.apply(next)?;
-        Ok(editor.bond(BondId(0)).attributes().order.clone())
+        Ok(editor
+            .noncovalent_bond(NoncovalentBondId(0))
+            .attributes()
+            .kind
+            .clone())
     });
-    assert_eq!(result, Ok(NumForm::Lit(2)));
+    assert_eq!(
+        result,
+        Ok(NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic))
+    );
     assert_eq!(
         molecule,
-        mol_dsl!(r#"{:atoms ["C" "N" "O"] :bonds [[0 1 "2"]]}"#)
+        mol_dsl!(r#"{:atoms ["C" "N" "O"] :noncovalent-bonds [{:atoms [0 1] :attrs "Ion"}]}"#)
     );
 }
 
@@ -6166,30 +6179,33 @@ fn test_molecule_editor_tracked_apply() {
 
 #[rstest]
 fn test_molecule_editor_tracked_apply_transient() {
-    let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let source = mol_dsl!(r#"{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#);
     let mut editor = source.edit();
-    editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+    editor.add_noncovalent_bond(
+        [AtomId(0), AtomId(1)],
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+    );
     let mut plain = editor.clone();
     let applied = editor.tracked_apply(Edits::new()).unwrap();
     let expected = MoleculeCorrespondence::new(
         Correspondence::identity(2),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
         Correspondence::identity(2),
-        Correspondence::empty(),
-        Correspondence::empty(),
-        Correspondence::empty(),
-        Correspondence::empty(),
         Correspondence::empty(),
         Correspondence::empty(),
     );
     assert_eq!(applied, expected);
     assert_eq!(
         editor.probe(),
-        Err(MoleculeIntegrityError::ParallelBonds {
+        Err(MoleculeIntegrityError::ParallelNoncovalentBonds {
             atoms: [AtomId(0), AtomId(1)]
         })
     );
-    plain.remove_topology(&[], &[BondId(1)]).unwrap();
-    editor.remove_topology(&[], &[BondId(1)]).unwrap();
+    plain.remove_noncovalent_bonds(&[NoncovalentBondId(1)]);
+    editor.remove_noncovalent_bonds(&[NoncovalentBondId(1)]);
     assert_eq!(editor.finish(), plain.finish());
 }
 
@@ -6349,14 +6365,17 @@ fn test_molecule_editor_finish_session() {
 }
 
 #[rstest]
-#[case::parallel_bond(MoleculeIntegrityError::ParallelBonds { atoms: [AtomId(0), AtomId(1)] })]
+#[case::parallel_noncovalent(MoleculeIntegrityError::ParallelNoncovalentBonds { atoms: [AtomId(0), AtomId(1)] })]
 fn test_molecule_editor_probe_error(#[case] expected: MoleculeIntegrityError) {
-    let source = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+    let source = mol_dsl!(r#"{:atoms ["C" "N"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#);
     let mut editor = source.clone().edit();
-    let added = editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+    let added = editor.add_noncovalent_bond(
+        [AtomId(0), AtomId(1)],
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+    );
     assert_eq!(editor.probe(), Err(expected.clone()));
     assert_eq!(editor.clone().finish(), Err(expected));
-    editor.remove_topology(&[], &[added]).unwrap();
+    editor.remove_noncovalent_bonds(&[added]);
     assert_eq!(editor.probe(), Ok(&source));
     assert_eq!(editor.finish(), Ok(source));
 }
@@ -9431,7 +9450,7 @@ fn test_molecule_editor_drop(#[from(equiv_molecule_entries)] entries: MoleculeEn
     let molecule = Molecule::from_entries(entries.clone());
     let mut editor = molecule.clone().edit();
     editor.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(-1);
-    editor.add_bond(AtomId(0), AtomId(0), BondForm::from_order(1));
+    editor.add_noncovalent_bond([AtomId(0), AtomId(0)], NoncovalentBondForm::default());
     drop(editor);
     assert_eq!(molecule, Molecule::from_entries(entries));
 }

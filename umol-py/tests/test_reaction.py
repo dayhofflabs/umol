@@ -13,6 +13,9 @@ from umol import (
     AtomForm,
     AtomDelta,
     AtomFieldChange,
+    AutomorphismAlgorithm,
+    BondDelta,
+    BondForm,
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
@@ -30,6 +33,8 @@ from umol import (
     Molecule,
     MoleculeCorrespondence,
     ParseError,
+    PreparedReaction,
+    PreparedSubstructureHost,
     ReactionApplicationConfig,
     Reaction,
     ReactionCompositionConfig,
@@ -121,81 +126,108 @@ def test_reaction_application_config_default():
     assert config.match_algorithm == SubstructureMatchAlgorithm.GraphAndOverlays()
     assert (
         config.subgraph_isomorphism_algorithm
-        == SubgraphIsomorphismAlgorithm.Vf2Rdkit()
+        == SubgraphIsomorphismAlgorithm.BitsetRi()
     )
     assert (
         config.relevant_cycle_algorithm
         == RelevantCycleEnumerationAlgorithm.Vismara()
     )
+    assert config.automorphism_algorithm == AutomorphismAlgorithm.TrailIr()
+    assert config.reduce_pattern_symmetry is False
+    assert config.reduce_host_symmetry is False
     assert repr(config) == (
         "ReactionApplicationConfig("
         "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
         "subgraph_isomorphism_algorithm="
-        "SubgraphIsomorphismAlgorithm.Vf2Rdkit(), "
+        "SubgraphIsomorphismAlgorithm.BitsetRi(), "
         "relevant_cycle_algorithm="
-        "RelevantCycleEnumerationAlgorithm.Vismara())"
+        "RelevantCycleEnumerationAlgorithm.Vismara(), "
+        "automorphism_algorithm=AutomorphismAlgorithm.TrailIr(), "
+        "reduce_pattern_symmetry=False, "
+        "reduce_host_symmetry=False)"
     )
 
 
 @pytest.mark.parametrize(
-    "match_algorithm,subiso_algorithm,expected_repr",
+    (
+        "match_algorithm",
+        "subiso_algorithm",
+        "expected_repr",
+        "automorphism_algorithm",
+        "reduce_pattern_symmetry",
+        "reduce_host_symmetry",
+    ),
     [
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Vf2(),
-            "SubgraphIsomorphismAlgorithm.Vf2()",
-            id="vf2",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Ullmann(),
-            "SubgraphIsomorphismAlgorithm.Ullmann()",
-            id="ullmann",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.Ri(),
-            "SubgraphIsomorphismAlgorithm.Ri()",
-            id="ri",
-        ),
-        pytest.param(
-            SubstructureMatchAlgorithm.GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6),
-            "SubgraphIsomorphismAlgorithm.ArcMatch(path_length=6)",
-            id="arc-match",
-        ),
         pytest.param(
             SubstructureMatchAlgorithm.GraphAndOverlays(),
             SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
             "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
+            AutomorphismAlgorithm.TrailIr(),
+            False,
+            False,
             id="vf2-rdkit",
         ),
         pytest.param(
             SubstructureMatchAlgorithm.GraphAndOverlays(),
             SubgraphIsomorphismAlgorithm.RayKirsch(),
             "SubgraphIsomorphismAlgorithm.RayKirsch()",
+            AutomorphismAlgorithm.TrailIr(),
+            True,
+            False,
             id="ray-kirsch",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.BitsetRi(),
+            "SubgraphIsomorphismAlgorithm.BitsetRi()",
+            AutomorphismAlgorithm.Nauty(),
+            True,
+            True,
+            id="bitset-ri",
+        ),
+        pytest.param(
+            SubstructureMatchAlgorithm.GraphAndOverlays(),
+            SubgraphIsomorphismAlgorithm.Glasgow(),
+            "SubgraphIsomorphismAlgorithm.Glasgow()",
+            AutomorphismAlgorithm.TrailIr(),
+            False,
+            True,
+            id="glasgow",
         ),
         pytest.param(
             SubstructureMatchAlgorithm.Incidence(),
             SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
             "SubgraphIsomorphismAlgorithm.Vf2Rdkit()",
+            AutomorphismAlgorithm.Nauty(),
+            True,
+            True,
             id="incidence",
         ),
     ],
 )
 def test_reaction_application_config_value(
-    match_algorithm, subiso_algorithm, expected_repr
+    match_algorithm,
+    subiso_algorithm,
+    expected_repr,
+    automorphism_algorithm,
+    reduce_pattern_symmetry,
+    reduce_host_symmetry,
 ):
     config = ReactionApplicationConfig(
         match_algorithm=match_algorithm,
         subgraph_isomorphism_algorithm=subiso_algorithm,
         relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(),
+        automorphism_algorithm=automorphism_algorithm,
+        reduce_pattern_symmetry=reduce_pattern_symmetry,
+        reduce_host_symmetry=reduce_host_symmetry,
     )
     equal = ReactionApplicationConfig(
         match_algorithm=match_algorithm,
         subgraph_isomorphism_algorithm=subiso_algorithm,
         relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(),
+        automorphism_algorithm=automorphism_algorithm,
+        reduce_pattern_symmetry=reduce_pattern_symmetry,
+        reduce_host_symmetry=reduce_host_symmetry,
     )
 
     assert config == equal
@@ -205,13 +237,21 @@ def test_reaction_application_config_value(
         config.relevant_cycle_algorithm
         == RelevantCycleEnumerationAlgorithm.Vismara()
     )
+    assert config.automorphism_algorithm == automorphism_algorithm
+    assert config.reduce_pattern_symmetry is reduce_pattern_symmetry
+    assert config.reduce_host_symmetry is reduce_host_symmetry
     assert repr(config) == (
         "ReactionApplicationConfig("
         f"match_algorithm={match_algorithm!r}, "
         f"subgraph_isomorphism_algorithm={expected_repr}, "
         "relevant_cycle_algorithm="
-        "RelevantCycleEnumerationAlgorithm.Vismara())"
+        "RelevantCycleEnumerationAlgorithm.Vismara(), "
+        f"automorphism_algorithm={automorphism_algorithm!r}, "
+        f"reduce_pattern_symmetry={reduce_pattern_symmetry!r}, "
+        f"reduce_host_symmetry={reduce_host_symmetry!r})"
     )
+    with pytest.raises(AttributeError):
+        config.reduce_host_symmetry = False
 
 
 def test_reaction_constructor():
@@ -1771,16 +1811,16 @@ def test_reaction_tracked_apply_composition():
         pytest.param(
             ReactionApplicationConfig(
                 match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
-                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
             ),
-            id="graph-and-overlays-ullmann",
+            id="graph-and-overlays-bitset-ri",
         ),
         pytest.param(
             ReactionApplicationConfig(
                 match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2(),
+                subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Glasgow(),
             ),
-            id="incidence-vf2",
+            id="incidence-glasgow",
         ),
     ],
 )
@@ -2119,3 +2159,164 @@ def test_reaction_workflow():
         AtomDelta.Add(id=6, attributes=AtomForm(Element("O")))
     )
     assert second == second_snapshot
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["apply", "tracked_apply", "apply_to_reaction", "apply_to_reaction_span"],
+)
+def test_reaction_apply_prepared_host_parity(method):
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} '
+        ':deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    host = Molecule.parse('{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+    prepared_host = PreparedSubstructureHost(host)
+    config = ReactionApplicationConfig(
+        reduce_pattern_symmetry=True,
+        reduce_host_symmetry=True,
+    )
+
+    direct = list(getattr(reaction, method)(host, config=config))
+    via_host = list(getattr(reaction, method)(prepared_host, config=config))
+
+    assert len(direct) == 2
+    assert via_host == direct
+    # Self-alias borrow check: passing `reaction.lhs` directly works cleanly.
+    assert len(list(getattr(reaction, method)(reaction.lhs, config=config))) == 1
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["apply", "tracked_apply", "apply_to_reaction", "apply_to_reaction_span"],
+)
+def test_prepared_reaction_apply_parity(method):
+    reaction = Reaction(
+        Molecule.parse('{:atoms ["C" "C"] :bonds [[0 1 "2"]]}'),
+        Deltas([
+            Delta.Atom(AtomDelta.Add(id=2, attributes=AtomForm(Element("O")))),
+            Delta.Bond(BondDelta.Add(id=1, atoms=(0, 2), attributes=BondForm.parse("1"))),
+            Delta.Bond(BondDelta.Add(id=2, atoms=(1, 2), attributes=BondForm.parse("1"))),
+        ]),
+    )
+    host = Molecule.parse('{:atoms ["C" "C" "O"] :bonds [[0 1 "2"] [1 2 "1"]]}')
+    prepared_host = PreparedSubstructureHost(host)
+
+    for reduce_pattern_symmetry, expected_len in [(False, 2), (True, 1)]:
+        config = ReactionApplicationConfig(
+            reduce_pattern_symmetry=reduce_pattern_symmetry,
+            reduce_host_symmetry=True,
+        )
+        prepared_reaction = PreparedReaction(reaction, config=config)
+        direct = list(getattr(reaction, method)(host, config=config))
+        from_mol = list(getattr(prepared_reaction, method)(host))
+        from_host = list(getattr(prepared_reaction, method)(prepared_host))
+
+        assert len(direct) == expected_len
+        assert from_mol == direct
+        assert from_host == direct
+
+
+def test_prepared_reaction_contract_and_errors():
+    source = Reaction.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    expected = Reaction(source.lhs, source.deltas)
+    config = ReactionApplicationConfig(
+        reduce_pattern_symmetry=True,
+        reduce_host_symmetry=True,
+    )
+    prepared = PreparedReaction(source, config=config)
+
+    # Mutating source after construction does not affect the prepared reaction.
+    source.lhs.atoms[0].charge = 5
+    source.deltas.append(
+        Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))
+    )
+    snapshot = prepared.reaction()
+    assert snapshot == expected
+    assert snapshot is not source
+
+    # Mutating the detached reaction snapshot does not affect the prepared reaction.
+    snapshot.lhs.atoms[0].charge = -3
+    assert prepared.reaction() == expected
+
+    assert prepared.config == config
+    assert repr(prepared) == (
+        f"PreparedReaction(lhs_atoms=1, lhs_bonds=0, deltas=1, config={config!r})"
+    )
+
+    with pytest.raises(AttributeError):
+        prepared.config = ReactionApplicationConfig()
+    assert prepared == prepared
+    assert prepared != PreparedReaction(expected, config=config)
+    with pytest.raises(TypeError):
+        PreparedReaction(expected, ReactionApplicationConfig())
+    with pytest.raises(TypeError):
+        prepared.apply("not a host")
+    with pytest.raises(TypeError):
+        Reaction().apply("not a host")
+
+    # Reaction-wide DPO precondition failure -> InvalidStructureError.
+    invalid_dpo = Reaction.parse(
+        '{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} '
+        ':deltas [{:atom {:remove 0}}]}'
+    )
+    with pytest.raises(
+        InvalidStructureError,
+        match=r"^invalid reaction: deleted atom AtomId\(0\) leaves dangling bond BondId\(0\)$",
+    ):
+        PreparedReaction(invalid_dpo)
+
+    # Incoherent live Reaction components -> ValueError.
+    corrupted = Reaction()
+    corrupted.deltas.append(
+        Delta.Atom(AtomDelta.Remove(id=0, attributes=AtomForm(Element("C"))))
+    )
+    with pytest.raises(ValueError):
+        PreparedReaction(corrupted)
+
+
+def test_react_prepared_and_prepared_host_react():
+    coupling = Reaction(
+        Molecule.parse('{:atoms ["C" "C"] :bonds []}'),
+        Deltas([
+            Delta.Bond(BondDelta.Add(id=0, atoms=(0, 1), attributes=BondForm.parse("1"))),
+        ]),
+    )
+    config = ReactionApplicationConfig(
+        reduce_pattern_symmetry=True,
+        reduce_host_symmetry=True,
+    )
+    prepared_reaction = PreparedReaction(coupling, config=config)
+
+    single = Molecule.parse('{:atoms ["C" "C"] :bonds []}')
+    prepared_host = PreparedSubstructureHost(single)
+
+    expected_single = list(single.react(coupling, config=config))
+    assert len(expected_single) == 1
+    assert list(single.react_prepared(prepared_reaction)) == expected_single
+    assert list(prepared_host.react(coupling, config=config)) == expected_single
+    assert list(prepared_host.react_prepared(prepared_reaction)) == expected_single
+
+    reactants = [
+        Molecule.parse('{:atoms ["C"] :bonds []}'),
+        Molecule.parse('{:atoms ["C"] :bonds []}'),
+    ]
+    expected_all = list(Molecule.react_all(reactants, coupling, config=config))
+    assert len(expected_all) == 1
+    assert (
+        list(
+            Molecule.react_all_prepared(
+                (reactant for reactant in reactants),
+                prepared_reaction,
+            )
+        )
+        == expected_all
+    )
+    assert list(Molecule.react_all_prepared([], PreparedReaction(Reaction()))) == [[]]
+
+    with pytest.raises(TypeError):
+        Molecule.react_all_prepared([Molecule(), "not a molecule"], prepared_reaction)
+    with pytest.raises(TypeError):
+        prepared_host.react(coupling, ReactionApplicationConfig())
