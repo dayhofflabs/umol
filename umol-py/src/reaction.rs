@@ -14,30 +14,31 @@ use umol_graph::ops::model::{
 use umol_graph::ops::resolve::{
     IsotopePolicy as GraphIsotopePolicy, ResolveConfig as GraphResolveConfig,
 };
-use umol_graph_core::{
-    AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm,
-    CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm,
-};
+use umol_graph_core::CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm;
 #[cfg(test)]
 use umol_graph_core::{
-    Correspondence,
+    AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm, Correspondence,
     RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm as GraphCoreSubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::dsl::ReactionDsl as GraphIrReactionDsl;
-#[cfg(test)]
-use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
 use umol_graph_ir::ir::{
     ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, Molecule as GraphIrMolecule,
-    MoleculeCorrespondence as GraphIrMoleculeCorrespondence, Reaction as GraphIrReaction,
+    MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
+    PreparedReaction as GraphIrPreparedReaction, Reaction as GraphIrReaction,
     ReactionApplicationIter as GraphIrReactionApplicationIter,
     ReactionProductsIter as GraphIrReactionProductsIter, ReactionSpan as GraphIrReactionSpan,
     SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
 };
+#[cfg(test)]
+use umol_graph_ir::ir::{
+    PreparedSubstructureHost as GraphIrPreparedSubstructureHost,
+    SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm,
+};
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
 use crate::algorithm::{
-    CommonSubgraphEnumerationAlgorithm, RelevantCycleEnumerationAlgorithm,
+    AutomorphismAlgorithm, CommonSubgraphEnumerationAlgorithm, RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm, SubstructureMatchAlgorithm,
 };
 use crate::correspondence::{
@@ -58,6 +59,9 @@ use crate::molecule::Molecule;
 use crate::reaction_span::ReactionSpan as PyReactionSpan;
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
+#[cfg(test)]
+use crate::substructure::PreparedSubstructureHost;
+use crate::substructure::SubstructureHostLike;
 
 /// Algorithm used to enumerate common subgraphs during reaction composition.
 #[pyclass(eq, frozen, from_py_object)]
@@ -120,21 +124,27 @@ impl ReactionCompositionConfig {
     }
 }
 
-/// Algorithms used to enumerate matches for reaction application.
+/// Algorithms and symmetry-reduction options used to enumerate matches for reaction application.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ReactionApplicationConfig {
     match_algorithm: SubstructureMatchAlgorithm,
     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+    automorphism_algorithm: AutomorphismAlgorithm,
+    reduce_pattern_symmetry: bool,
+    reduce_host_symmetry: bool,
 }
 
 impl Default for ReactionApplicationConfig {
     fn default() -> Self {
         Self {
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr(),
+            reduce_pattern_symmetry: false,
+            reduce_host_symmetry: false,
         }
     }
 }
@@ -145,18 +155,27 @@ impl ReactionApplicationConfig {
     #[pyo3(signature = (
         *,
         match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::BitsetRi(),
         relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm::Vismara(),
+        automorphism_algorithm=AutomorphismAlgorithm::TrailIr(),
+        reduce_pattern_symmetry=false,
+        reduce_host_symmetry=false,
     ))]
     fn new(
         match_algorithm: SubstructureMatchAlgorithm,
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
+        automorphism_algorithm: AutomorphismAlgorithm,
+        reduce_pattern_symmetry: bool,
+        reduce_host_symmetry: bool,
     ) -> Self {
         Self {
             match_algorithm,
             subgraph_isomorphism_algorithm,
             relevant_cycle_algorithm,
+            automorphism_algorithm,
+            reduce_pattern_symmetry,
+            reduce_host_symmetry,
         }
     }
 
@@ -180,21 +199,43 @@ impl ReactionApplicationConfig {
         self.relevant_cycle_algorithm
     }
 
+    #[getter]
+    fn automorphism_algorithm(&self) -> AutomorphismAlgorithm {
+        self.automorphism_algorithm
+    }
+
+    #[getter]
+    fn reduce_pattern_symmetry(&self) -> bool {
+        self.reduce_pattern_symmetry
+    }
+
+    #[getter]
+    fn reduce_host_symmetry(&self) -> bool {
+        self.reduce_host_symmetry
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "ReactionApplicationConfig(match_algorithm={}, subgraph_isomorphism_algorithm={}, relevant_cycle_algorithm={})",
+            "ReactionApplicationConfig(match_algorithm={}, subgraph_isomorphism_algorithm={}, relevant_cycle_algorithm={}, automorphism_algorithm={}, reduce_pattern_symmetry={}, reduce_host_symmetry={})",
             self.match_algorithm.repr(),
             self.subgraph_isomorphism_algorithm.repr(),
             self.relevant_cycle_algorithm.repr(),
+            self.automorphism_algorithm.repr(),
+            if self.reduce_pattern_symmetry {
+                "True"
+            } else {
+                "False"
+            },
+            if self.reduce_host_symmetry {
+                "True"
+            } else {
+                "False"
+            },
         )
     }
 }
 
 impl ReactionApplicationConfig {
-    #[allow(
-        dead_code,
-        reason = "Rust-to-Python conversion API for configured reaction application"
-    )]
     pub(crate) fn from_rust(config: GraphIrSubstructureMatchConfig) -> Self {
         Self {
             match_algorithm: SubstructureMatchAlgorithm::from_rust(config.match_algorithm),
@@ -204,6 +245,9 @@ impl ReactionApplicationConfig {
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::from_rust(
                 config.relevant_cycle_algorithm,
             ),
+            automorphism_algorithm: AutomorphismAlgorithm::from_rust(config.automorphism_algorithm),
+            reduce_pattern_symmetry: config.reduce_pattern_symmetry,
+            reduce_host_symmetry: config.reduce_host_symmetry,
         }
     }
 
@@ -212,9 +256,9 @@ impl ReactionApplicationConfig {
             match_algorithm: self.match_algorithm.to_rust(),
             subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm.to_rust(),
             relevant_cycle_algorithm: self.relevant_cycle_algorithm.to_rust(),
-            automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
-            reduce_pattern_symmetry: false,
-            reduce_host_symmetry: false,
+            automorphism_algorithm: self.automorphism_algorithm.to_rust(),
+            reduce_pattern_symmetry: self.reduce_pattern_symmetry,
+            reduce_host_symmetry: self.reduce_host_symmetry,
         }
     }
 }
@@ -503,60 +547,73 @@ impl Reaction {
 
     /// Return one product per successful match through a one-shot iterator.
     ///
-    /// Matching is eager; output construction is lazy. The iterator owns snapshots of the
-    /// reaction and host, so later mutations do not affect it. Reaction-wide precondition failures
-    /// raise `InvalidStructureError` here; failures while realizing a match are raised by
-    /// iteration.
+    /// Accepts either a `Molecule` or a `PreparedSubstructureHost`. Matching is eager; output
+    /// construction is lazy. The iterator owns snapshots of the reaction and host, so later
+    /// mutations do not affect it. Reaction-wide precondition failures raise
+    /// `InvalidStructureError` here; failures while realizing a match are raised by iteration.
     #[pyo3(signature = (host, *, config=None))]
     fn apply(
         &self,
         py: Python<'_>,
-        host: Py<Molecule>,
+        host: SubstructureHostLike<'_>,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust().clone();
         let config = config.unwrap_or_default().to_rust();
-        let application = reaction
-            .apply(&host, config)
-            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        let application = match host {
+            SubstructureHostLike::Prepared(host) => reaction.apply_to_host(host.to_rust(), config),
+            SubstructureHostLike::Molecule(host) => reaction.apply(host.to_rust(), config),
+        }
+        .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
 
         Py::new(py, ReactionApplicationIter::from_rust(application))
     }
 
     /// Iterate over products and their host-to-product correspondences.
     ///
-    /// Matching, snapshot ownership, and errors follow apply.
+    /// Accepts either a `Molecule` or a `PreparedSubstructureHost`. Matching, snapshot ownership,
+    /// and errors follow apply.
     #[pyo3(signature = (host, *, config=None))]
     fn tracked_apply(
         &self,
         py: Python<'_>,
-        host: Py<Molecule>,
+        host: SubstructureHostLike<'_>,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<TrackedReactionApplicationIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust().clone();
-        let applications = reaction
-            .tracked_apply(&host, config.unwrap_or_default().to_rust())
-            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        let config = config.unwrap_or_default().to_rust();
+        let applications = match host {
+            SubstructureHostLike::Prepared(host) => {
+                reaction.tracked_apply_to_host(host.to_rust(), config)
+            }
+            SubstructureHostLike::Molecule(host) => reaction.tracked_apply(host.to_rust(), config),
+        }
+        .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
         Py::new(py, TrackedReactionApplicationIter::from_rust(applications))
     }
 
     /// Iterate over realized reactions.
     ///
-    /// Matching, snapshot ownership, and errors follow apply.
+    /// Accepts either a `Molecule` or a `PreparedSubstructureHost`. Matching, snapshot ownership,
+    /// and errors follow apply.
     #[pyo3(signature = (host, *, config=None))]
     fn apply_to_reaction(
         &self,
         py: Python<'_>,
-        host: Py<Molecule>,
+        host: SubstructureHostLike<'_>,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationToReactionIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust().clone();
-        let applications = reaction
-            .apply_to_reaction(&host, config.unwrap_or_default().to_rust())
-            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        let config = config.unwrap_or_default().to_rust();
+        let applications = match host {
+            SubstructureHostLike::Prepared(host) => {
+                reaction.apply_to_host_to_reaction(host.to_rust(), config)
+            }
+            SubstructureHostLike::Molecule(host) => {
+                reaction.apply_to_reaction(host.to_rust(), config)
+            }
+        }
+        .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
         Py::new(
             py,
             ReactionApplicationToReactionIter::from_rust(applications),
@@ -565,19 +622,26 @@ impl Reaction {
 
     /// Iterate over realized reaction spans.
     ///
-    /// Matching, snapshot ownership, and errors follow apply.
+    /// Accepts either a `Molecule` or a `PreparedSubstructureHost`. Matching, snapshot ownership,
+    /// and errors follow apply.
     #[pyo3(signature = (host, *, config=None))]
     fn apply_to_reaction_span(
         &self,
         py: Python<'_>,
-        host: Py<Molecule>,
+        host: SubstructureHostLike<'_>,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationToReactionSpanIter>> {
         let reaction = self.to_rust(py)?;
-        let host = host.try_borrow(py)?.to_rust().clone();
-        let applications = reaction
-            .apply_to_reaction_span(&host, config.unwrap_or_default().to_rust())
-            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        let config = config.unwrap_or_default().to_rust();
+        let applications = match host {
+            SubstructureHostLike::Prepared(host) => {
+                reaction.apply_to_host_to_reaction_span(host.to_rust(), config)
+            }
+            SubstructureHostLike::Molecule(host) => {
+                reaction.apply_to_reaction_span(host.to_rust(), config)
+            }
+        }
+        .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
         Py::new(
             py,
             ReactionApplicationToReactionSpanIter::from_rust(applications),
@@ -629,6 +693,137 @@ impl Reaction {
             self.deltas.bind(py).borrow().to_rust().clone(),
         )
         .map_err(reaction_integrity_error)
+    }
+}
+
+/// Immutable prepared reaction for repeated reaction application.
+///
+/// Validates reaction-wide application preconditions and normalizes deltas once at construction,
+/// snapshots the `Reaction`, and precompiles `reaction.lhs` under `config`. Mutating the source
+/// reaction after construction does not affect this prepared reaction.
+#[pyclass(frozen)]
+#[derive(Debug)]
+pub struct PreparedReaction(GraphIrPreparedReaction);
+
+#[pymethods]
+impl PreparedReaction {
+    /// Prepare `reaction` for repeated application under `config`.
+    ///
+    /// Raises `ValueError` if the live `Reaction` components are incoherent, or
+    /// `InvalidStructureError` if the reaction fails a reaction-wide application precondition.
+    #[new]
+    #[pyo3(signature = (reaction, *, config=None))]
+    pub(crate) fn new(
+        py: Python<'_>,
+        reaction: &Reaction,
+        config: Option<ReactionApplicationConfig>,
+    ) -> PyResult<Self> {
+        let reaction = reaction.to_rust(py)?;
+        let config = config.unwrap_or_default().to_rust();
+        let prepared = GraphIrPreparedReaction::new(&reaction, config)
+            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+        Ok(Self::from_rust(prepared))
+    }
+
+    /// Return a detached snapshot of the prepared reaction.
+    fn reaction(&self, py: Python<'_>) -> PyResult<Reaction> {
+        Reaction::from_rust(py, self.to_rust().reaction().clone())
+    }
+
+    /// The immutable application configuration bound to this prepared reaction.
+    #[getter]
+    fn config(&self) -> ReactionApplicationConfig {
+        ReactionApplicationConfig::from_rust(self.to_rust().config())
+    }
+
+    /// Return one product per successful match in a `Molecule` or `PreparedSubstructureHost`.
+    fn apply(
+        &self,
+        py: Python<'_>,
+        host: SubstructureHostLike<'_>,
+    ) -> PyResult<Py<ReactionApplicationIter>> {
+        let application = match host {
+            SubstructureHostLike::Prepared(host) => self.to_rust().apply_to_host(host.to_rust()),
+            SubstructureHostLike::Molecule(host) => self.to_rust().apply(host.to_rust()),
+        };
+        Py::new(py, ReactionApplicationIter::from_rust(application))
+    }
+
+    /// Iterate over products and their host-to-product correspondences for a `Molecule` or
+    /// `PreparedSubstructureHost`.
+    fn tracked_apply(
+        &self,
+        py: Python<'_>,
+        host: SubstructureHostLike<'_>,
+    ) -> PyResult<Py<TrackedReactionApplicationIter>> {
+        let applications = match host {
+            SubstructureHostLike::Prepared(host) => {
+                self.to_rust().tracked_apply_to_host(host.to_rust())
+            }
+            SubstructureHostLike::Molecule(host) => self.to_rust().tracked_apply(host.to_rust()),
+        };
+        Py::new(py, TrackedReactionApplicationIter::from_rust(applications))
+    }
+
+    /// Iterate over realized reactions for a `Molecule` or `PreparedSubstructureHost`.
+    fn apply_to_reaction(
+        &self,
+        py: Python<'_>,
+        host: SubstructureHostLike<'_>,
+    ) -> PyResult<Py<ReactionApplicationToReactionIter>> {
+        let applications = match host {
+            SubstructureHostLike::Prepared(host) => {
+                self.to_rust().apply_to_host_to_reaction(host.to_rust())
+            }
+            SubstructureHostLike::Molecule(host) => {
+                self.to_rust().apply_to_reaction(host.to_rust())
+            }
+        };
+        Py::new(
+            py,
+            ReactionApplicationToReactionIter::from_rust(applications),
+        )
+    }
+
+    /// Iterate over realized reaction spans for a `Molecule` or `PreparedSubstructureHost`.
+    fn apply_to_reaction_span(
+        &self,
+        py: Python<'_>,
+        host: SubstructureHostLike<'_>,
+    ) -> PyResult<Py<ReactionApplicationToReactionSpanIter>> {
+        let applications = match host {
+            SubstructureHostLike::Prepared(host) => self
+                .to_rust()
+                .apply_to_host_to_reaction_span(host.to_rust()),
+            SubstructureHostLike::Molecule(host) => {
+                self.to_rust().apply_to_reaction_span(host.to_rust())
+            }
+        };
+        Py::new(
+            py,
+            ReactionApplicationToReactionSpanIter::from_rust(applications),
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        let reaction = self.to_rust().reaction();
+        format!(
+            "PreparedReaction(lhs_atoms={}, lhs_bonds={}, deltas={}, config={})",
+            reaction.lhs().atoms().count(),
+            reaction.lhs().bonds().count(),
+            reaction.deltas().len(),
+            self.config().__repr__(),
+        )
+    }
+}
+
+impl PreparedReaction {
+    pub(crate) fn from_rust(prepared: GraphIrPreparedReaction) -> Self {
+        Self(prepared)
+    }
+
+    pub(crate) fn to_rust(&self) -> &GraphIrPreparedReaction {
+        &self.0
     }
 }
 
@@ -764,7 +959,7 @@ impl ReactionProductsIter {
         slf
     }
 
-    fn __next__(&mut self) -> PyResult<Option<Vec<Molecule>>> {
+    pub(crate) fn __next__(&mut self) -> PyResult<Option<Vec<Molecule>>> {
         match self.inner.next() {
             Some(Ok(products)) => Ok(Some(
                 products.into_iter().map(Molecule::from_rust).collect(),
@@ -934,8 +1129,11 @@ mod tests {
     fn test_reaction_application_config_default() {
         let expected = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::GraphAndOverlays(),
-            SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            SubgraphIsomorphismAlgorithm::BitsetRi(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
+            AutomorphismAlgorithm::TrailIr(),
+            false,
+            false,
         );
 
         assert_eq!(ReactionApplicationConfig::default(), expected);
@@ -945,8 +1143,11 @@ mod tests {
     fn test_reaction_application_config_value() {
         let config = ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::BitsetRi(),
+            SubgraphIsomorphismAlgorithm::Glasgow(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
+            AutomorphismAlgorithm::Nauty(),
+            true,
+            true,
         );
 
         assert_eq!(
@@ -955,20 +1156,28 @@ mod tests {
         );
         assert_eq!(
             config.subgraph_isomorphism_algorithm(),
-            SubgraphIsomorphismAlgorithm::BitsetRi()
+            SubgraphIsomorphismAlgorithm::Glasgow()
         );
         assert_eq!(
             config.relevant_cycle_algorithm(),
             RelevantCycleEnumerationAlgorithm::Vismara()
         );
         assert_eq!(
+            config.automorphism_algorithm(),
+            AutomorphismAlgorithm::Nauty()
+        );
+        assert!(config.reduce_pattern_symmetry());
+        assert!(config.reduce_host_symmetry());
+        assert_eq!(
             config.__repr__(),
             concat!(
                 "ReactionApplicationConfig(",
                 "match_algorithm=SubstructureMatchAlgorithm.Incidence(), ",
-                "subgraph_isomorphism_algorithm=",
-                "SubgraphIsomorphismAlgorithm.BitsetRi(), ",
-                "relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
+                "subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Glasgow(), ",
+                "relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(), ",
+                "automorphism_algorithm=AutomorphismAlgorithm.Nauty(), ",
+                "reduce_pattern_symmetry=True, ",
+                "reduce_host_symmetry=True)"
             )
         );
         assert_ne!(config, ReactionApplicationConfig::default());
@@ -977,24 +1186,36 @@ mod tests {
     #[rstest]
     #[case::default(
         GraphIrSubstructureMatchAlgorithm::GraphAndOverlays,
-        GraphCoreSubgraphIsomorphismAlgorithm::Vf2Rdkit,
-        GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
-        ReactionApplicationConfig::default()
-    )]
-    #[case::incidence_bitset_ri(
-        GraphIrSubstructureMatchAlgorithm::Incidence,
         GraphCoreSubgraphIsomorphismAlgorithm::BitsetRi,
         GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+        GraphCoreAutomorphismAlgorithm::TrailIr,
+        false,
+        false,
+        ReactionApplicationConfig::default()
+    )]
+    #[case::incidence_glasgow_sym(
+        GraphIrSubstructureMatchAlgorithm::Incidence,
+        GraphCoreSubgraphIsomorphismAlgorithm::Glasgow,
+        GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
+        GraphCoreAutomorphismAlgorithm::Nauty,
+        true,
+        true,
         ReactionApplicationConfig::new(
             SubstructureMatchAlgorithm::Incidence(),
-            SubgraphIsomorphismAlgorithm::BitsetRi(),
+            SubgraphIsomorphismAlgorithm::Glasgow(),
             RelevantCycleEnumerationAlgorithm::Vismara(),
+            AutomorphismAlgorithm::Nauty(),
+            true,
+            true,
         )
     )]
     fn test_reaction_application_config_from_rust(
         #[case] match_algorithm: GraphIrSubstructureMatchAlgorithm,
         #[case] subgraph_isomorphism_algorithm: GraphCoreSubgraphIsomorphismAlgorithm,
         #[case] relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm,
+        #[case] automorphism_algorithm: GraphCoreAutomorphismAlgorithm,
+        #[case] reduce_pattern_symmetry: bool,
+        #[case] reduce_host_symmetry: bool,
         #[case] expected: ReactionApplicationConfig,
     ) {
         assert_eq!(
@@ -1002,9 +1223,9 @@ mod tests {
                 match_algorithm,
                 subgraph_isomorphism_algorithm,
                 relevant_cycle_algorithm,
-                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
-                reduce_pattern_symmetry: false,
-                reduce_host_symmetry: false,
+                automorphism_algorithm,
+                reduce_pattern_symmetry,
+                reduce_host_symmetry,
             }),
             expected,
         );
@@ -1035,6 +1256,9 @@ mod tests {
             SubstructureMatchAlgorithm::Incidence(),
             subgraph_isomorphism_algorithm,
             RelevantCycleEnumerationAlgorithm::Vismara(),
+            AutomorphismAlgorithm::Nauty(),
+            true,
+            false,
         );
 
         assert_eq!(
@@ -1043,8 +1267,8 @@ mod tests {
                 match_algorithm: GraphIrSubstructureMatchAlgorithm::Incidence,
                 subgraph_isomorphism_algorithm: expected_subgraph_isomorphism_algorithm,
                 relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
-                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::TrailIr,
-                reduce_pattern_symmetry: false,
+                automorphism_algorithm: GraphCoreAutomorphismAlgorithm::Nauty,
+                reduce_pattern_symmetry: true,
                 reduce_host_symmetry: false,
             }
         );
@@ -2326,7 +2550,13 @@ mod tests {
         Python::attach(|py| {
             let reaction = Reaction::from_rust(py, expected_reaction.clone()).unwrap();
             let host = Py::new(py, Molecule::from_rust(expected_host.clone())).unwrap();
-            let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
+            let application = reaction
+                .apply(
+                    py,
+                    SubstructureHostLike::Molecule(host.bind(py).borrow()),
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(reaction.to_rust(py).unwrap(), expected_reaction);
             assert_eq!(host.bind(py).borrow().to_rust(), &expected_host);
@@ -2362,7 +2592,13 @@ mod tests {
         Python::attach(|py| {
             let mut reaction = Reaction::from_rust(py, expected_reaction).unwrap();
             let host = Py::new(py, Molecule::from_rust(expected_host)).unwrap();
-            let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
+            let application = reaction
+                .apply(
+                    py,
+                    SubstructureHostLike::Molecule(host.bind(py).borrow()),
+                    None,
+                )
+                .unwrap();
 
             *reaction.lhs.bind(py).borrow_mut().to_rust_mut() =
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -2411,26 +2647,41 @@ mod tests {
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
+        AutomorphismAlgorithm::TrailIr(),
+        false,
+        false,
     ))]
     #[case::ray_kirsch(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::RayKirsch(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
+        AutomorphismAlgorithm::TrailIr(),
+        false,
+        false,
     ))]
     #[case::bitset_ri(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::BitsetRi(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
+        AutomorphismAlgorithm::TrailIr(),
+        false,
+        false,
     ))]
     #[case::glasgow(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::GraphAndOverlays(),
         SubgraphIsomorphismAlgorithm::Glasgow(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
+        AutomorphismAlgorithm::TrailIr(),
+        false,
+        false,
     ))]
     #[case::incidence(ReactionApplicationConfig::new(
         SubstructureMatchAlgorithm::Incidence(),
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
+        AutomorphismAlgorithm::TrailIr(),
+        false,
+        false,
     ))]
     fn test_reaction_apply_config(
         reaction_application: (GraphIrReaction, GraphIrMolecule),
@@ -2440,7 +2691,13 @@ mod tests {
         Python::attach(|py| {
             let reaction = Reaction::from_rust(py, reaction).unwrap();
             let host = Py::new(py, Molecule::from_rust(host)).unwrap();
-            let application = reaction.apply(py, host, Some(config)).unwrap();
+            let application = reaction
+                .apply(
+                    py,
+                    SubstructureHostLike::Molecule(host.bind(py).borrow()),
+                    Some(config),
+                )
+                .unwrap();
 
             let products: Vec<GraphIrMolecule> = iter::from_fn(|| {
                 application
@@ -2501,7 +2758,14 @@ mod tests {
             .unwrap();
             let host = Py::new(py, Molecule::from_rust(GraphIrMolecule::default())).unwrap();
 
-            let error = reaction.apply(py, host, None).err().unwrap();
+            let error = reaction
+                .apply(
+                    py,
+                    SubstructureHostLike::Molecule(host.bind(py).borrow()),
+                    None,
+                )
+                .err()
+                .unwrap();
 
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
@@ -3509,5 +3773,125 @@ mod tests {
         });
         assert!(products.__next__().unwrap().is_none());
         assert!(products.__next__().unwrap().is_none());
+    }
+
+    #[rstest]
+    fn test_prepared_reaction_new_and_apply(
+        reaction_application: (GraphIrReaction, GraphIrMolecule),
+    ) {
+        let (expected_reaction, expected_host) = reaction_application;
+        Python::attach(|py| {
+            let mut reaction = Reaction::from_rust(py, expected_reaction.clone()).unwrap();
+            let config = ReactionApplicationConfig::new(
+                SubstructureMatchAlgorithm::GraphAndOverlays(),
+                SubgraphIsomorphismAlgorithm::BitsetRi(),
+                RelevantCycleEnumerationAlgorithm::Vismara(),
+                AutomorphismAlgorithm::TrailIr(),
+                true,
+                true,
+            );
+            let prepared = PreparedReaction::new(py, &reaction, Some(config)).unwrap();
+
+            // Mutating source reaction after preparation must not affect the prepared snapshot.
+            *reaction.lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
+            reaction.deltas = Py::new(py, Deltas::from_rust(GraphIrDeltas::default())).unwrap();
+
+            assert_eq!(
+                prepared.reaction(py).unwrap().to_rust(py).unwrap(),
+                expected_reaction
+            );
+            assert_eq!(prepared.config(), config);
+            assert_eq!(
+                prepared.__repr__(),
+                format!(
+                    "PreparedReaction(lhs_atoms=1, lhs_bonds=0, deltas=1, config={})",
+                    config.__repr__()
+                )
+            );
+
+            let host = Py::new(py, Molecule::from_rust(expected_host.clone())).unwrap();
+            let prepared_host = Py::new(
+                py,
+                PreparedSubstructureHost::from_rust(GraphIrPreparedSubstructureHost::new(
+                    &expected_host,
+                )),
+            )
+            .unwrap();
+            let from_mol = prepared
+                .apply(py, SubstructureHostLike::Molecule(host.bind(py).borrow()))
+                .unwrap();
+            let from_host = prepared
+                .apply(
+                    py,
+                    SubstructureHostLike::Prepared(prepared_host.bind(py).borrow()),
+                )
+                .unwrap();
+            let mol_products: Vec<GraphIrMolecule> = iter::from_fn(|| {
+                from_mol
+                    .borrow_mut(py)
+                    .__next__()
+                    .unwrap()
+                    .map(|p| p.to_rust().clone())
+            })
+            .collect();
+            let host_products: Vec<GraphIrMolecule> = iter::from_fn(|| {
+                from_host
+                    .borrow_mut(py)
+                    .__next__()
+                    .unwrap()
+                    .map(|p| p.to_rust().clone())
+            })
+            .collect();
+            assert_eq!(mol_products.len(), 1);
+            assert_eq!(mol_products, host_products);
+        });
+    }
+
+    #[rstest]
+    fn test_prepared_reaction_new_error() {
+        Python::attach(|py| {
+            // Reaction-wide DPO precondition failure -> `InvalidStructureError`.
+            let invalid_dpo = Reaction::from_rust(
+                py,
+                GraphIrReaction::new(
+                    GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                        atoms: vec![
+                            GraphIrAtomForm::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::O),
+                        ],
+                        bonds: vec![(
+                            GraphIrAtomId(0),
+                            GraphIrAtomId(1),
+                            GraphIrBondForm::from_order(1),
+                        )],
+                        ..Default::default()
+                    }),
+                    [GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
+                        id: GraphIrAtomId(0),
+                        attributes: GraphIrAtomForm::from_element(ChemElement::C),
+                    })]
+                    .into_iter()
+                    .collect(),
+                ),
+            )
+            .unwrap();
+            let error = PreparedReaction::new(py, &invalid_dpo, None).unwrap_err();
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+
+            // Live component corruption -> `ValueError`.
+            let mut corrupted = Reaction::from_rust(py, GraphIrReaction::default()).unwrap();
+            corrupted.deltas = Py::new(
+                py,
+                Deltas::from_rust(GraphIrDeltas::from_iter([GraphIrDelta::Atom(
+                    GraphIrAtomDelta::Remove {
+                        id: GraphIrAtomId(0),
+                        attributes: GraphIrAtomForm::from_element(ChemElement::C),
+                    },
+                )])),
+            )
+            .unwrap();
+            let error = PreparedReaction::new(py, &corrupted, None).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+        });
     }
 }

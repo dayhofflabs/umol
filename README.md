@@ -151,26 +151,32 @@ len(pyrrole_n.substructure_matches(histidine))   # 1
 len(pyridine_n.substructure_matches(histidine))  # 1
 len(aromatic_n.substructure_matches(histidine))  # 2
 len(any_n.substructure_matches(histidine))       # 3, including ammonium
+aromatic_n.has_substructure_match(histidine)     # True
+aromatic_n.count_substructure_matches(histidine) # 2
 ```
 
 Each match is a correspondence from pattern entities to host entities.
 `match.atoms.matched_pairs` contains atom pairs; `match.bonds`,
 `match.aromatic_systems`, and the other components cover the remaining families.
 
-Algorithm choice can be configured explicitly. This example matches through the
-incidence graph using Ray–Kirsch subgraph isomorphism:
+Algorithm choice and symmetry reduction can be configured explicitly, and reused
+patterns or hosts can be prepared once for repeated queries:
 
 ```python
 from umol import (
+    PreparedSubstructureHost, PreparedSubstructurePattern,
     SubstructureSearchConfig, SubstructureMatchAlgorithm,
     SubgraphIsomorphismAlgorithm,
 )
 
 search = SubstructureSearchConfig(
-    match_algorithm=SubstructureMatchAlgorithm.Incidence(),
-    subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.RayKirsch(),
+    match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(),
+    subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(),
+    reduce_pattern_symmetry=True,
 )
-matches = aromatic_n.substructure_matches(histidine, config=search)
+prepared_pattern = PreparedSubstructurePattern(aromatic_n, config=search)
+prepared_host = PreparedSubstructureHost(histidine)
+count = prepared_pattern.count_matches(prepared_host)
 ```
 
 
@@ -293,7 +299,23 @@ len(product_sets[0])  # 2: furan and water
 ```
 
 `Molecule.react_all(reactants, rule)` combines several reactants before applying
-the rule and splitting its products.
+the rule and splitting its products. For repeated application across a rule
+library or molecule corpus, prepare the reused reactions and/or hosts and enable
+symmetry reduction to avoid duplicate products:
+
+```python
+from umol import (
+    PreparedReaction, PreparedSubstructureHost, ReactionApplicationConfig,
+)
+
+cfg = ReactionApplicationConfig(
+    reduce_pattern_symmetry=True,
+    reduce_host_symmetry=True,
+)
+prepared_rule = PreparedReaction(rule, config=cfg)
+prepared_host = PreparedSubstructureHost(diketone)
+unique_products = list(prepared_rule.apply(prepared_host))  # 1 deduplicated product
+```
 
 ## Composing reactions
 

@@ -252,7 +252,7 @@ impl PatternFingerprintConfig {
         *,
         width=2048,
         match_algorithm=SubstructureMatchAlgorithm::GraphAndOverlays(),
-        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm::BitsetRi(),
         relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     fn new(
@@ -778,12 +778,12 @@ mod tests {
     #[case::default(
         2048,
         SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         }
     )]
@@ -906,14 +906,14 @@ mod tests {
         PatternFingerprintConfig {
             width: 2048,
             match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays(),
-            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi(),
             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara(),
         },
         2048,
         SubstructureMatchAlgorithm::GraphAndOverlays(),
-        SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
+        SubgraphIsomorphismAlgorithm::BitsetRi(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
-        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Vf2Rdkit(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
+        "PatternFingerprintConfig(width=2048, match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.BitsetRi(), relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara())"
     )]
     #[case::custom(
         PatternFingerprintConfig {

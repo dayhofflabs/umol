@@ -102,7 +102,7 @@ approximate.
 | `*Error` | operational or setup failure, the `Err` side | 58 | all |
 | `*Validator` | validates a tier-2 invariant or tier-3 conformance property | 12 | graph after the integrity-check migration |
 | `*Resolver` | fills undetermined state under a chemistry model | 5 | graph |
-| `*Scratch` | opaque reusable buffer carrier for repeated-call hot loops | 1 | graph-core |
+| `*Scratch` | opaque reusable buffer carrier for repeated-call hot loops | 2 | graph-core |
 | `*Form` / `*Dsl` | lattice-shaped graph-IR value / boundary surface | 69 / 38 | graph-ir, py |
 
 `*Failure` has no member yet, but is named in settled vocabulary and expected to gain one.
@@ -1236,8 +1236,9 @@ overridden.
 **Not:** interchangeable, and neither is *correspondence*, which is the *result* of pattern matching
 rather than the operation.
 **In code:** first sense — `Matching`, `BondMatching`, `PerfectMatchingAlgorithm`,
-`MatchingEnumerationAlgorithm`; second sense — `substructure_matches`, `SubstructureMatchAlgorithm`,
-`Lattice::matches`.
+`MatchingEnumerationAlgorithm`; second sense — `substructure_matches`, `has_substructure_match`,
+`first_substructure_match`, `count_substructure_matches`, `SubstructureMatchAlgorithm`,
+`PreparedSubstructurePattern`, `PreparedSubstructureHost`, `Lattice::matches`.
 
 ### Mismatch
 
@@ -1471,6 +1472,18 @@ The [resolver recovery contract](operations.md#realizability-failures-and-recove
 classified failures admit recovery and how conflicts differ.
 **In code:** `AromaticityFailurePolicy`, `StereoFailurePolicy`.
 
+### Prepared
+
+A **`Prepared*`** type is an immutable, snapshotted carrier that precomputes structural plans,
+bitsets, predicate classes, validated/normalized deltas, or transparent lazy caches for repeated
+matching or reaction application. Preparation preserves exact parity with the corresponding
+one-shot operation and isolates the prepared carrier from later mutations to its source inputs.
+
+**Not:** a `*Scratch` buffer carrier (which is mutable, stateless, and reused across arbitrary
+inputs) or an unvalidated open carrier.
+**In code:** `PreparedSubgraphQuery`, `PreparedSubgraphTarget`, `PreparedSubstructurePattern`,
+`PreparedSubstructureHost`, `PreparedReaction`.
+
 ### Principal field
 
 A **principal field** is the [inherent field](#inherent-field) written first in an entity's
@@ -1505,7 +1518,8 @@ emits one product-component collection per successful match without application 
 correspondences.
 
 **Not:** `apply`, which returns unsplit products; reaction construction or composition.
-**In code:** `React`, `react`, `react_all`, `ReactionProductsIter`.
+**In code:** `React`, `react`, `react_prepared`, `react_all`, `react_all_prepared`,
+`ReactionProductsIter`.
 
 ### Reaction
 
@@ -1767,8 +1781,9 @@ Admission policy:
   results), and Rust-only unless binding benchmarks justify exposing it to Python.
 
 **Not:** a config, an algorithm parameter, a stateful solver handle, or an observable cache.
-**In code:** `AutomorphismScratch`, `Graph::automorphisms_with_scratch`,
-`Graph::canonical_labeling_with_scratch`.
+**In code:** `AutomorphismScratch`, `SubgraphIsomorphismScratch`,
+`Graph::automorphisms_with_scratch`, `Graph::canonical_labeling_with_scratch`,
+`PreparedSubgraphQuery::*_with_scratch`.
 
 ### Solution
 

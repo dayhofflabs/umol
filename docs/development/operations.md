@@ -329,3 +329,57 @@ Explicit-config and byte-input variants retain the same composition. Unresolved 
 after parse → raise, retaining partial fields, constraints, and explicit stereo, with the same
 reaction-map/agent restrictions.
 Failure channels remain owned by their respective stages.
+
+## Substructure matching and reaction application
+
+Substructure matching evaluates injective pattern-to-host embeddings under an explicit
+SubstructureMatchConfig selecting match_algorithm (GraphAndOverlays or Incidence),
+subgraph_isomorphism_algorithm (Vf2Rdkit, RayKirsch, BitsetRi, or Glasgow),
+relevant_cycle_algorithm, automorphism_algorithm (TrailIr or Nauty), reduce_pattern_symmetry, and
+reduce_host_symmetry. At the umol-graph-core layer callers always pass algorithms explicitly;
+higher-layer defaults (PatternFingerprinter and Python configs) select BitsetRi and TrailIr with
+both symmetry flags false.
+
+### Screening and enumeration
+
+Molecule::substructure_matches, has_substructure_match, first_substructure_match,
+count_substructure_matches, visit_substructure_matches, and visit_substructure_embeddings share the
+same matching semantics and algorithm/symmetry behavior. All of them panic if the pattern molecule
+carries molecule-scope constraints, which substructure matching does not evaluate. Incidence
+matching uses the non-subdivided constitution IncidenceGraph over atoms, localized bonds, and
+overlays without bond-to-bond incidences.
+
+### Symmetry reduction
+
+Enabling reduce_pattern_symmetry or reduce_host_symmetry restricts enumeration to one canonical
+embedding per orbit under proper stereo-, overlay-, and constraint-preserving automorphisms:
+
+- For Molecule substructure matching, both pattern and host symmetries are proper atom-level (or
+  incidence-level) subgroups preserving stored attributes, overlays, stereo orientation, and entity
+  constraints.
+- For Reaction application, reduce_pattern_symmetry computes proper automorphisms of the full
+  ReactionSpan (preserving deltas, stereo changes, and constraint spans) projected onto lhs, never
+  bare lhs automorphisms; if span conversion fails, pattern symmetry conservatively falls back to
+  the trivial subgroup.
+- Combining both flags enforces double-orbit canonicality over $G_Q \times G_H$, preserving
+  distinct regioisomers and enantiomers.
+
+### Prepared carriers
+
+PreparedSubstructurePattern, PreparedSubstructureHost, and PreparedReaction are immutable,
+Arc-snapshotted carriers (`Send + Sync`, `O(1)` clone for PreparedSubstructureHost and
+PreparedReaction) that precompute query plans, predicate classes, screening masks, target bitsets,
+transparent lazy caches (incidence graph, relevant rings, and per-algorithm host symmetry), and
+validated/normalized reaction deltas. Mutating source inputs after preparation has no effect, and
+prepared matching or application produces the exact same match order, products, correspondences,
+and error channels as the corresponding one-shot operations.
+
+PreparedReaction::new validates reaction-wide preconditions before preparing lhs, so
+ApplyPreconditionError is reported at construction and subsequent apply*, apply_to_host*, and
+React::react_prepared calls return iterators directly; per-match ApplyError outcomes remain
+iterator items.
+
+Practical guideline: prepare whichever side(s) are reused across calls (PreparedSubstructurePattern
+or PreparedReaction for reused patterns/rules, PreparedSubstructureHost for reused hosts);
+enabling symmetry reduction is usually worthwhile when deduplicating reaction applications or
+matching symmetric patterns and hosts.

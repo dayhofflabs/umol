@@ -1,6 +1,6 @@
 # 256 — Subgraph isomorphism performance
 
-Status: In Progress
+Status: Completed
 Date: 2026-11-27
 Relates: [151](151-python-molecule-workflows-2026-07-13.md),
 [162](162-common-subgraph-algs-2026-07-25.md),
@@ -277,10 +277,12 @@ Key algorithmic conclusions:
 - **Semantic properties:** `PreparedSubstructurePattern::new(p, cfg).matches(h)` equals
   `p.substructure_matches(h, cfg)` for every `(p, h, cfg)`. Cloning is $O(1)$ / independent;
   mutating the original `Molecule` after construction does not affect the prepared pattern.
-- **Rust/Python boundary:** Immutable (`#[pyclass(frozen)]`) owned object in `umol-py`;
-  `matches`/`has_match`/`first_match`/`count_matches` accept either `Molecule` or
-  `PreparedSubstructureHost` (justified Python union adaptation avoiding duplicated `*_in_host`
-  names in Python).
+- **Rust/Python boundary:** Immutable (`#[pyclass(frozen)]`) owned object in `umol-py`; exposes
+  `pattern()` method returning a detached `Molecule` copy (preserving the `python-api.md`
+  property-mutation contract), immutable `config` property, and
+  `matches`/`has_match`/`first_match`/`count_matches` accepting either `Molecule` or
+  `PreparedSubstructureHost` via `SubstructureHostLike` (justified Python union adaptation avoiding
+  duplicated `*_in_host` names in Python).
 
 ### `PreparedSubstructureHost` (`umol-graph-ir`, bound in `umol-py`)
 - **Type and role:** Immutable prepared host carrier for many-patterns × 1-host and $R \times M$
@@ -304,8 +306,10 @@ Key algorithmic conclusions:
   (observably pure) and thread-safe. Mutating the original `Molecule` after construction does not
   affect the prepared host.
 - **Rust/Python boundary:** Immutable (`#[pyclass(frozen)]`) owned object in `umol-py`; exposes
-  `molecule` property and `react(reaction, *, config=None)`. `Reaction.apply*` methods accept
-  `Molecule | PreparedSubstructureHost` (or `apply_to_host` — matching Rust parity cleanly).
+  `molecule()` method returning a detached `Molecule` copy (preserving the `python-api.md`
+  property-mutation contract), `react(reaction, *, config=None)`, and `react_prepared(reaction)`.
+  `Reaction.apply*` and `PreparedReaction.apply*` accept `Molecule | PreparedSubstructureHost` via
+  `SubstructureHostLike`.
 
 ### `PreparedReaction` (`umol-graph-ir`, bound in `umol-py`)
 - **Type and role:** Immutable prepared reaction carrier for repeated reaction application ($1
@@ -335,10 +339,11 @@ Key algorithmic conclusions:
   `r.apply*(h, cfg)?` / `h.react(&r, cfg)?`. Cloning is $O(1)$; mutating the source `Reaction` or
   host after preparation has no effect.
 - **Rust/Python boundary:** Immutable (`#[pyclass(frozen)]`) owned object in `umol-py`; exposes
-  `reaction` and `config` properties,
+  `reaction()` method returning a detached `Reaction` copy (preserving the `python-api.md`
+  property-mutation contract), immutable `config` property,
   `apply`/`tracked_apply`/`apply_to_reaction`/`apply_to_reaction_span` accepting `Molecule |
-  PreparedSubstructureHost`, and `react_prepared` parity on `Molecule` / `PreparedSubstructureHost`
-  / `Molecule.react_all`.
+  PreparedSubstructureHost` via `SubstructureHostLike`, and `react_prepared` / `react_all_prepared`
+  parity on `Molecule` and `PreparedSubstructureHost`.
 
 ## Staged implementation plan
 
@@ -921,18 +926,31 @@ Every stage ends **green** (`cargo test --workspace` + clippy `-D warnings`, and
       `apply/vf2rdkit_unsym`).
 
 ### Stage S7 — `umol-py` bindings, defaults, documentation, and verification (additive/default switch, green)
-- **S7a (`umol-py`):** Update `SubstructureSearchConfig`, `ReactionApplicationConfig`, and
-  `PatternFingerprintConfig` defaults (`BitsetRi()`, `TrailIr()`, `reduce_pattern_symmetry=False`,
-  `reduce_host_symmetry=False`); expose `Molecule::{has_substructure_match,
-  first_substructure_match, count_substructure_matches}`. **Additive/default switch (green).**
-  `[dep: S5b, S6a]`
-- **S7b (`umol-py`, docs):** Bind frozen `PreparedSubstructureHost`, `PreparedSubstructurePattern`,
-  and `PreparedReaction` (supporting `Molecule | PreparedSubstructureHost` on
-  `PreparedSubstructurePattern` matching methods, `Reaction.apply*`, and `PreparedReaction.apply*`,
-  plus `PreparedSubstructureHost.react` and `react_prepared` parity); add Rust PyO3 tests + Python
-  `pytest` suite (`umol-py/.venv`, Python 3.13); update
-  `docs/development/{nomenclature,operations,python-api}.md` and `README.md`. **Additive (green).**
-  `[dep: S6d, S7a]`
+- **S7a (`umol-py`) — Done:** Switched `SubstructureSearchConfig`, `ReactionApplicationConfig`, and
+  `PatternFingerprintConfig` defaults to `SubgraphIsomorphismAlgorithm.BitsetRi()`, exposed
+  `automorphism_algorithm` (default `AutomorphismAlgorithm.TrailIr()`), `reduce_pattern_symmetry`
+  (default `False`), and `reduce_host_symmetry` (default `False`) on `SubstructureSearchConfig` and
+  `ReactionApplicationConfig`, and exposed `Molecule::{has_substructure_match,
+  first_substructure_match, count_substructure_matches}` (`umol-py/src/{substructure,reaction,
+  molecule,fingerprint/config}.rs`). **Additive/default switch (green).** `[dep: S5b, S6a]`
+- **S7b (`umol-py`, docs) — Done:** Bound frozen `PreparedSubstructureHost`,
+  `PreparedSubstructurePattern`, and `PreparedReaction` (`umol-py/src/{substructure,reaction,
+  molecule,lib}.rs`, `umol-py/python/umol/__init__.py`) with `SubstructureHostLike` (`Molecule |
+  PreparedSubstructureHost`) on `PreparedSubstructurePattern` matching methods, `Reaction.apply*`,
+  and `PreparedReaction.apply*`; exposed detached-copy `molecule()` / `pattern()` / `reaction()`
+  methods (preserving `docs/development/python-api.md`'s property-mutation contract) and read-only
+  `config` properties; exposed `Molecule::{react_prepared, react_all_prepared}` and
+  `PreparedSubstructureHost::{react, react_prepared}`. Added Rust PyO3 tests and Python `pytest`
+  coverage (`test_{substructure,reaction,fingerprint,import,class_constructor_signatures}.py`);
+  updated `docs/development/{nomenclature,operations,python-api}.md` and `README.md`. **Additive
+  (green).** `[dep: S6d, S7a]`
+  - *Final verification gate (`umol-py/.venv`, Python 3.13.18):* `cargo +nightly fmt --all --
+    --check`, `git diff --check`, `cargo clippy --workspace --all-targets -- -D warnings` (0
+    warnings), `cargo test --workspace` (all workspace crates + doc tests green, including 1,792
+    `umol-py` Rust unit tests), `umol-graph-core --test property --features proptest
+    subgraph_isomorphism` (27 passed), `umol-graph-ir --test property --features proptest`
+    (`substructure`: 42 passed; `reaction`: 105 passed, 1 ignored), `maturin develop` + `pytest -q
+    umol-py/tests` (**3,726 passed, 2 skipped**), and README Python snippet verification.
 
 ### Critical path & verification gate
 - **Critical path:** `S0a → S1a/S1b → S1c → S2a/S2b/S2c → S2d → S3a → S3b → S4a → S4b → S4c → S5a →

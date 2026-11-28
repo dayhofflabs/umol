@@ -675,6 +675,49 @@ for products in Molecule.react_all([first, second], reaction):
     print(products)
 ```
 
+### Substructure search, prepared carriers, and reaction application
+
+SubstructureSearchConfig and ReactionApplicationConfig are frozen, keyword-only configuration
+values exposing match_algorithm, subgraph_isomorphism_algorithm, relevant_cycle_algorithm,
+automorphism_algorithm, reduce_pattern_symmetry, and reduce_host_symmetry. Both default to
+GraphAndOverlays(), BitsetRi(), Vismara(), TrailIr(), False, and False. PatternFingerprintConfig
+likewise defaults subgraph_isomorphism_algorithm to BitsetRi(), matching Rust's
+PatternFingerprinter::new.
+
+Molecule exposes substructure_matches, has_substructure_match, first_substructure_match, and
+count_substructure_matches with keyword-only config=None. Rust's closure visitors
+(visit_substructure_matches, visit_substructure_embeddings, and the prepared visit_* methods) remain
+Rust-only so hot-loop screening does not incur per-match Python callback overhead across the FFI
+boundary; Python callers use has_match, first_match, count_matches, or matches directly.
+
+PreparedSubstructureHost, PreparedSubstructurePattern, and PreparedReaction are opaque frozen
+carriers (`#[pyclass(frozen)]`) with Python object-identity equality (matching GraphSymmetry).
+Construction captures detached Rust snapshots of the supplied Molecule or Reaction, so later
+mutations to source inputs have no effect. Immutable configuration access is exposed through the
+read-only `config` property on PreparedSubstructurePattern and PreparedReaction. Because Molecule
+and Reaction are mutable Python objects, `molecule()`, `pattern()`, and `reaction()` are methods
+returning detached mutable copies rather than properties (matching ReactionSpan.lhs and rhs and
+preserving the property-mutation contract).
+
+PreparedSubstructurePattern's matches, has_match, first_match, and count_matches methods, as well
+as Reaction's and PreparedReaction's apply, tracked_apply, apply_to_reaction, and
+apply_to_reaction_span methods, accept either a Molecule or a PreparedSubstructureHost through an
+internal SubstructureHostLike argument adapter. This Python union avoids duplicating Rust's
+*_in_host and *_to_host method names while dispatching directly to the corresponding Rust prepared
+path without extra host copies.
+
+PreparedReaction(reaction, *, config=None) snapshots and validates the live Reaction components
+(raising ValueError on component incoherence) and checks reaction-wide application preconditions
+(raising InvalidStructureError on ApplyPreconditionError). Its application methods return the same
+one-shot iterators directly without re-running precondition checks; per-match failures remain
+iterator next() exceptions.
+
+React parity is exposed as Molecule.react_prepared(reaction),
+Molecule.react_all_prepared(reactants, reaction), PreparedSubstructureHost.react(reaction, *,
+config=None), and PreparedSubstructureHost.react_prepared(reaction). Keeping react_prepared and
+react_all_prepared separate from react and react_all avoids an ambiguous config keyword when a
+PreparedReaction already binds its application configuration.
+
 ## Choosing the Python mutation model
 
 Begin with the public behavior of the corresponding Rust type. An owned transformation normally

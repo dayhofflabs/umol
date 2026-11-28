@@ -53,7 +53,9 @@ use crate::model::stereo::StereoModel;
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
-use crate::reaction::{Reaction, ReactionApplicationConfig, ReactionProductsIter};
+use crate::reaction::{
+    PreparedReaction, Reaction, ReactionApplicationConfig, ReactionProductsIter,
+};
 use crate::resolve::{ResolveConfig, ResolveContradiction, ResolveReport, Solution};
 use crate::ring::{RingConfig, RingModel, RingViews};
 use crate::smiles::SmilesIoConfig;
@@ -899,6 +901,19 @@ impl Molecule {
         Py::new(py, ReactionProductsIter::from_rust(products))
     }
 
+    /// Apply a `PreparedReaction` and lazily emit one connected product-component list per match.
+    ///
+    /// Reaction-wide preconditions were checked when `reaction` was prepared; per-match failures
+    /// are raised during iteration.
+    fn react_prepared(
+        &self,
+        py: Python<'_>,
+        reaction: &PreparedReaction,
+    ) -> PyResult<Py<ReactionProductsIter>> {
+        let products = GraphIrReact::react_prepared(self.to_rust(), reaction.to_rust());
+        Py::new(py, ReactionProductsIter::from_rust(products))
+    }
+
     /// Combine `reactants` in iterable order, apply `reaction`, and lazily emit product components.
     ///
     /// Any iterable is accepted, including an empty iterable. Matching is eager; product
@@ -930,6 +945,31 @@ impl Molecule {
             config.unwrap_or_default().to_rust(),
         )
         .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+
+        Py::new(py, ReactionProductsIter::from_rust(products))
+    }
+
+    /// Combine `reactants` in iterable order, apply a `PreparedReaction`, and lazily emit product
+    /// components.
+    ///
+    /// Any iterable of `Molecule` is accepted, including an empty iterable. Reaction-wide
+    /// preconditions were checked when `reaction` was prepared; per-match failures are raised
+    /// during iteration.
+    #[staticmethod]
+    fn react_all_prepared(
+        py: Python<'_>,
+        reactants: &Bound<'_, PyAny>,
+        reaction: &PreparedReaction,
+    ) -> PyResult<Py<ReactionProductsIter>> {
+        let reactants = reactants
+            .try_iter()?
+            .map(|item| -> PyResult<Py<Molecule>> { Ok(item?.cast_into::<Molecule>()?.unbind()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let reactants = reactants
+            .iter()
+            .map(|molecule| -> PyResult<_> { Ok(molecule.try_borrow(py)?.to_rust().clone()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let products = GraphIrReact::react_prepared(reactants.as_slice(), reaction.to_rust());
 
         Py::new(py, ReactionProductsIter::from_rust(products))
     }
@@ -984,6 +1024,43 @@ impl Molecule {
             .into_iter()
             .map(MoleculeCorrespondence::from_rust)
             .collect()
+    }
+
+    /// Return whether this pattern has at least one occurrence in `host`.
+    #[pyo3(signature = (host, *, config=None))]
+    fn has_substructure_match(
+        &self,
+        host: &Self,
+        config: Option<SubstructureSearchConfig>,
+    ) -> bool {
+        let config = config.unwrap_or_default().to_rust();
+        self.to_rust()
+            .has_substructure_match(host.to_rust(), config)
+    }
+
+    /// Return the first occurrence of this pattern in `host`, or `None` if no match exists.
+    #[pyo3(signature = (host, *, config=None))]
+    fn first_substructure_match(
+        &self,
+        host: &Self,
+        config: Option<SubstructureSearchConfig>,
+    ) -> Option<MoleculeCorrespondence> {
+        let config = config.unwrap_or_default().to_rust();
+        self.to_rust()
+            .first_substructure_match(host.to_rust(), config)
+            .map(MoleculeCorrespondence::from_rust)
+    }
+
+    /// Count occurrences of this pattern in `host` without materializing correspondences.
+    #[pyo3(signature = (host, *, config=None))]
+    fn count_substructure_matches(
+        &self,
+        host: &Self,
+        config: Option<SubstructureSearchConfig>,
+    ) -> u64 {
+        let config = config.unwrap_or_default().to_rust();
+        self.to_rust()
+            .count_substructure_matches(host.to_rust(), config)
     }
 
     /// Generate an unfolded binary hashed fingerprint.
@@ -1246,6 +1323,7 @@ impl Molecule {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::iter;
 
     use pyo3::exceptions::{PyAttributeError, PyRuntimeError};
     use pyo3::types::{PyBytes, PyList};
@@ -1270,9 +1348,10 @@ mod tests {
         AromaticSystemForm as GraphIrAromaticSystemForm,
         AromaticSystemId as GraphIrAromaticSystemId, AtomFieldChange as GraphIrAtomFieldChange,
         AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle,
-        AtomUpdate as GraphIrAtomUpdate, BondForm as GraphIrBondForm,
-        Constraint as GraphIrConstraint, DativeBondForm as GraphIrDativeBondForm,
-        DativeBondId as GraphIrDativeBondId, Edit as GraphIrEdit, Edits as GraphIrEdits,
+        AtomUpdate as GraphIrAtomUpdate, BondDelta as GraphIrBondDelta,
+        BondForm as GraphIrBondForm, Constraint as GraphIrConstraint,
+        DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
+        Delta as GraphIrDelta, Deltas as GraphIrDeltas, Edit as GraphIrEdit, Edits as GraphIrEdits,
         Entity as GraphIrEntity, MoleculeConstraint as GraphIrMoleculeConstraint,
         MoleculeCorrespondence as GraphIrMoleculeCorrespondence,
         MulticenterBondForm as GraphIrMulticenterBondForm,
@@ -1280,6 +1359,7 @@ mod tests {
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
+        Reaction as GraphIrReaction,
         SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm,
         SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
     };
@@ -2572,6 +2652,60 @@ mod tests {
                     "C#c-4#h0#n4#u0#s#v0#d0#t0#a!#m!",
                 ]
             );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_substructure_screening_and_react_prepared() {
+        let host = Molecule::from_rust(mol_dsl!(
+            r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
+        ));
+        let pattern = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#));
+        let absent = Molecule::from_rust(mol_dsl!(r#"{:atoms ["S"]}"#));
+
+        assert!(pattern.has_substructure_match(&host, None));
+        assert!(!absent.has_substructure_match(&host, None));
+        assert_eq!(pattern.count_substructure_matches(&host, None), 2);
+        assert_eq!(absent.count_substructure_matches(&host, None), 0);
+        assert_eq!(
+            pattern.first_substructure_match(&host, None),
+            pattern.substructure_matches(&host, None).into_iter().next()
+        );
+        assert_eq!(absent.first_substructure_match(&host, None), None);
+
+        Python::attach(|py| {
+            let reaction = Reaction::from_rust(
+                py,
+                GraphIrReaction::new(
+                    mol_dsl!(r#"{:atoms ["C" "C"] :bonds []}"#),
+                    GraphIrDeltas::from_iter([GraphIrDelta::Bond(GraphIrBondDelta::Add {
+                        id: GraphIrBondId(0),
+                        atoms: [GraphIrAtomId(0), GraphIrAtomId(1)],
+                        attributes: GraphIrBondForm::from_order(1),
+                    })]),
+                ),
+            )
+            .unwrap();
+            let prepared = PreparedReaction::new(py, &reaction, None).unwrap();
+            let direct = host.react(py, &reaction, None).unwrap();
+            let via_prepared = host.react_prepared(py, &prepared).unwrap();
+            let direct_sets: Vec<Vec<GraphIrMolecule>> = iter::from_fn(|| {
+                direct
+                    .borrow_mut(py)
+                    .__next__()
+                    .unwrap()
+                    .map(|set| set.into_iter().map(|m| m.to_rust().clone()).collect())
+            })
+            .collect();
+            let prepared_sets: Vec<Vec<GraphIrMolecule>> = iter::from_fn(|| {
+                via_prepared
+                    .borrow_mut(py)
+                    .__next__()
+                    .unwrap()
+                    .map(|set| set.into_iter().map(|m| m.to_rust().clone()).collect())
+            })
+            .collect();
+            assert_eq!(prepared_sets, direct_sets);
         });
     }
 }

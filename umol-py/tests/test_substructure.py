@@ -1,7 +1,10 @@
 import pytest
 
 from umol import (
+    AutomorphismAlgorithm,
     Molecule,
+    PreparedSubstructureHost,
+    PreparedSubstructurePattern,
     RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
@@ -16,45 +19,69 @@ def test_substructure_search_config_default():
     assert config.match_algorithm == SubstructureMatchAlgorithm.GraphAndOverlays()
     assert (
         config.subgraph_isomorphism_algorithm
-        == SubgraphIsomorphismAlgorithm.Vf2Rdkit()
+        == SubgraphIsomorphismAlgorithm.BitsetRi()
     )
     assert (
         config.relevant_cycle_algorithm
         == RelevantCycleEnumerationAlgorithm.Vismara()
     )
+    assert config.automorphism_algorithm == AutomorphismAlgorithm.TrailIr()
+    assert config.reduce_pattern_symmetry is False
+    assert config.reduce_host_symmetry is False
     assert repr(config) == (
         "SubstructureSearchConfig("
         "match_algorithm=SubstructureMatchAlgorithm.GraphAndOverlays(), "
         "subgraph_isomorphism_algorithm="
-        "SubgraphIsomorphismAlgorithm.Vf2Rdkit(), "
+        "SubgraphIsomorphismAlgorithm.BitsetRi(), "
         "relevant_cycle_algorithm="
-        "RelevantCycleEnumerationAlgorithm.Vismara())"
+        "RelevantCycleEnumerationAlgorithm.Vismara(), "
+        "automorphism_algorithm=AutomorphismAlgorithm.TrailIr(), "
+        "reduce_pattern_symmetry=False, "
+        "reduce_host_symmetry=False)"
     )
 
 
 @pytest.mark.parametrize(
-    ("match_algorithm", "subgraph_isomorphism_algorithm"),
+    (
+        "match_algorithm",
+        "subgraph_isomorphism_algorithm",
+        "automorphism_algorithm",
+        "reduce_pattern_symmetry",
+        "reduce_host_symmetry",
+    ),
     [
         pytest.param(
             SubstructureMatchAlgorithm.GraphAndOverlays(),
             SubgraphIsomorphismAlgorithm.BitsetRi(),
-            id="graph-bitset-ri",
+            AutomorphismAlgorithm.TrailIr(),
+            True,
+            False,
+            id="graph-bitset-ri-pattern-sym",
         ),
         pytest.param(
             SubstructureMatchAlgorithm.Incidence(),
             SubgraphIsomorphismAlgorithm.Glasgow(),
-            id="incidence-glasgow",
+            AutomorphismAlgorithm.Nauty(),
+            True,
+            True,
+            id="incidence-glasgow-both-sym",
         ),
     ],
 )
 def test_substructure_search_config_value(
     match_algorithm,
     subgraph_isomorphism_algorithm,
+    automorphism_algorithm,
+    reduce_pattern_symmetry,
+    reduce_host_symmetry,
 ):
     config = SubstructureSearchConfig(
         match_algorithm=match_algorithm,
         subgraph_isomorphism_algorithm=subgraph_isomorphism_algorithm,
         relevant_cycle_algorithm=RelevantCycleEnumerationAlgorithm.Vismara(),
+        automorphism_algorithm=automorphism_algorithm,
+        reduce_pattern_symmetry=reduce_pattern_symmetry,
+        reduce_host_symmetry=reduce_host_symmetry,
     )
 
     assert config.match_algorithm == match_algorithm
@@ -63,13 +90,21 @@ def test_substructure_search_config_value(
         config.relevant_cycle_algorithm
         == RelevantCycleEnumerationAlgorithm.Vismara()
     )
+    assert config.automorphism_algorithm == automorphism_algorithm
+    assert config.reduce_pattern_symmetry is reduce_pattern_symmetry
+    assert config.reduce_host_symmetry is reduce_host_symmetry
     assert repr(config) == (
         "SubstructureSearchConfig("
         f"match_algorithm={match_algorithm!r}, "
         f"subgraph_isomorphism_algorithm={subgraph_isomorphism_algorithm!r}, "
         "relevant_cycle_algorithm="
-        "RelevantCycleEnumerationAlgorithm.Vismara())"
+        "RelevantCycleEnumerationAlgorithm.Vismara(), "
+        f"automorphism_algorithm={automorphism_algorithm!r}, "
+        f"reduce_pattern_symmetry={reduce_pattern_symmetry!r}, "
+        f"reduce_host_symmetry={reduce_host_symmetry!r})"
     )
+    with pytest.raises(AttributeError):
+        config.reduce_pattern_symmetry = False
 
 
 def test_substructure_search_config_keyword_error():
@@ -175,3 +210,169 @@ def test_molecule_substructure_matches_keyword_error():
         ),
     ):
         pattern.substructure_matches(host, SubstructureSearchConfig())
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "has_substructure_match",
+        "first_substructure_match",
+        "count_substructure_matches",
+    ],
+)
+def test_molecule_substructure_screening_keyword_error(method):
+    pattern = Molecule.parse('{:atoms ["C"] :bonds []}')
+    host = Molecule.parse('{:atoms ["C"] :bonds []}')
+
+    with pytest.raises(TypeError):
+        getattr(pattern, method)(host, SubstructureSearchConfig())
+
+
+@pytest.mark.parametrize(
+    ("reduce_pattern_symmetry", "reduce_host_symmetry", "expected_count"),
+    [
+        (False, False, 4),
+        (True, False, 2),
+        (False, True, 2),
+        (True, True, 1),
+    ],
+)
+def test_molecule_substructure_screening_and_symmetry(
+    reduce_pattern_symmetry,
+    reduce_host_symmetry,
+    expected_count,
+):
+    butane = Molecule.parse(
+        '{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]}'
+    )
+    chain3 = Molecule.parse('{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+    absent = Molecule.parse('{:atoms ["S"] :bonds []}')
+    config = SubstructureSearchConfig(
+        reduce_pattern_symmetry=reduce_pattern_symmetry,
+        reduce_host_symmetry=reduce_host_symmetry,
+    )
+
+    matches = chain3.substructure_matches(butane, config=config)
+    assert len(matches) == expected_count
+    assert chain3.has_substructure_match(butane, config=config) is True
+    assert chain3.first_substructure_match(butane, config=config) == matches[0]
+    assert chain3.count_substructure_matches(butane, config=config) == expected_count
+
+    assert absent.has_substructure_match(butane, config=config) is False
+    assert absent.first_substructure_match(butane, config=config) is None
+    assert absent.count_substructure_matches(butane, config=config) == 0
+
+
+def test_prepared_substructure_host_contract():
+    source = Molecule.parse('{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+    expected = source.copy()
+    prepared_host = PreparedSubstructureHost(source)
+
+    # Mutating source after construction does not affect the prepared host.
+    source.atoms[0].charge = 3
+    snapshot = prepared_host.molecule()
+    assert snapshot == expected
+    assert snapshot is not source
+
+    # Mutating the returned detached snapshot does not affect the prepared host.
+    snapshot.atoms[0].charge = -2
+    assert prepared_host.molecule() == expected
+
+    assert repr(prepared_host) == "PreparedSubstructureHost(atoms=3, bonds=2)"
+    with pytest.raises(AttributeError):
+        prepared_host.extra = 1
+    assert prepared_host == prepared_host
+    assert prepared_host != PreparedSubstructureHost(expected)
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        SubstructureMatchAlgorithm.GraphAndOverlays(),
+        SubstructureMatchAlgorithm.Incidence(),
+    ],
+)
+@pytest.mark.parametrize(
+    "subiso",
+    [
+        SubgraphIsomorphismAlgorithm.Vf2Rdkit(),
+        SubgraphIsomorphismAlgorithm.RayKirsch(),
+        SubgraphIsomorphismAlgorithm.BitsetRi(),
+        SubgraphIsomorphismAlgorithm.Glasgow(),
+    ],
+)
+@pytest.mark.parametrize(
+    ("reduce_pattern_symmetry", "reduce_host_symmetry", "expected_count"),
+    [
+        (False, False, 12),
+        (True, False, 6),
+        (False, True, 1),
+        (True, True, 1),
+    ],
+)
+def test_prepared_substructure_pattern_parity(
+    strategy,
+    subiso,
+    reduce_pattern_symmetry,
+    reduce_host_symmetry,
+    expected_count,
+):
+    cyclohexane = Molecule.parse(
+        '{:atoms ["C" "C" "C" "C" "C" "C"] '
+        ':bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}'
+    )
+    pattern = Molecule.parse('{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}')
+    config = SubstructureSearchConfig(
+        match_algorithm=strategy,
+        subgraph_isomorphism_algorithm=subiso,
+        reduce_pattern_symmetry=reduce_pattern_symmetry,
+        reduce_host_symmetry=reduce_host_symmetry,
+    )
+    prepared_host = PreparedSubstructureHost(cyclohexane)
+    prepared_pattern = PreparedSubstructurePattern(pattern, config=config)
+
+    direct = pattern.substructure_matches(cyclohexane, config=config)
+    from_mol = prepared_pattern.matches(cyclohexane)
+    from_host = prepared_pattern.matches(prepared_host)
+
+    assert len(direct) == expected_count
+    assert from_mol == direct
+    assert from_host == direct
+    assert prepared_pattern.has_match(cyclohexane) is True
+    assert prepared_pattern.has_match(prepared_host) is True
+    assert prepared_pattern.first_match(cyclohexane) == direct[0]
+    assert prepared_pattern.first_match(prepared_host) == direct[0]
+    assert prepared_pattern.count_matches(cyclohexane) == expected_count
+    assert prepared_pattern.count_matches(prepared_host) == expected_count
+
+
+def test_prepared_substructure_pattern_contract_and_errors():
+    source = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
+    expected = source.copy()
+    prepared = PreparedSubstructurePattern(source)
+
+    source.atoms[0].charge = 4
+    snapshot = prepared.pattern()
+    assert snapshot == expected
+    snapshot.atoms[0].charge = -1
+    assert prepared.pattern() == expected
+
+    assert prepared.config == SubstructureSearchConfig.default()
+    assert repr(prepared) == (
+        f"PreparedSubstructurePattern(atoms=2, bonds=1, config={prepared.config!r})"
+    )
+
+    with pytest.raises(AttributeError):
+        prepared.config = SubstructureSearchConfig()
+    assert prepared == prepared
+    assert prepared != PreparedSubstructurePattern(expected)
+    with pytest.raises(TypeError):
+        PreparedSubstructurePattern(source, SubstructureSearchConfig())
+    with pytest.raises(TypeError):
+        prepared.matches("not a host")
+    with pytest.raises(TypeError):
+        prepared.has_match(123)
+    with pytest.raises(TypeError):
+        prepared.first_match(object())
+    with pytest.raises(TypeError):
+        prepared.count_matches(None)
