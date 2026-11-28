@@ -4,8 +4,8 @@
 //!
 //! Two strategies compose over the chosen subgraph-isomorphism algorithm:
 //! `GraphAndOverlays` matches the atom-bond topology then post-verifies
-//! overlays; `Incidence` matches the incidence (Levi) graph for hyperedge-only
-//! connectivity.
+//! overlays; `Incidence` matches the overlay-augmented incidence graph for
+//! connectivity carried by overlays.
 
 mod prepared;
 
@@ -36,8 +36,9 @@ pub enum SubstructureMatchAlgorithm {
     /// Match the atom-bond topology, then post-verify the N-ary / special
     /// overlays against the atom correspondence.
     GraphAndOverlays,
-    /// Match the incidence (Levi) graph — true hypergraph matching for connectivity
-    /// carried solely by overlays.
+    /// Match the overlay-augmented incidence graph (localized bonds as direct
+    /// edges, overlays as pseudonodes) — useful when pattern connectivity is
+    /// carried by overlays.
     Incidence,
 }
 
