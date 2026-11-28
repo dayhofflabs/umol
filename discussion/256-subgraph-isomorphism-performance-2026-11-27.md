@@ -888,13 +888,37 @@ Every stage ends **green** (`cargo test --workspace` + clippy `-D warnings`, and
     - `ring6_coronene`: `none` 16.6 µs, `pattern` **3.15 µs**, `host` 6.15 µs → **5.74 µs**
       (**−6.3%**, **2.89×** faster than `none`), `both` 5.88 µs → **5.43 µs** (**−8.8%**,
       **3.06×** faster than `none`).
-- **S6d (`umol-graph-ir`, benches):** Add `PreparedReaction` (`new -> Result<Self,
-  ApplyPreconditionError>`, `reaction`, `config`, infallible `apply*` and `apply_to_host*`
-  iterators), `React::react_prepared(&self, reaction: &PreparedReaction) -> ReactionProductsIter`
-  (for `Molecule`, `PreparedSubstructureHost`, `[Molecule]`), share `Arc<Deltas>` in
-  `ReactionApplicationIter`, add comprehensive unit/parity/isolation/error/symmetry tests, and
-  benchmark `PreparedReaction` × `PreparedSubstructureHost` in `umol-graph-ir/benches/reaction.rs`
-  (unsym and `(true, true)` sym). **Additive (green).** `[dep: S5b, S6c]`
+- **S6d (`umol-graph-ir`, benches) — Done:** Added `PreparedReaction` (`Clone + Debug + Send +
+  Sync`, `Arc`-backed $O(1)$ clone; `new(reaction, config) -> Result<Self,
+  ApplyPreconditionError>`, `reaction`, `config`, and infallible `apply*` / `apply_to_host*`
+  iterators), re-exported from `umol_graph_ir::ir`; added `React::react_prepared(&self, reaction:
+  &PreparedReaction) -> ReactionProductsIter` for `Molecule`, `PreparedSubstructureHost`, and
+  `[Molecule]`. Refactored `ReactionApplicationIter<T>` to store `Option<ReactionApplicationState>`
+  with `Arc<Deltas>` (zero input clones on 0-match pre-screens; immediate state drop on error or
+  exhaustion), moved `bond_endpoints_are_disjoint` to `tracked_apply_at` (already checked in
+  `prepare_deltas`), and made `apply_deltas_at` borrow `&Deltas` via `Cow::Borrowed` when all
+  deltas are `Atom`/`Bond`. Added `#[rstest]` unit, parity (across all 2 × 4 × 2 × 4 strategy /
+  symmetry / automorphism / subiso combinations), isolation, error-precedence, span-fallback, and
+  `React::react_prepared` tests plus `PreparedReaction` benchmarks in
+  `umol-graph-ir/benches/reaction.rs`. **Additive (green).** `[dep: S5b, S6c]`
+  - *Verification:* `cargo +nightly fmt --all`, `git diff --check`, `cargo clippy -p umol-graph-ir
+    --all-targets --features proptest -- -D warnings` clean; `umol-graph-ir` `--lib
+    ir::reaction::tests` (278 passed, 3 ignored) and `--doc` (2 passed, 3 ignored).
+  - *Benchmark verification (`BitsetRi`, `GraphAndOverlays`, Apple M1 Pro, `--warm-up-time 1
+    --measurement-time 2 --sample-size 20`):*
+    - Single 6-atom aromatic rule (`reaction/*/all_matches`): `apply` 4.68 µs → `apply_to_host`
+      4.20 µs → `prepared_apply` **2.73 µs** (1.71×) → `prepared_apply_to_host` **2.28 µs**
+      (**2.05×**).
+    - `reaction_library` (16 rules × 6 hosts), unsym: `apply/vf2rdkit_unsym` 662 µs →
+      `apply/bitset_ri_unsym` 632 µs → `prepared_rxn` 516 µs → `apply_to_host_per_run` 492 µs →
+      `apply_to_host_prebuilt` 467 µs → `prepared_both_per_run` **380 µs** (**1.74×** vs
+      `Vf2Rdkit`) → `prepared_both_prebuilt` **351 µs** (**1.88×** vs `Vf2Rdkit`).
+    - `reaction_library` (16 rules × 6 hosts), `(true, true)` sym: `apply/bitset_ri_sym` 1.20 ms →
+      `apply_to_host_per_run` 897 µs → `apply_to_host_prebuilt` 809 µs → `prepared_rxn` 516 µs
+      (2.33×) → `prepared_both_per_run` **250 µs** (**4.81×** vs `apply_sym`; **1.52×** faster than
+      unsym `prepared_both_per_run`) → `prepared_both_prebuilt` **175 µs** (**6.86×** vs
+      `apply_sym`; **2.00×** faster than unsym `prepared_both_prebuilt`; **3.78×** faster than
+      `apply/vf2rdkit_unsym`).
 
 ### Stage S7 — `umol-py` bindings, defaults, documentation, and verification (additive/default switch, green)
 - **S7a (`umol-py`):** Update `SubstructureSearchConfig`, `ReactionApplicationConfig`, and

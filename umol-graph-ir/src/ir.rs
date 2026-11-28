@@ -115,8 +115,8 @@ pub use noncovalent::{
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
 pub use reaction::{
-    DpoContradiction, React, Reaction, ReactionApplicationIter, ReactionIntegrityError,
-    ReactionProductsIter,
+    DpoContradiction, PreparedReaction, React, Reaction, ReactionApplicationIter,
+    ReactionIntegrityError, ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
 pub use remap::MoleculeRemapping;

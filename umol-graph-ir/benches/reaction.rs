@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
     AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm, AtomHandle, AtomId, BondDelta,
     BondForm, BondId, Constraint, ConstraintSpan, Delta, Deltas, Edits, ElectronCountsForm,
-    EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm,
+    EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, PreparedReaction,
     PreparedSubstructureHost, Reaction, ReactionSpan, ReactionSpanEntries, RingScope,
     RollbackMethod, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
@@ -152,6 +152,7 @@ fn reversal_case() -> Reaction {
 
 fn benchmark_reaction(c: &mut Criterion) {
     let (reaction, host, correspondence) = application_case();
+    let prepared_reaction = PreparedReaction::new(&reaction, MATCH_CONFIG).unwrap();
     let prepared_host = PreparedSubstructureHost::new(&host);
     let applications = reaction
         .apply(&host, MATCH_CONFIG)
@@ -159,6 +160,13 @@ fn benchmark_reaction(c: &mut Criterion) {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert_eq!(applications.len(), 1);
+    assert_eq!(
+        prepared_reaction
+            .apply_to_host(&prepared_host)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        applications
+    );
     let reversal = reversal_case();
     let mut group = c.benchmark_group("reaction");
     group.bench_function("match_enumeration", |b| {
@@ -206,6 +214,24 @@ fn benchmark_reaction(c: &mut Criterion) {
                 reaction
                     .apply_to_host(black_box(&prepared_host), MATCH_CONFIG)
                     .unwrap()
+                    .collect::<Vec<_>>(),
+            )
+        })
+    });
+    group.bench_function("prepared_apply/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                prepared_reaction
+                    .apply(black_box(&host))
+                    .collect::<Vec<_>>(),
+            )
+        })
+    });
+    group.bench_function("prepared_apply_to_host/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                prepared_reaction
+                    .apply_to_host(black_box(&prepared_host))
                     .collect::<Vec<_>>(),
             )
         })
@@ -677,20 +703,54 @@ fn benchmark_reaction_library(c: &mut Criterion) {
     let prepared_hosts: Vec<PreparedSubstructureHost> =
         hosts.iter().map(PreparedSubstructureHost::new).collect();
     let reactions = reaction_library();
+    let prepared_reactions_unsym: Vec<PreparedReaction> = reactions
+        .iter()
+        .map(|reaction| {
+            PreparedReaction::new(reaction, MATCH_CONFIG)
+                .expect("benchmark reaction satisfies preconditions")
+        })
+        .collect();
+    let prepared_reactions_sym: Vec<PreparedReaction> = reactions
+        .iter()
+        .map(|reaction| {
+            PreparedReaction::new(reaction, MATCH_CONFIG_SYM)
+                .expect("benchmark reaction satisfies preconditions")
+        })
+        .collect();
 
-    for host in &hosts {
-        for reaction in &reactions {
+    for (host, prepared_host) in hosts.iter().zip(&prepared_hosts) {
+        for ((reaction, prepared_unsym), prepared_sym) in reactions
+            .iter()
+            .zip(&prepared_reactions_unsym)
+            .zip(&prepared_reactions_sym)
+        {
             let direct = reaction
                 .apply(host, MATCH_CONFIG)
                 .expect("benchmark reaction satisfies preconditions")
                 .collect::<Result<Vec<_>, _>>()
                 .expect("benchmark application succeeds");
-            let prepared = reaction
-                .apply_to_host(&PreparedSubstructureHost::new(host), MATCH_CONFIG)
+            let via_host = reaction
+                .apply_to_host(prepared_host, MATCH_CONFIG)
                 .expect("benchmark reaction satisfies preconditions")
                 .collect::<Result<Vec<_>, _>>()
                 .expect("benchmark application succeeds");
-            assert_eq!(direct.len(), prepared.len());
+            let via_prepared = prepared_unsym
+                .apply_to_host(prepared_host)
+                .collect::<Result<Vec<_>, _>>()
+                .expect("benchmark application succeeds");
+            assert_eq!(direct.len(), via_host.len());
+            assert_eq!(direct.len(), via_prepared.len());
+
+            let direct_sym = reaction
+                .apply(host, MATCH_CONFIG_SYM)
+                .expect("benchmark reaction satisfies preconditions")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("benchmark application succeeds");
+            let via_prepared_sym = prepared_sym
+                .apply_to_host(prepared_host)
+                .collect::<Result<Vec<_>, _>>()
+                .expect("benchmark application succeeds");
+            assert_eq!(direct_sym.len(), via_prepared_sym.len());
         }
     }
 
@@ -743,6 +803,40 @@ fn benchmark_reaction_library(c: &mut Criterion) {
             black_box(total)
         })
     });
+    group.bench_function("prepared_rxn/bitset_ri_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                for reaction in &prepared_reactions_unsym {
+                    total += reaction.apply(host).count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("prepared_both_per_run/bitset_ri_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                let prepared = PreparedSubstructureHost::new(host);
+                for reaction in &prepared_reactions_unsym {
+                    total += reaction.apply_to_host(&prepared).count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("prepared_both_prebuilt/bitset_ri_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &prepared_hosts {
+                for reaction in &prepared_reactions_unsym {
+                    total += reaction.apply_to_host(host).count();
+                }
+            }
+            black_box(total)
+        })
+    });
     group.bench_function("apply/bitset_ri_sym", |b| {
         b.iter(|| {
             let mut total = 0usize;
@@ -778,6 +872,40 @@ fn benchmark_reaction_library(c: &mut Criterion) {
                         .apply_to_host(host, MATCH_CONFIG_SYM)
                         .unwrap()
                         .count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("prepared_rxn/bitset_ri_sym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                for reaction in &prepared_reactions_sym {
+                    total += reaction.apply(host).count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("prepared_both_per_run/bitset_ri_sym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                let prepared = PreparedSubstructureHost::new(host);
+                for reaction in &prepared_reactions_sym {
+                    total += reaction.apply_to_host(&prepared).count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("prepared_both_prebuilt/bitset_ri_sym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &prepared_hosts {
+                for reaction in &prepared_reactions_sym {
+                    total += reaction.apply_to_host(host).count();
                 }
             }
             black_box(total)

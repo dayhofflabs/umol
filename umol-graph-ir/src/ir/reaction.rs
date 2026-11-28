@@ -8,6 +8,7 @@
 mod dpo;
 mod integrity;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem;
 use std::sync::Arc;
@@ -87,43 +88,62 @@ pub struct Reaction {
     deltas: Arc<Deltas>,
 }
 
+#[derive(Debug)]
+struct ReactionApplicationState {
+    reaction: Reaction,
+    host: Molecule,
+    deltas: Arc<Deltas>,
+    correspondences: IntoIter<MoleculeCorrespondence>,
+}
+
 /// One-shot reaction applications over an eagerly enumerated correspondence set.
 ///
-/// This operation-issued iterator is created by the [`Reaction::apply`] family and has no public
-/// constructor. The type parameter is the selected output: a molecule, a molecule with its
-/// correspondence, a reaction, or a reaction span. It owns snapshots of the reaction and host
-/// plus the reaction's normalized deltas,
-/// so later changes to the inputs cannot affect iteration. Matching is completed when the iterator
-/// is created; outputs are constructed lazily in match order. Match-local rejection is skipped;
+/// This operation-issued iterator is created by the [`Reaction::apply`] and
+/// [`PreparedReaction::apply`] families and has no public constructor. The type parameter is the
+/// selected output: a molecule, a molecule with its correspondence, a reaction, or a reaction
+/// span. It owns snapshots of the reaction and host plus the reaction's normalized deltas, so
+/// later changes to the inputs cannot affect iteration. Matching is completed when the iterator is
+/// created; outputs are constructed lazily in match order. Match-local rejection is skipped;
 /// another application failure is yielded once and terminates the iterator.
 #[derive(Debug)]
 pub struct ReactionApplicationIter<T> {
-    reaction: Reaction,
-    host: Molecule,
-    deltas: Deltas,
-    correspondences: IntoIter<MoleculeCorrespondence>,
-    failed: bool,
+    state: Option<ReactionApplicationState>,
     output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
 }
 
 impl<T> ReactionApplicationIter<T> {
+    fn from_matches(
+        reaction: Reaction,
+        host: Molecule,
+        deltas: Arc<Deltas>,
+        correspondences: Vec<MoleculeCorrespondence>,
+        output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
+    ) -> Self {
+        let state = (!correspondences.is_empty()).then(|| ReactionApplicationState {
+            reaction,
+            host,
+            deltas,
+            correspondences: correspondences.into_iter(),
+        });
+        Self { state, output }
+    }
+
     fn new(
         reaction: Reaction,
         host: Molecule,
         match_config: SubstructureMatchConfig,
         output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
     ) -> Result<Self, ApplyPreconditionError> {
-        let deltas = reaction.prepare_deltas()?;
+        let deltas = Arc::new(reaction.prepare_deltas()?);
         let prepared_pattern = reaction.prepare_lhs(match_config);
-        let correspondences = prepared_pattern.matches(&host).into_iter();
-        Ok(Self {
+        let correspondences = prepared_pattern.matches(&host);
+        Ok(Self::from_matches(
             reaction,
             host,
             deltas,
             correspondences,
-            failed: false,
             output,
-        })
+        ))
     }
 
     fn new_in_host(
@@ -132,17 +152,61 @@ impl<T> ReactionApplicationIter<T> {
         match_config: SubstructureMatchConfig,
         output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
     ) -> Result<Self, ApplyPreconditionError> {
-        let deltas = reaction.prepare_deltas()?;
+        let deltas = Arc::new(reaction.prepare_deltas()?);
         let prepared_pattern = reaction.prepare_lhs(match_config);
-        let correspondences = prepared_pattern.matches_in_host(host).into_iter();
-        Ok(Self {
+        let correspondences = prepared_pattern.matches_in_host(host);
+        let state = (!correspondences.is_empty()).then(|| ReactionApplicationState {
             reaction,
             host: host.molecule().clone(),
             deltas,
-            correspondences,
-            failed: false,
-            output,
-        })
+            correspondences: correspondences.into_iter(),
+        });
+        Ok(Self { state, output })
+    }
+
+    fn from_prepared(
+        prepared: &PreparedReaction,
+        host: &Molecule,
+        output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
+    ) -> Self {
+        let correspondences = prepared.inner.prepared_lhs.matches(host);
+        let state = (!correspondences.is_empty()).then(|| ReactionApplicationState {
+            reaction: prepared.inner.reaction.clone(),
+            host: host.clone(),
+            deltas: Arc::clone(&prepared.inner.deltas),
+            correspondences: correspondences.into_iter(),
+        });
+        Self { state, output }
+    }
+
+    fn from_prepared_owned_host(
+        prepared: &PreparedReaction,
+        host: Molecule,
+        output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
+    ) -> Self {
+        let correspondences = prepared.inner.prepared_lhs.matches(&host);
+        let state = (!correspondences.is_empty()).then(|| ReactionApplicationState {
+            reaction: prepared.inner.reaction.clone(),
+            host,
+            deltas: Arc::clone(&prepared.inner.deltas),
+            correspondences: correspondences.into_iter(),
+        });
+        Self { state, output }
+    }
+
+    fn from_prepared_in_host(
+        prepared: &PreparedReaction,
+        host: &PreparedSubstructureHost,
+        output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
+    ) -> Self {
+        let correspondences = prepared.inner.prepared_lhs.matches_in_host(host);
+        let state = (!correspondences.is_empty()).then(|| ReactionApplicationState {
+            reaction: prepared.inner.reaction.clone(),
+            host: host.molecule().clone(),
+            deltas: Arc::clone(&prepared.inner.deltas),
+            correspondences: correspondences.into_iter(),
+        });
+        Self { state, output }
     }
 }
 
@@ -150,23 +214,26 @@ impl<T> Iterator for ReactionApplicationIter<T> {
     type Item = Result<T, ApplyError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while !self.failed {
-            let correspondence = self.correspondences.next()?;
-            match self
+        loop {
+            let state = self.state.as_mut()?;
+            let Some(correspondence) = state.correspondences.next() else {
+                self.state = None;
+                return None;
+            };
+            match state
                 .reaction
-                .apply_deltas_at(&self.host, &correspondence, self.deltas.clone())
+                .apply_deltas_at(&state.host, &correspondence, &state.deltas)
             {
                 Ok(Some((product, correspondence))) => {
-                    return Some(Ok((self.output)(&self.host, product, correspondence)));
+                    return Some(Ok((self.output)(&state.host, product, correspondence)));
                 }
                 Ok(None) => {}
                 Err(error) => {
-                    self.failed = true;
+                    self.state = None;
                     return Some(Err(error));
                 }
             }
         }
-        None
     }
 }
 
@@ -199,18 +266,229 @@ impl Iterator for ReactionProductsIter {
     }
 }
 
+#[derive(Debug)]
+struct PreparedReactionInner {
+    reaction: Reaction,
+    deltas: Arc<Deltas>,
+    prepared_lhs: PreparedSubstructurePattern,
+}
+
+/// Immutable prepared reaction for repeated reaction application.
+///
+/// Validates and normalizes reaction-wide application preconditions once at construction time,
+/// snapshots the [`Reaction`], and precompiles `reaction.lhs()` into a
+/// [`PreparedSubstructurePattern`] under `config` (using reaction-preserving symmetry generators
+/// derived from [`Reaction::to_reaction_span`] when `config.reduce_pattern_symmetry` is enabled).
+///
+/// # Semantic properties
+///
+/// - Applying `PreparedReaction::new(reaction, config)?` against `host` (or
+///   `PreparedSubstructureHost::new(host)`) produces the exact same match order, products,
+///   correspondences, reactions, reaction spans, split product sets, and [`ApplyError`] outcomes
+///   as `reaction.apply*(host, config)?` and `host.react(reaction, config)?`.
+/// - Cloning shares the immutable prepared state in `O(1)`; mutating the source [`Reaction`] or
+///   host after construction has no effect.
+///
+/// # Examples
+///
+/// ```
+/// use umol_graph_core::{
+///     AutomorphismAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+/// };
+/// use umol_graph_ir::ir::{
+///     Molecule, PreparedReaction, PreparedSubstructureHost, React, Reaction,
+///     SubstructureMatchAlgorithm, SubstructureMatchConfig,
+/// };
+///
+/// let config = SubstructureMatchConfig {
+///     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+///     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
+///     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+///     automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+///     reduce_pattern_symmetry: false,
+///     reduce_host_symmetry: false,
+/// };
+/// let prepared = PreparedReaction::new(&Reaction::default(), config)?;
+/// let host = PreparedSubstructureHost::new(&Molecule::new());
+/// let products: Vec<Molecule> = prepared
+///     .apply_to_host(&host)
+///     .collect::<Result<Vec<_>, _>>()?;
+/// let split_sets: Vec<Vec<Molecule>> = host
+///     .react_prepared(&prepared)
+///     .collect::<Result<Vec<_>, _>>()?;
+/// assert_eq!(products.len(), 1);
+/// assert_eq!(split_sets.len(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct PreparedReaction {
+    inner: Arc<PreparedReactionInner>,
+}
+
+impl PreparedReaction {
+    /// Validate reaction-wide application preconditions and precompile `reaction.lhs()` under
+    /// `config`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApplyPreconditionError`] when `reaction` fails a reaction-wide structural
+    /// precondition (the same checks performed by [`Reaction::apply`]). Precondition checks run
+    /// before pattern preparation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `reaction.lhs()` carries molecule constraints, which substructure matching does
+    /// not evaluate.
+    pub fn new(
+        reaction: &Reaction,
+        config: SubstructureMatchConfig,
+    ) -> Result<Self, ApplyPreconditionError> {
+        let deltas = Arc::new(reaction.prepare_deltas()?);
+        let prepared_lhs = reaction.prepare_lhs(config);
+        Ok(Self {
+            inner: Arc::new(PreparedReactionInner {
+                reaction: reaction.clone(),
+                deltas,
+                prepared_lhs,
+            }),
+        })
+    }
+
+    /// Snapshotted [`Reaction`].
+    pub fn reaction(&self) -> &Reaction {
+        &self.inner.reaction
+    }
+
+    /// Matching configuration bound to this prepared reaction.
+    pub fn config(&self) -> SubstructureMatchConfig {
+        self.inner.prepared_lhs.config()
+    }
+
+    /// Every product of applying this prepared reaction to `host`.
+    ///
+    /// Produces the exact same match order, products, ownership isolation, and [`ApplyError`]
+    /// outcomes as [`Reaction::apply`] with `self.config()`.
+    pub fn apply(&self, host: &Molecule) -> ReactionApplicationIter<Molecule> {
+        ReactionApplicationIter::from_prepared(self, host, |_, product, _| product)
+    }
+
+    /// Apply to `host` in match order, retaining each host-to-product correspondence.
+    ///
+    /// Produces the exact same results and error behavior as [`Reaction::tracked_apply`] with
+    /// `self.config()`.
+    pub fn tracked_apply(
+        &self,
+        host: &Molecule,
+    ) -> ReactionApplicationIter<(Molecule, MoleculeCorrespondence)> {
+        ReactionApplicationIter::from_prepared(self, host, |_, product, correspondence| {
+            (product, correspondence)
+        })
+    }
+
+    /// Apply to `host` in match order, expressing each application as a [`Reaction`].
+    ///
+    /// Produces the exact same results and error behavior as [`Reaction::apply_to_reaction`] with
+    /// `self.config()`.
+    pub fn apply_to_reaction(&self, host: &Molecule) -> ReactionApplicationIter<Reaction> {
+        ReactionApplicationIter::from_prepared(self, host, |host, product, correspondence| {
+            let deltas = host
+                .difference_to(&product, &correspondence)
+                .expect("application correspondence describes compatible molecule sides");
+            Reaction::new(host.clone(), deltas)
+        })
+    }
+
+    /// Apply to `host` in match order, expressing each application as a [`ReactionSpan`].
+    ///
+    /// Produces the exact same results and error behavior as
+    /// [`Reaction::apply_to_reaction_span`] with `self.config()`.
+    pub fn apply_to_reaction_span(&self, host: &Molecule) -> ReactionApplicationIter<ReactionSpan> {
+        ReactionApplicationIter::from_prepared(self, host, |host, product, correspondence| {
+            ReactionSpan::superimpose(host, &product, &correspondence)
+                .expect("application correspondence describes compatible molecule sides")
+        })
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`], reusing both this reaction's prepared LHS and
+    /// normalized deltas and the host's prepared bitsets and lazy caches.
+    ///
+    /// Produces the exact same match order, products, ownership isolation, and [`ApplyError`]
+    /// outcomes as [`Reaction::apply_to_host`] with `self.config()`.
+    pub fn apply_to_host(
+        &self,
+        host: &PreparedSubstructureHost,
+    ) -> ReactionApplicationIter<Molecule> {
+        ReactionApplicationIter::from_prepared_in_host(self, host, |_, product, _| product)
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`] in match order, retaining each
+    /// host-to-product correspondence.
+    ///
+    /// Produces the exact same results and error behavior as [`Reaction::tracked_apply_to_host`]
+    /// with `self.config()`.
+    pub fn tracked_apply_to_host(
+        &self,
+        host: &PreparedSubstructureHost,
+    ) -> ReactionApplicationIter<(Molecule, MoleculeCorrespondence)> {
+        ReactionApplicationIter::from_prepared_in_host(self, host, |_, product, correspondence| {
+            (product, correspondence)
+        })
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`] in match order, expressing each application as
+    /// a [`Reaction`].
+    ///
+    /// Produces the exact same results and error behavior as
+    /// [`Reaction::apply_to_host_to_reaction`] with `self.config()`.
+    pub fn apply_to_host_to_reaction(
+        &self,
+        host: &PreparedSubstructureHost,
+    ) -> ReactionApplicationIter<Reaction> {
+        ReactionApplicationIter::from_prepared_in_host(
+            self,
+            host,
+            |host, product, correspondence| {
+                let deltas = host
+                    .difference_to(&product, &correspondence)
+                    .expect("application correspondence describes compatible molecule sides");
+                Reaction::new(host.clone(), deltas)
+            },
+        )
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`] in match order, expressing each application as
+    /// a [`ReactionSpan`].
+    ///
+    /// Produces the exact same results and error behavior as
+    /// [`Reaction::apply_to_host_to_reaction_span`] with `self.config()`.
+    pub fn apply_to_host_to_reaction_span(
+        &self,
+        host: &PreparedSubstructureHost,
+    ) -> ReactionApplicationIter<ReactionSpan> {
+        ReactionApplicationIter::from_prepared_in_host(
+            self,
+            host,
+            |host, product, correspondence| {
+                ReactionSpan::superimpose(host, &product, &correspondence)
+                    .expect("application correspondence describes compatible molecule sides")
+            },
+        )
+    }
+}
+
 /// Apply a reaction and emit only the connected product components of each successful match.
 ///
-/// Implementations preserve reaction match order, [`Molecule::split`] component order, and both
-/// application error channels. The operation borrows reusable reactants and takes an explicit
-/// matching configuration; its returned iterator owns snapshots of every input.
+/// Implementations preserve reaction match order, [`Molecule::split`] component order, and
+/// application error channels. The operation borrows reusable reactants; its returned iterator
+/// owns snapshots of every input.
 ///
 /// # Semantic properties
 ///
 /// For a molecule slice `reactants`, the result is identical to combining `reactants` in slice
 /// order, applying `reaction`, and splitting every successful product while
 /// discarding the split correspondences. An empty slice follows the same rule through the empty
-/// combined molecule.
+/// combined molecule. [`Self::react_prepared`] produces the exact same product sets and
+/// [`ApplyError`] outcomes as [`Self::react`] with `reaction.reaction()` and `reaction.config()`.
 ///
 /// # Examples
 ///
@@ -263,6 +541,13 @@ pub trait React {
         reaction: &Reaction,
         match_config: SubstructureMatchConfig,
     ) -> Result<ReactionProductsIter, ApplyPreconditionError>;
+
+    /// Apply a [`PreparedReaction`] and lazily emit the connected product components for every
+    /// successful match.
+    ///
+    /// Reaction-wide preconditions were established when `reaction` was prepared, so issuing the
+    /// iterator is infallible. Per-match execution failures remain [`ApplyError`] iterator items.
+    fn react_prepared(&self, reaction: &PreparedReaction) -> ReactionProductsIter;
 }
 
 impl React for Molecule {
@@ -275,6 +560,10 @@ impl React for Molecule {
             .apply(self, match_config)
             .map(ReactionProductsIter::new)
     }
+
+    fn react_prepared(&self, reaction: &PreparedReaction) -> ReactionProductsIter {
+        ReactionProductsIter::new(reaction.apply(self))
+    }
 }
 
 impl React for PreparedSubstructureHost {
@@ -286,6 +575,10 @@ impl React for PreparedSubstructureHost {
         reaction
             .apply_to_host(self, match_config)
             .map(ReactionProductsIter::new)
+    }
+
+    fn react_prepared(&self, reaction: &PreparedReaction) -> ReactionProductsIter {
+        ReactionProductsIter::new(reaction.apply_to_host(self))
     }
 }
 
@@ -300,6 +593,15 @@ impl React for [Molecule] {
             product
         })
         .map(ReactionProductsIter::new)
+    }
+
+    fn react_prepared(&self, reaction: &PreparedReaction) -> ReactionProductsIter {
+        let host = Molecule::combine_all(self);
+        ReactionProductsIter::new(ReactionApplicationIter::from_prepared_owned_host(
+            reaction,
+            host,
+            |_, product, _| product,
+        ))
     }
 }
 
@@ -1263,7 +1565,10 @@ impl Reaction {
         }
 
         let deltas = normalize_reaction_deltas(&self.lhs, self.deltas().clone())?;
-        self.apply_deltas_at(host, correspondence, deltas)
+        if !bond_endpoints_are_disjoint(&deltas) {
+            return Err(ApplyError::Inconsistent);
+        }
+        self.apply_deltas_at(host, correspondence, &deltas)
     }
 
     /// Apply at a supplied match and return the realized host-to-product reaction.
@@ -1325,12 +1630,22 @@ impl Reaction {
         &self,
         host: &Molecule,
         correspondence: &MoleculeCorrespondence,
-        mut deltas: Deltas,
+        deltas: &Deltas,
     ) -> Result<Option<(Molecule, MoleculeCorrespondence)>, ApplyError> {
-        if !bond_endpoints_are_disjoint(&deltas) {
-            return Err(ApplyError::Inconsistent);
-        }
-        deltas = reframe_deltas(deltas, &self.lhs, host, correspondence)?;
+        debug_assert!(bond_endpoints_are_disjoint(deltas));
+        let needs_reframe = deltas
+            .iter()
+            .any(|delta| !matches!(delta, Delta::Atom(_) | Delta::Bond(_)));
+        let deltas: Cow<'_, Deltas> = if needs_reframe {
+            Cow::Owned(reframe_deltas(
+                deltas.clone(),
+                &self.lhs,
+                host,
+                correspondence,
+            )?)
+        } else {
+            Cow::Borrowed(deltas)
+        };
         let host_atom = |id: AtomId| {
             correspondence
                 .atoms()
@@ -9207,5 +9522,689 @@ mod tests {
             Deltas::new(),
         );
         let _ = reaction.apply_to_host(&host, MATCH_CONFIG);
+    }
+
+    #[rstest]
+    fn test_prepared_reaction_new() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<PreparedReaction>();
+
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        );
+        let config = SubstructureMatchConfig {
+            reduce_pattern_symmetry: true,
+            reduce_host_symmetry: true,
+            ..MATCH_CONFIG
+        };
+        let prepared = PreparedReaction::new(&reaction, config).unwrap();
+        let cloned = prepared.clone();
+
+        assert_eq!(prepared.reaction(), &reaction);
+        assert_eq!(cloned.reaction(), &reaction);
+        assert_eq!(prepared.config(), config);
+        assert_eq!(cloned.config(), config);
+
+        let mut host = mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
+        let snapshot = host.clone();
+        let prepared_host = PreparedSubstructureHost::new(&host);
+        let iter = prepared.apply(&host);
+        host.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(5);
+
+        let expected: Vec<Molecule> = reaction
+            .apply(&snapshot, config)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(iter.collect::<Result<Vec<_>, _>>().unwrap(), expected);
+        assert_eq!(
+            cloned
+                .apply_to_host(&prepared_host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::dpo_dangling_bond(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::from_element(Element::C),
+            })]),
+        ),
+        ApplyPreconditionError::ReactionDpo(DpoContradiction::DanglingBond {
+            atom: AtomId(0),
+            bond: BondId(0),
+        })
+    )]
+    #[case::inconsistent_duplicate_bond_endpoints(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([
+                Delta::Bond(BondDelta::Remove {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(2),
+                }),
+            ]),
+        ),
+        ApplyPreconditionError::InconsistentReaction
+    )]
+    #[case::inconsistent_stereo_delta_domain(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "H" "F" "Cl" "Br"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationForm::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCoset::Lit(0),
+                    ),
+                    new: StereoConfigurationForm::Kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCoset::Lit(99),
+                    ),
+                },
+            })]),
+        ),
+        ApplyPreconditionError::InconsistentReaction
+    )]
+    #[case::precondition_precedes_lhs_molecule_constraints(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+                constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: None,
+                    sum: NumForm::Lit(0),
+                })
+                .into(),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::from_element(Element::C),
+            })]),
+        ),
+        ApplyPreconditionError::ReactionDpo(DpoContradiction::DanglingBond {
+            atom: AtomId(0),
+            bond: BondId(0),
+        })
+    )]
+    fn test_prepared_reaction_new_error(
+        #[case] reaction: Reaction,
+        #[case] expected: ApplyPreconditionError,
+    ) {
+        let host = Molecule::new();
+        assert_eq!(
+            PreparedReaction::new(&reaction, MATCH_CONFIG).unwrap_err(),
+            expected
+        );
+        assert_eq!(reaction.apply(&host, MATCH_CONFIG).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "substructure matching does not evaluate molecule constraints")]
+    fn test_prepared_reaction_new_molecule_constraints_error(
+        #[values(
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubstructureMatchAlgorithm::Incidence
+        )]
+        strategy: SubstructureMatchAlgorithm,
+    ) {
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: None,
+                    sum: NumForm::Lit(0),
+                })
+                .into(),
+                ..Default::default()
+            }),
+            Deltas::new(),
+        );
+        let config = SubstructureMatchConfig {
+            match_algorithm: strategy,
+            ..MATCH_CONFIG
+        };
+        let _ = PreparedReaction::new(&reaction, config);
+    }
+
+    #[rstest]
+    #[case::asymmetric_charge_on_symmetric_lhs(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        (2, 2, 2, 2),
+        2
+    )]
+    #[case::symmetric_epoxidation(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(2),
+                    atoms: [AtomId(1), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "2"] [1 2 "1"]]}"#),
+        (2, 1, 2, 1),
+        1
+    )]
+    #[case::aromatic_overlay_reframe(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::N),
+                    AtomForm::from_element(Element::O),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(2), AtomId(0), BondForm::from_order(1)),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::default(),
+                )],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(0),
+                change: AromaticSystemFieldChange::Electrons {
+                    old: ElectronCountsForm::Undetermined,
+                    new: ElectronCountsForm::Lit(vec![1, 2, 3]),
+                },
+            })]),
+        ),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(0), BondForm::from_order(1)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(2), AtomId(0), AtomId(1)],
+                AromaticSystemForm {
+                    electrons: ElectronCountsForm::Lit(vec![7, 11, 13]),
+                    ..Default::default()
+                },
+            )],
+            ..Default::default()
+        }),
+        (1, 1, 1, 1),
+        1
+    )]
+    #[case::meso_host_preserves_both_enantiomers(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                               {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]}"#
+        ),
+        (2, 2, 2, 2),
+        2
+    )]
+    #[case::chiral_c2_host_reduces_equivalent_sites(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                               {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
+        ),
+        (2, 2, 1, 1),
+        1
+    )]
+    #[case::symmetric_bimolecular_three_copies(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O" "C" "O"] :bonds [[0 1 "1"] [2 3 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(2),
+                atoms: [AtomId(0), AtomId(2)],
+                attributes: BondForm::from_order(1),
+            })]),
+        ),
+        Molecule::combine_all(&[
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+        ]),
+        (6, 3, 1, 1),
+        1
+    )]
+    #[case::no_match_prescreen(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["S" "O"] :bonds [[0 1 "2"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        (0, 0, 0, 0),
+        0
+    )]
+    fn test_prepared_reaction_apply(
+        #[case] reaction: Reaction,
+        #[case] host: Molecule,
+        #[case] expected_counts: (usize, usize, usize, usize),
+        #[case] expected_unique_products: usize,
+    ) {
+        let prepared_host = PreparedSubstructureHost::new(&host);
+        let canon_ctx = CanonicalizeContext {
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+        };
+        let modes = [
+            (false, false, expected_counts.0),
+            (true, false, expected_counts.1),
+            (false, true, expected_counts.2),
+            (true, true, expected_counts.3),
+        ];
+
+        for strategy in [
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubstructureMatchAlgorithm::Incidence,
+        ] {
+            for (reduce_pattern_symmetry, reduce_host_symmetry, expected_count) in modes {
+                for auto_alg in [AutomorphismAlgorithm::TrailIr, AutomorphismAlgorithm::Nauty] {
+                    for subiso in [
+                        SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+                        SubgraphIsomorphismAlgorithm::RayKirsch,
+                        SubgraphIsomorphismAlgorithm::BitsetRi,
+                        SubgraphIsomorphismAlgorithm::Glasgow,
+                    ] {
+                        let config = SubstructureMatchConfig {
+                            match_algorithm: strategy,
+                            subgraph_isomorphism_algorithm: subiso,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                            automorphism_algorithm: auto_alg,
+                            reduce_pattern_symmetry,
+                            reduce_host_symmetry,
+                        };
+                        let prepared = PreparedReaction::new(&reaction, config).unwrap();
+                        let direct: Vec<Molecule> = reaction
+                            .apply(&host, config)
+                            .unwrap()
+                            .collect::<Result<Vec<_>, _>>()
+                            .unwrap();
+                        let via_prepared: Vec<Molecule> = prepared
+                            .apply(&host)
+                            .collect::<Result<Vec<_>, _>>()
+                            .unwrap();
+                        let via_both: Vec<Molecule> = prepared
+                            .apply_to_host(&prepared_host)
+                            .collect::<Result<Vec<_>, _>>()
+                            .unwrap();
+                        assert_eq!(
+                            via_prepared, direct,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                        assert_eq!(
+                            via_both, direct,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                        assert_eq!(
+                            via_both.len(),
+                            expected_count,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                        let unique_canonical: HashSet<Molecule> = via_both
+                            .iter()
+                            .map(|product| product.clone().canonicalize(&canon_ctx).unwrap())
+                            .collect();
+                        assert_eq!(
+                            unique_canonical.len(),
+                            expected_unique_products,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                    }
+                }
+            }
+        }
+
+        // Verify exact parity across all output variants and `React::react_prepared`.
+        let config = SubstructureMatchConfig {
+            reduce_pattern_symmetry: true,
+            reduce_host_symmetry: true,
+            ..MATCH_CONFIG
+        };
+        let prepared = PreparedReaction::new(&reaction, config).unwrap();
+        let expected_tracked = reaction
+            .tracked_apply(&host, config)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            prepared
+                .tracked_apply(&host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_tracked
+        );
+        assert_eq!(
+            prepared
+                .tracked_apply_to_host(&prepared_host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_tracked
+        );
+        let expected_reactions = reaction
+            .apply_to_reaction(&host, config)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            prepared
+                .apply_to_reaction(&host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_reactions
+        );
+        assert_eq!(
+            prepared
+                .apply_to_host_to_reaction(&prepared_host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_reactions
+        );
+        let expected_spans = reaction
+            .apply_to_reaction_span(&host, config)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            prepared
+                .apply_to_reaction_span(&host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_spans
+        );
+        assert_eq!(
+            prepared
+                .apply_to_host_to_reaction_span(&prepared_host)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_spans
+        );
+        let expected_split = host
+            .react(&reaction, config)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            host.react_prepared(&prepared)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_split
+        );
+        assert_eq!(
+            prepared_host
+                .react_prepared(&prepared)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            expected_split
+        );
+    }
+
+    #[rstest]
+    fn test_prepared_reaction_apply_error() {
+        // Span-fallback case: `old` mismatches `lhs`, so `to_reaction_span()` fails and pattern
+        // symmetry conservatively falls back to `{1}`, matching `Reaction::apply`.
+        let fallback_reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C#c0" "C#c0"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
+                },
+            })]),
+        );
+        assert!(fallback_reaction.to_reaction_span().is_err());
+        let fallback_host = mol_dsl!(r#"{:atoms ["C#c0" "C#c0"] :bonds [[0 1 "1"]]}"#);
+        let fallback_prepared_host = PreparedSubstructureHost::new(&fallback_host);
+        let config_sym = SubstructureMatchConfig {
+            reduce_pattern_symmetry: true,
+            reduce_host_symmetry: false,
+            ..MATCH_CONFIG
+        };
+        let prepared_fallback = PreparedReaction::new(&fallback_reaction, config_sym).unwrap();
+        let expected_fallback: Vec<Result<Molecule, ApplyError>> = fallback_reaction
+            .apply(&fallback_host, config_sym)
+            .unwrap()
+            .collect();
+        assert_eq!(
+            prepared_fallback.apply(&fallback_host).collect::<Vec<_>>(),
+            expected_fallback
+        );
+        assert_eq!(
+            prepared_fallback
+                .apply_to_host(&fallback_prepared_host)
+                .collect::<Vec<_>>(),
+            expected_fallback
+        );
+
+        // Per-match `ApplyError` propagation and early termination when multiple matches exist:
+        // `lhs` aromatic electrons are undetermined (matching the host), while the delta requires
+        // `old = [1, 2, 3]` against host electrons `[7, 7, 7]`.
+        let error_reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(2), AtomId(0), BondForm::from_order(1)),
+                ],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::default(),
+                )],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                id: AromaticSystemId(0),
+                change: AromaticSystemFieldChange::Electrons {
+                    old: ElectronCountsForm::Lit(vec![1, 2, 3]),
+                    new: ElectronCountsForm::Lit(vec![1, 1, 1]),
+                },
+            })]),
+        );
+        let error_host = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(0), BondForm::from_order(1)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm {
+                    electrons: ElectronCountsForm::Lit(vec![7, 7, 7]),
+                    ..Default::default()
+                },
+            )],
+            ..Default::default()
+        });
+        let error_prepared_host = PreparedSubstructureHost::new(&error_host);
+        let prepared_error = PreparedReaction::new(&error_reaction, MATCH_CONFIG).unwrap();
+        let expected_error = Err(ApplyError::CorrespondenceMismatch {
+            entity: Entity::AromaticSystem(AromaticSystemId(0)),
+        });
+
+        let expected: Vec<Result<Molecule, ApplyError>> = error_reaction
+            .apply(&error_host, MATCH_CONFIG)
+            .unwrap()
+            .collect();
+        let mut iter_mol = prepared_error.apply(&error_host);
+        let mut iter_host = prepared_error.apply_to_host(&error_prepared_host);
+        let from_mol: Vec<Result<Molecule, ApplyError>> = iter_mol.by_ref().collect();
+        let from_host: Vec<Result<Molecule, ApplyError>> = iter_host.by_ref().collect();
+
+        assert_eq!(expected, vec![expected_error]);
+        assert_eq!(from_mol, expected);
+        assert_eq!(from_host, expected);
+        assert_eq!(iter_mol.next(), None);
+        assert_eq!(iter_host.next(), None);
+    }
+
+    #[rstest]
+    #[case::empty_reactants(
+        Reaction::default(),
+        vec![]
+    )]
+    #[case::single_reactant(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                attributes: BondForm::from_order(1),
+            })]),
+        ),
+        vec![mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#)]
+    )]
+    #[case::symmetric_bimolecular_pair(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds []}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                attributes: BondForm::from_order(1),
+            })]),
+        ),
+        vec![mol_dsl!(r#"{:atoms ["C"]}"#), mol_dsl!(r#"{:atoms ["C"]}"#)]
+    )]
+    #[case::symmetric_bimolecular_three_copies(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O" "C" "O"] :bonds [[0 1 "1"] [2 3 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(2),
+                atoms: [AtomId(0), AtomId(2)],
+                attributes: BondForm::from_order(1),
+            })]),
+        ),
+        vec![
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+        ]
+    )]
+    #[case::asymmetric_bimolecular_pair(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "N"] :bonds []}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                attributes: BondForm::from_order(1),
+            })]),
+        ),
+        vec![
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["N"]}"#),
+        ]
+    )]
+    fn test_react_react_prepared(#[case] reaction: Reaction, #[case] reactants: Vec<Molecule>) {
+        for strategy in [
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubstructureMatchAlgorithm::Incidence,
+        ] {
+            for (reduce_pattern_symmetry, reduce_host_symmetry) in
+                [(false, false), (true, false), (false, true), (true, true)]
+            {
+                let config = SubstructureMatchConfig {
+                    match_algorithm: strategy,
+                    reduce_pattern_symmetry,
+                    reduce_host_symmetry,
+                    ..MATCH_CONFIG
+                };
+                let prepared = PreparedReaction::new(&reaction, config).unwrap();
+                let direct: Vec<Vec<Molecule>> = reactants
+                    .as_slice()
+                    .react(&reaction, config)
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                let via_prepared: Vec<Vec<Molecule>> = reactants
+                    .as_slice()
+                    .react_prepared(&prepared)
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                assert_eq!(
+                    via_prepared, direct,
+                    "{strategy:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                );
+            }
+        }
     }
 }
