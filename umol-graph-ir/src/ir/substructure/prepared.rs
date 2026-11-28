@@ -921,6 +921,37 @@ impl PreparedSubstructurePattern {
     /// Panics if `pattern` carries molecule constraints, which substructure matching
     /// does not evaluate.
     pub fn new(pattern: &Molecule, config: SubstructureMatchConfig) -> Self {
+        Self::with_pattern_symmetry(pattern, config, |pattern, incidence| match incidence {
+            None => pattern.proper_atom_generators(config.automorphism_algorithm, true),
+            Some(_) => {
+                let graph_symmetry = pattern
+                    .graph_symmetry(&GraphSymmetryConfig {
+                        automorphism_algorithm: config.automorphism_algorithm,
+                        include_constraints: true,
+                        ..GraphSymmetryConfig::default()
+                    })
+                    .into_graph_symmetry();
+                pattern.proper_incidence_generators(&graph_symmetry)
+            }
+        })
+    }
+
+    /// Prepare `pattern` for substructure matching under `config`, supplying custom proper
+    /// pattern-symmetry generators when `config.reduce_pattern_symmetry` is enabled.
+    ///
+    /// `pattern_symmetry_generators` is invoked only when `config.reduce_pattern_symmetry` is
+    /// `true`, receiving `None` for `GraphAndOverlays` (generators over `pattern.raw_graph()`) or
+    /// `Some(&incidence)` for `Incidence` (generators over `incidence.raw_graph()`).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pattern` carries molecule constraints, which substructure matching
+    /// does not evaluate.
+    pub(crate) fn with_pattern_symmetry(
+        pattern: &Molecule,
+        config: SubstructureMatchConfig,
+        pattern_symmetry_generators: impl FnOnce(&Molecule, Option<&IncidenceGraph>) -> Vec<Vec<NodeId>>,
+    ) -> Self {
         assert!(
             pattern.constraints().is_empty(),
             "substructure matching does not evaluate molecule constraints"
@@ -1011,8 +1042,7 @@ impl PreparedSubstructurePattern {
                     config.subgraph_isomorphism_algorithm,
                 );
                 if config.reduce_pattern_symmetry {
-                    let generators =
-                        pattern.proper_atom_generators(config.automorphism_algorithm, true);
+                    let generators = pattern_symmetry_generators(&pattern, None);
                     if !generators.is_empty() {
                         let symmetry = QuerySymmetryConstraints::try_from_generators(
                             pattern.raw_graph(),
@@ -1032,14 +1062,7 @@ impl PreparedSubstructurePattern {
                     config.subgraph_isomorphism_algorithm,
                 );
                 if config.reduce_pattern_symmetry {
-                    let graph_symmetry = pattern
-                        .graph_symmetry(&GraphSymmetryConfig {
-                            automorphism_algorithm: config.automorphism_algorithm,
-                            include_constraints: true,
-                            ..GraphSymmetryConfig::default()
-                        })
-                        .into_graph_symmetry();
-                    let generators = pattern.proper_incidence_generators(&graph_symmetry);
+                    let generators = pattern_symmetry_generators(&pattern, Some(&incidence));
                     if !generators.is_empty() {
                         let symmetry = QuerySymmetryConstraints::try_from_generators(
                             incidence.raw_graph(),

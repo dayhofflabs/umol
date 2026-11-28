@@ -16,7 +16,7 @@ use std::vec::IntoIter;
 use dpo::check_reaction_dpo;
 pub use dpo::DpoContradiction;
 pub use integrity::ReactionIntegrityError;
-use umol_graph_core::{Correspondence, NodeId};
+use umol_graph_core::{AutomorphismAlgorithm, Correspondence, NodeId};
 use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{
@@ -52,10 +52,11 @@ use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+use super::incidence::{IncidenceGraph, IncidenceNodeId};
 use super::ligand::{StereoLigand, StereoLigandKind};
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
-use super::molecule::{Molecule, MoleculeIntegrityError};
+use super::molecule::{GraphSymmetryConfig, Molecule, MoleculeIntegrityError};
 use super::multicenter::{
     multicenter_bond_representative_action, MulticenterBondForm, MulticenterBondUpdate,
 };
@@ -67,7 +68,10 @@ use super::stereo::{
     stereo_atom_representative_action, stereo_bond_representative_action, StereoConfigurationForm,
     StereoCoset, StereoKind, StereoTerm,
 };
-use super::substructure::SubstructureMatchConfig;
+use super::substructure::{
+    PreparedSubstructureHost, PreparedSubstructurePattern, SubstructureMatchConfig,
+};
+use super::symmetry::project_generators;
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe, ReframeKind};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
@@ -110,13 +114,30 @@ impl<T> ReactionApplicationIter<T> {
         output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
     ) -> Result<Self, ApplyPreconditionError> {
         let deltas = reaction.prepare_deltas()?;
-        let correspondences = reaction
-            .lhs
-            .substructure_matches(&host, match_config)
-            .into_iter();
+        let prepared_pattern = reaction.prepare_lhs(match_config);
+        let correspondences = prepared_pattern.matches(&host).into_iter();
         Ok(Self {
             reaction,
             host,
+            deltas,
+            correspondences,
+            failed: false,
+            output,
+        })
+    }
+
+    fn new_in_host(
+        reaction: Reaction,
+        host: &PreparedSubstructureHost,
+        match_config: SubstructureMatchConfig,
+        output: fn(&Molecule, Molecule, MoleculeCorrespondence) -> T,
+    ) -> Result<Self, ApplyPreconditionError> {
+        let deltas = reaction.prepare_deltas()?;
+        let prepared_pattern = reaction.prepare_lhs(match_config);
+        let correspondences = prepared_pattern.matches_in_host(host).into_iter();
+        Ok(Self {
+            reaction,
+            host: host.molecule().clone(),
             deltas,
             correspondences,
             failed: false,
@@ -252,6 +273,18 @@ impl React for Molecule {
     ) -> Result<ReactionProductsIter, ApplyPreconditionError> {
         reaction
             .apply(self, match_config)
+            .map(ReactionProductsIter::new)
+    }
+}
+
+impl React for PreparedSubstructureHost {
+    fn react(
+        &self,
+        reaction: &Reaction,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionProductsIter, ApplyPreconditionError> {
+        reaction
+            .apply_to_host(self, match_config)
             .map(ReactionProductsIter::new)
     }
 }
@@ -2405,6 +2438,88 @@ impl Reaction {
         Ok(deltas)
     }
 
+    fn prepare_lhs(&self, match_config: SubstructureMatchConfig) -> PreparedSubstructurePattern {
+        PreparedSubstructurePattern::with_pattern_symmetry(
+            &self.lhs,
+            match_config,
+            |_, lhs_incidence| {
+                self.proper_lhs_generators(lhs_incidence, match_config.automorphism_algorithm)
+            },
+        )
+    }
+
+    /// Generating set for the proper reaction-preserving automorphism subgroup projected onto
+    /// either `lhs.raw_graph()` (`lhs_incidence.is_none()`) or `lhs_incidence.raw_graph()`
+    /// (`lhs_incidence.is_some()`).
+    ///
+    /// Falls back conservatively to `{1}` (empty generator list) if span conversion or span
+    /// symmetry coloring fails.
+    fn proper_lhs_generators(
+        &self,
+        lhs_incidence: Option<&IncidenceGraph>,
+        algorithm: AutomorphismAlgorithm,
+    ) -> Vec<Vec<NodeId>> {
+        if self.deltas.is_empty() {
+            return match lhs_incidence {
+                None => self.lhs.proper_atom_generators(algorithm, true),
+                Some(_) => {
+                    let symmetry = self
+                        .lhs
+                        .graph_symmetry(&GraphSymmetryConfig {
+                            automorphism_algorithm: algorithm,
+                            include_constraints: true,
+                            ..GraphSymmetryConfig::default()
+                        })
+                        .into_graph_symmetry();
+                    self.lhs.proper_incidence_generators(&symmetry)
+                }
+            };
+        }
+
+        let Ok(span) = self.to_reaction_span() else {
+            return Vec::new();
+        };
+        let Some((span_incidence, span_generators)) = span.proper_incidence_generators(algorithm)
+        else {
+            return Vec::new();
+        };
+        if span_generators.is_empty() {
+            return Vec::new();
+        }
+
+        match lhs_incidence {
+            None => project_generators(&span_generators, self.lhs.atoms().count()),
+            Some(lhs_incidence) => {
+                let lhs_node_count = lhs_incidence.node_count();
+                let mut projected = Vec::with_capacity(span_generators.len());
+                for generator in &span_generators {
+                    let mut perm = vec![NodeId(0); lhs_node_count];
+                    let mut moved = false;
+                    for lhs_node in lhs_incidence.node_ids() {
+                        let entity = lhs_incidence.entity(lhs_node);
+                        let span_node = span_incidence
+                            .node_of(entity)
+                            .expect("lhs entity belongs to reaction span incidence graph");
+                        let image_entity = span_incidence
+                            .entity(IncidenceNodeId::from(generator[span_node.index()]));
+                        let image_lhs_node = lhs_incidence
+                            .node_of(image_entity)
+                            .expect("span automorphism maps lhs entity to lhs entity");
+                        let target = NodeId::from(image_lhs_node);
+                        if target.index() != lhs_node.index() {
+                            moved = true;
+                        }
+                        perm[lhs_node.index()] = target;
+                    }
+                    if moved {
+                        projected.push(perm);
+                    }
+                }
+                projected
+            }
+        }
+    }
+
     /// Every product of applying the reaction to `host`: one per injective match of `lhs` into
     /// `host` under `match_config` that satisfies the match-local DPO and structural conditions.
     ///
@@ -2493,6 +2608,128 @@ impl Reaction {
         ReactionApplicationIter::new(
             self.clone(),
             host.clone(),
+            match_config,
+            |host, product, correspondence| {
+                ReactionSpan::superimpose(host, &product, &correspondence)
+                    .expect("application correspondence describes compatible molecule sides")
+            },
+        )
+    }
+
+    /// Apply this reaction against a [`PreparedSubstructureHost`], reusing the host's prepared
+    /// adjacency bitsets and lazy ring, incidence, and host-symmetry caches.
+    ///
+    /// Produces the exact same match order, products, ownership isolation, and error channels as
+    /// [`Self::apply`] called on `host.molecule()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApplyPreconditionError`] before match enumeration when this reaction fails a
+    /// reaction-wide structural precondition. Failures arising while realizing a selected match
+    /// remain [`ApplyError`] iterator items.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.lhs()` carries molecule constraints, which substructure matching does not
+    /// evaluate.
+    pub fn apply_to_host(
+        &self,
+        host: &PreparedSubstructureHost,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<Molecule>, ApplyPreconditionError> {
+        ReactionApplicationIter::new_in_host(self.clone(), host, match_config, |_, product, _| {
+            product
+        })
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`] in match order, retaining each
+    /// host-to-product correspondence.
+    ///
+    /// Matching, cache reuse, ownership, and failure behavior are the same as
+    /// [`Self::apply_to_host`]; results are identical to [`Self::tracked_apply`] on
+    /// `host.molecule()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same precondition errors and iterator execution errors as
+    /// [`Self::apply_to_host`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.lhs()` carries molecule constraints, which substructure matching does not
+    /// evaluate.
+    pub fn tracked_apply_to_host(
+        &self,
+        host: &PreparedSubstructureHost,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<(Molecule, MoleculeCorrespondence)>, ApplyPreconditionError>
+    {
+        ReactionApplicationIter::new_in_host(
+            self.clone(),
+            host,
+            match_config,
+            |_, product, correspondence| (product, correspondence),
+        )
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`] in match order, expressing each application as
+    /// a [`Reaction`].
+    ///
+    /// Matching, cache reuse, ownership, and failure behavior are the same as
+    /// [`Self::apply_to_host`]; results are identical to [`Self::apply_to_reaction`] on
+    /// `host.molecule()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same precondition errors and iterator execution errors as
+    /// [`Self::apply_to_host`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.lhs()` carries molecule constraints, which substructure matching does not
+    /// evaluate.
+    pub fn apply_to_host_to_reaction(
+        &self,
+        host: &PreparedSubstructureHost,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<Reaction>, ApplyPreconditionError> {
+        ReactionApplicationIter::new_in_host(
+            self.clone(),
+            host,
+            match_config,
+            |host, product, correspondence| {
+                let deltas = host
+                    .difference_to(&product, &correspondence)
+                    .expect("application correspondence describes compatible molecule sides");
+                Reaction::new(host.clone(), deltas)
+            },
+        )
+    }
+
+    /// Apply against a [`PreparedSubstructureHost`] in match order, expressing each application as
+    /// a [`ReactionSpan`].
+    ///
+    /// Matching, cache reuse, ownership, and failure behavior are the same as
+    /// [`Self::apply_to_host`]; results are identical to [`Self::apply_to_reaction_span`] on
+    /// `host.molecule()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same precondition errors and iterator execution errors as
+    /// [`Self::apply_to_host`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self.lhs()` carries molecule constraints, which substructure matching does not
+    /// evaluate.
+    pub fn apply_to_host_to_reaction_span(
+        &self,
+        host: &PreparedSubstructureHost,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionApplicationIter<ReactionSpan>, ApplyPreconditionError> {
+        ReactionApplicationIter::new_in_host(
+            self.clone(),
+            host,
             match_config,
             |host, product, correspondence| {
                 ReactionSpan::superimpose(host, &product, &correspondence)
@@ -3069,6 +3306,7 @@ mod tests {
     use umol_perm::{Orientation, MAX_DEGREE};
 
     use super::super::boolean::BooleanForm;
+    use super::super::canonicalize::{Canonicalize, CanonicalizeContext};
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, LigandPermutation, LigandSymmetryForm,
@@ -3090,6 +3328,7 @@ mod tests {
     };
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::*;
+    use crate::mol_dsl;
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
         match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
@@ -8322,5 +8561,651 @@ mod tests {
         );
         assert_eq!(witness.atoms().matched_pairs(), &[(AtomId(0), AtomId(0))]);
         assert_eq!(witness.atoms().left_unmatched(), vec![AtomId(1)]);
+    }
+
+    #[rstest]
+    #[case::asymmetric_charge_on_symmetric_lhs(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        (2, 2, 2, 2),
+        2
+    )]
+    #[case::symmetric_epoxidation(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(2),
+                    atoms: [AtomId(1), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        mol_dsl!(r#"{:atoms ["C" "C" "Cl"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        (2, 1, 2, 1),
+        1
+    )]
+    #[case::benzene_monosubstitution_on_toluene(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 6],
+                bonds: (0..6)
+                    .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
+                    .collect(),
+                aromatic: vec![((0..6).map(AtomId).collect(), AromaticSystemForm::default())],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(6),
+                    attributes: AtomForm::from_element(Element::Cl),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(6),
+                    atoms: [AtomId(0), AtomId(6)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(0), AtomId(6), BondForm::from_order(1)),
+            ],
+            aromatic: vec![((0..6).map(AtomId).collect(), AromaticSystemForm::default())],
+            ..Default::default()
+        }),
+        (12, 6, 6, 4),
+        4
+    )]
+    #[case::added_asymmetric_constraint_preserves_regioisomers(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+                MoleculeConstraint::ChargeSum {
+                    atoms: Some(vec![AtomId(0)]),
+                    sum: NumForm::Lit(0),
+                },
+            )))]),
+        ),
+        mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        (2, 2, 2, 2),
+        2
+    )]
+    #[case::added_chiral_center_preserves_enantiomers(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "F" "F" "Cl" "Br"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
+                id: StereoAtomId(0),
+                site: AtomId(0),
+                ligands: [1, 2, 3, 4]
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .into(),
+                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["C" "F#i18" "F#i19" "Cl" "Br"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+        ),
+        (2, 2, 2, 2),
+        2
+    )]
+    #[case::walden_inversion_reduces_proper_rotations(
+        Reaction::new(
+            mol_dsl!(
+                r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                    :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                    :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+            ),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32),
+                    new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32),
+                },
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["C" "F" "F" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+        ),
+        (3, 1, 1, 1),
+        1
+    )]
+    fn test_reaction_apply_symmetry_reduction(
+        #[case] reaction: Reaction,
+        #[case] host: Molecule,
+        #[case] expected_counts: (usize, usize, usize, usize),
+        #[case] expected_unique_products: usize,
+    ) {
+        let canon_ctx = CanonicalizeContext {
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+        };
+        let modes = [
+            (false, false, expected_counts.0),
+            (true, false, expected_counts.1),
+            (false, true, expected_counts.2),
+            (true, true, expected_counts.3),
+        ];
+
+        for strategy in [
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubstructureMatchAlgorithm::Incidence,
+        ] {
+            for (reduce_pattern_symmetry, reduce_host_symmetry, expected_count) in modes {
+                for auto_alg in [AutomorphismAlgorithm::TrailIr, AutomorphismAlgorithm::Nauty] {
+                    for subiso in [
+                        SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+                        SubgraphIsomorphismAlgorithm::RayKirsch,
+                        SubgraphIsomorphismAlgorithm::BitsetRi,
+                        SubgraphIsomorphismAlgorithm::Glasgow,
+                    ] {
+                        let config = SubstructureMatchConfig {
+                            match_algorithm: strategy,
+                            subgraph_isomorphism_algorithm: subiso,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                            automorphism_algorithm: auto_alg,
+                            reduce_pattern_symmetry,
+                            reduce_host_symmetry,
+                        };
+                        let products: Vec<Molecule> = reaction
+                            .apply(&host, config)
+                            .unwrap()
+                            .collect::<Result<Vec<_>, _>>()
+                            .unwrap();
+                        assert_eq!(
+                            products.len(),
+                            expected_count,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                        let unique_canonical: HashSet<Molecule> = products
+                            .iter()
+                            .map(|product| product.clone().canonicalize(&canon_ctx).unwrap())
+                            .collect();
+                        assert_eq!(
+                            unique_canonical.len(),
+                            expected_unique_products,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[rstest]
+    fn test_reaction_apply_symmetry_span_fallback_and_react_entry_points() {
+        let mismatched_reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C#c0" "C#c0"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
+                },
+            })]),
+        );
+        assert!(mismatched_reaction.to_reaction_span().is_err());
+        let config_sym = SubstructureMatchConfig {
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: true,
+            reduce_host_symmetry: false,
+        };
+        let config_raw = SubstructureMatchConfig {
+            reduce_pattern_symmetry: false,
+            ..config_sym
+        };
+        let host = mol_dsl!(r#"{:atoms ["C#c0" "C#c0"] :bonds [[0 1 "1"]]}"#);
+        let fallback_results: Vec<Result<Molecule, ApplyError>> = mismatched_reaction
+            .apply(&host, config_sym)
+            .unwrap()
+            .collect();
+        let raw_results: Vec<Result<Molecule, ApplyError>> = mismatched_reaction
+            .apply(&host, config_raw)
+            .unwrap()
+            .collect();
+        assert_eq!(fallback_results, raw_results);
+
+        let coupling = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds []}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                attributes: BondForm::from_order(1),
+            })]),
+        );
+        let reactants = [mol_dsl!(r#"{:atoms ["C"]}"#), mol_dsl!(r#"{:atoms ["C"]}"#)];
+        let reacted_raw: Vec<Vec<Molecule>> = reactants
+            .as_slice()
+            .react(&coupling, config_raw)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let reacted_sym: Vec<Vec<Molecule>> = reactants
+            .as_slice()
+            .react(&coupling, config_sym)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(reacted_raw.len(), 2);
+        assert_eq!(reacted_sym.len(), 1);
+
+        let combined = Molecule::combine_all(&reactants);
+        assert_eq!(
+            coupling
+                .tracked_apply(&combined, config_sym)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            coupling
+                .apply_to_reaction(&combined, config_sym)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            coupling
+                .apply_to_reaction_span(&combined, config_sym)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            combined
+                .react(&coupling, config_sym)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[rstest]
+    #[case::benzene_monosubstitution(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    attributes: AtomForm::from_element(Element::Cl),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: (0..6)
+                .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
+                .collect(),
+            aromatic: vec![((0..6).map(AtomId).collect(), AromaticSystemForm::default())],
+            ..Default::default()
+        }),
+        (6, 6, 1, 1),
+        1
+    )]
+    #[case::biphenyl_ch_monosubstitution(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C)
+                        .with_constraint(AtomConstraintForm::degree(2)),
+                ],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(1),
+                    attributes: AtomForm::from_element(Element::Cl),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 12],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+                (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(6), AtomId(7), BondForm::from_order(1)),
+                (AtomId(7), AtomId(8), BondForm::from_order(1)),
+                (AtomId(8), AtomId(9), BondForm::from_order(1)),
+                (AtomId(9), AtomId(10), BondForm::from_order(1)),
+                (AtomId(10), AtomId(11), BondForm::from_order(1)),
+                (AtomId(11), AtomId(6), BondForm::from_order(1)),
+                (AtomId(0), AtomId(6), BondForm::from_order(1)),
+            ],
+            aromatic: vec![
+                ((0..6).map(AtomId).collect(), AromaticSystemForm::default()),
+                ((6..12).map(AtomId).collect(), AromaticSystemForm::default()),
+            ],
+            ..Default::default()
+        }),
+        (10, 10, 3, 3),
+        3
+    )]
+    #[case::adipic_acid_monodeprotonation(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["O" "C" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(-1),
+                },
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["O" "C" "O" "C" "C" "C" "C" "C" "O" "O"]
+                :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"] [3 4 "1"] [4 5 "1"]
+                        [5 6 "1"] [6 7 "1"] [7 8 "2"] [7 9 "1"]]}"#
+        ),
+        (2, 2, 1, 1),
+        1
+    )]
+    #[case::symmetric_bimolecular_three_copies(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O" "C" "O"] :bonds [[0 1 "1"] [2 3 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Add {
+                id: BondId(2),
+                atoms: [AtomId(0), AtomId(2)],
+                attributes: BondForm::from_order(1),
+            })]),
+        ),
+        Molecule::combine_all(&[
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+        ]),
+        (6, 3, 1, 1),
+        1
+    )]
+    #[case::meso_host_preserves_both_enantiomers(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                               {:site 1 :ligands [0 5 6 7] :attrs "Th1"}]}"#
+        ),
+        (2, 2, 2, 2),
+        2
+    )]
+    #[case::chiral_c2_host_reduces_equivalent_sites(
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C"]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        ),
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "H" "F" "Cl" "H" "F" "Cl"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                               {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
+        ),
+        (2, 2, 1, 1),
+        1
+    )]
+    fn test_reaction_apply_to_host_symmetry_and_parity(
+        #[case] reaction: Reaction,
+        #[case] host: Molecule,
+        #[case] expected_counts: (usize, usize, usize, usize),
+        #[case] expected_unique_products: usize,
+    ) {
+        let prepared_host = PreparedSubstructureHost::new(&host);
+        let canon_ctx = CanonicalizeContext {
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+        };
+        let modes = [
+            (false, false, expected_counts.0),
+            (true, false, expected_counts.1),
+            (false, true, expected_counts.2),
+            (true, true, expected_counts.3),
+        ];
+
+        for strategy in [
+            SubstructureMatchAlgorithm::GraphAndOverlays,
+            SubstructureMatchAlgorithm::Incidence,
+        ] {
+            for (reduce_pattern_symmetry, reduce_host_symmetry, expected_count) in modes {
+                for auto_alg in [AutomorphismAlgorithm::TrailIr, AutomorphismAlgorithm::Nauty] {
+                    for subiso in [
+                        SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+                        SubgraphIsomorphismAlgorithm::RayKirsch,
+                        SubgraphIsomorphismAlgorithm::BitsetRi,
+                        SubgraphIsomorphismAlgorithm::Glasgow,
+                    ] {
+                        let config = SubstructureMatchConfig {
+                            match_algorithm: strategy,
+                            subgraph_isomorphism_algorithm: subiso,
+                            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+                            automorphism_algorithm: auto_alg,
+                            reduce_pattern_symmetry,
+                            reduce_host_symmetry,
+                        };
+                        let direct: Vec<Molecule> = reaction
+                            .apply(&host, config)
+                            .unwrap()
+                            .collect::<Result<Vec<_>, _>>()
+                            .unwrap();
+                        let via_host: Vec<Molecule> = reaction
+                            .apply_to_host(&prepared_host, config)
+                            .unwrap()
+                            .collect::<Result<Vec<_>, _>>()
+                            .unwrap();
+                        assert_eq!(
+                            via_host, direct,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                        assert_eq!(
+                            via_host.len(),
+                            expected_count,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                        let unique_canonical: HashSet<Molecule> = via_host
+                            .iter()
+                            .map(|product| product.clone().canonicalize(&canon_ctx).unwrap())
+                            .collect();
+                        assert_eq!(
+                            unique_canonical.len(),
+                            expected_unique_products,
+                            "{strategy:?}/{auto_alg:?}/{subiso:?} ({reduce_pattern_symmetry},{reduce_host_symmetry})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[rstest]
+    fn test_reaction_apply_to_host_outputs_isolation_and_preconditions() {
+        let mut host = mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
+        let snapshot = host.clone();
+        let prepared_host = PreparedSubstructureHost::new(&host);
+        // Mutating the original molecule after preparing the host must not affect applications.
+        host.atom_mut(AtomId(0)).attributes_mut().charge = NumForm::Lit(5);
+
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        );
+        let config = SubstructureMatchConfig {
+            match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+            subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::BitsetRi,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
+            reduce_pattern_symmetry: true,
+            reduce_host_symmetry: true,
+        };
+
+        assert_eq!(
+            reaction
+                .apply_to_host(&prepared_host, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            reaction
+                .apply(&snapshot, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        assert_eq!(
+            reaction
+                .tracked_apply_to_host(&prepared_host, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            reaction
+                .tracked_apply(&snapshot, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        assert_eq!(
+            reaction
+                .apply_to_host_to_reaction(&prepared_host, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            reaction
+                .apply_to_reaction(&snapshot, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        assert_eq!(
+            reaction
+                .apply_to_host_to_reaction_span(&prepared_host, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            reaction
+                .apply_to_reaction_span(&snapshot, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        assert_eq!(
+            prepared_host
+                .react(&reaction, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            snapshot
+                .react(&reaction, config)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+
+        // Precondition error parity (`ApplyPreconditionError`).
+        let invalid_reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::from_element(Element::C),
+            })]),
+        );
+        assert_eq!(
+            invalid_reaction
+                .apply_to_host(&prepared_host, config)
+                .unwrap_err(),
+            invalid_reaction.apply(&snapshot, config).unwrap_err(),
+        );
+        assert_eq!(
+            prepared_host.react(&invalid_reaction, config).unwrap_err(),
+            snapshot.react(&invalid_reaction, config).unwrap_err(),
+        );
+    }
+
+    #[rstest]
+    #[should_panic(expected = "substructure matching does not evaluate molecule constraints")]
+    fn test_reaction_apply_to_host_panics_on_lhs_molecule_constraints() {
+        let host = PreparedSubstructureHost::new(&mol_dsl!(r#"{:atoms ["C"]}"#));
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: None,
+                    sum: NumForm::Lit(0),
+                })
+                .into(),
+                ..Default::default()
+            }),
+            Deltas::new(),
+        );
+        let _ = reaction.apply_to_host(&host, MATCH_CONFIG);
     }
 }

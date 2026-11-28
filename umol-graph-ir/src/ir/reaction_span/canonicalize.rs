@@ -122,7 +122,7 @@ fn remapping_from_order(
 }
 
 /// The remapping that sends every entity of `source` to its image in `target` under `node_images`.
-fn remapping_from_images(
+pub(super) fn remapping_from_images(
     source: &ReactionSpan,
     target: &ReactionSpan,
     incidence_graph: &IncidenceGraph,

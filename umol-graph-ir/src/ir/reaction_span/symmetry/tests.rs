@@ -1,9 +1,11 @@
 //! Unit tests for the colors and the remapping checks of a reaction span.
 
 use std::cmp::Ordering;
+use std::collections::{BTreeSet, VecDeque};
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
+use umol_graph_core::{AutomorphismAlgorithm, QuerySymmetryConstraints};
 
 use super::*;
 use crate::ir::incidence::IncidenceLevel;
@@ -1681,4 +1683,201 @@ fn test_initial_colors_error(
         initial_colors(&span, &incidence_graph, level, include_constraints),
         Err(Contradiction)
     );
+}
+
+fn span_subgroup_elements(node_count: usize, generators: &[Vec<NodeId>]) -> BTreeSet<Vec<u32>> {
+    let identity: Vec<u32> = (0..node_count as u32).collect();
+    let mut visited = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    visited.insert(identity.clone());
+    queue.push_back(identity);
+    while let Some(current) = queue.pop_front() {
+        for generator in generators {
+            let next: Vec<u32> = current.iter().map(|&x| generator[x as usize].0).collect();
+            if visited.insert(next.clone()) {
+                queue.push_back(next);
+            }
+        }
+    }
+    visited
+}
+
+#[rstest]
+#[case::symmetric_epoxidation(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Some(2)
+)]
+#[case::asymmetric_monosubstitution(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(2), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Some(1)
+)]
+#[case::benzene_monosubstitution(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Added(AtomForm::from_element(Element::Cl)),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(1), AtomId(2), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(2), AtomId(3), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(3), AtomId(4), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(4), AtomId(5), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(5), AtomId(0), EntitySpan::Unchanged(BondForm::from_order(1))),
+            (AtomId(0), AtomId(6), EntitySpan::Added(BondForm::from_order(1))),
+        ],
+        ..Default::default()
+    }),
+    Some(2)
+)]
+#[case::tetrahedral_walden_inversion(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::F, Element::F, Element::F]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )],
+        ..Default::default()
+    }),
+    Some(12)
+)]
+#[case::added_chiral_center(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::F, Element::F, Element::F]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Added(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+        )],
+        ..Default::default()
+    }),
+    Some(12)
+)]
+#[case::added_asymmetric_molecule_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0)]),
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    Some(1)
+)]
+#[case::added_symmetric_molecule_constraint(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 2],
+        bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::from_order(1)))],
+        constraints: vec![ConstraintSpan::Added(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum {
+                atoms: Some(vec![AtomId(0), AtomId(1)]),
+                sum: NumForm::Lit(0),
+            },
+        ))],
+        ..Default::default()
+    }),
+    Some(2)
+)]
+#[case::malformed_stereo_falls_back_none(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: [Element::C, Element::F, Element::F, Element::F, Element::F]
+            .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+            .into(),
+        bonds: (1..=4)
+            .map(|ligand| {
+                (AtomId(0), AtomId(ligand), EntitySpan::Unchanged(BondForm::from_order(1)))
+            })
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Unchanged(StereoAtomForm::new(StereoKind::Tetrahedral, 2u32)),
+        )],
+        ..Default::default()
+    }),
+    None
+)]
+fn test_reaction_span_proper_incidence_generators(
+    #[case] span: ReactionSpan,
+    #[case] expected_order: Option<usize>,
+) {
+    let trail = span.proper_incidence_generators(AutomorphismAlgorithm::TrailIr);
+    let nauty = span.proper_incidence_generators(AutomorphismAlgorithm::Nauty);
+    match expected_order {
+        None => {
+            assert!(trail.is_none());
+            assert!(nauty.is_none());
+        }
+        Some(expected_order) => {
+            let (trail_inc, trail_gens) = trail.expect("valid span produces proper generators");
+            let (nauty_inc, nauty_gens) = nauty.expect("valid span produces proper generators");
+            let trail_group = span_subgroup_elements(trail_inc.node_count(), &trail_gens);
+            let nauty_group = span_subgroup_elements(nauty_inc.node_count(), &nauty_gens);
+            assert_eq!(trail_group, nauty_group);
+            assert_eq!(trail_group.len(), expected_order);
+
+            let q_trail =
+                QuerySymmetryConstraints::try_from_generators(trail_inc.raw_graph(), &trail_gens)
+                    .unwrap();
+            let q_nauty =
+                QuerySymmetryConstraints::try_from_generators(nauty_inc.raw_graph(), &nauty_gens)
+                    .unwrap();
+            assert_eq!(q_trail.constraints(), q_nauty.constraints());
+        }
+    }
 }

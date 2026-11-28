@@ -1,40 +1,57 @@
 //! Colors and remapping checks of a reaction span.
 
-use umol_graph_core::{EdgeId, NodeId};
+use std::collections::BTreeSet;
+
+use umol_graph_core::{AutomorphismAlgorithm, EdgeId, NodeId};
 use umol_perm::Permutation;
 
+use super::super::edit::collect_constraint_entities;
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::{DescriptionLevel, Entity};
 use super::super::error::Contradiction;
-use super::super::id::{AtomId, AtomPosition, BondId};
+use super::super::id::{AtomId, AtomPosition, BondId, StereoAtomId, StereoBondId};
 use super::super::incidence::{
-    Incidence, IncidenceEdge, IncidenceEdgeId, IncidenceGraph, IncidenceNodeId,
+    Incidence, IncidenceEdge, IncidenceEdgeId, IncidenceGraph, IncidenceLevel, IncidenceNodeId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::span::EntitySpan;
+use super::super::span::{ConstraintSpan, EntitySpan};
 use super::super::stereo::integrity::{check_stereo_atom_kind, check_stereo_bond_kind};
 use super::super::stereo::StereoKind;
-use super::super::symmetry::{rank_colors, InitialColors};
-use super::super::traits::{AsColor, FrameTransport, Normalize};
+use super::super::symmetry::{
+    extract_subgroup_generators, rank_colors, AutomorphismAdapter, InitialColors,
+};
+use super::super::traits::{AsColor, FrameTransport, Normalize, Reframe};
+use super::canonicalize::remapping_from_images;
 use super::ReactionSpan;
 
-/// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
-/// `target` with the same site and the same form.
-///
-/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `source`,
-/// and `target` has the entity counts of `source`. A generator of `source` is such a remapping of
-/// `source` onto itself.
-pub(crate) fn remapping_preserves_stereo(
+#[derive(Clone, Copy)]
+enum SpanStereoRecordId {
+    Atom(StereoAtomId),
+    Bond(StereoBondId),
+}
+
+fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
+where
+    Form: Clone + FrameTransport<Action = Permutation> + Normalize,
+{
+    source
+        .clone()
+        .reframe_by(&action)
+        .is_some_and(|mapped| mapped.normalized_eq(target))
+}
+
+fn stereo_record_preserved(
     source: &ReactionSpan,
     target: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
-    images: &[NodeId],
+    image_of: impl Fn(usize) -> u32,
+    record: SpanStereoRecordId,
 ) -> bool {
-    let entity_image = |entity| {
+    let entity_image = |entity: Entity| {
         let node = incidence_graph
             .node_of(entity)
             .expect("stereo remapping entity is in incidence graph");
-        incidence_graph.entity(IncidenceNodeId::from(images[node.index()]))
+        incidence_graph.entity(IncidenceNodeId(image_of(node.index())))
     };
     let frame_action = |ligands: &[StereoLigand], image_ligands: &[StereoLigand]| {
         let mapped = ligands
@@ -48,77 +65,313 @@ pub(crate) fn remapping_preserves_stereo(
             .collect::<Option<Vec<_>>>()?;
         Permutation::between(&mapped, image_ligands)
     };
-    fn form_preserved<Form>(source: &Form, target: &Form, action: Permutation) -> bool
-    where
-        Form: Clone + FrameTransport<Action = Permutation> + Normalize,
-    {
-        source
-            .clone()
-            .reframe_by(&action)
-            .is_some_and(|mapped| mapped.normalized_eq(target))
-    }
 
+    match record {
+        SpanStereoRecordId::Atom(id) => {
+            let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(id)) else {
+                return false;
+            };
+            if entity_image(Entity::Atom(source.stereo_atoms().site(id)))
+                != Entity::Atom(target.stereo_atoms().site(image_id))
+            {
+                return false;
+            }
+            let Some(action) = frame_action(
+                source.stereo_atoms().ligands(id),
+                target.stereo_atoms().ligands(image_id),
+            ) else {
+                return false;
+            };
+            form_preserved(
+                source.stereo_atoms().attributes(id),
+                target.stereo_atoms().attributes(image_id),
+                action,
+            )
+        }
+        SpanStereoRecordId::Bond(id) => {
+            let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(id)) else {
+                return false;
+            };
+            let [s0, s1] = source
+                .graph()
+                .edge_endpoints(EdgeId::from(source.stereo_bonds().site(id)))
+                .map(AtomId::from);
+            let (Entity::Atom(m0), Entity::Atom(m1)) = (
+                entity_image(Entity::Atom(s0)),
+                entity_image(Entity::Atom(s1)),
+            ) else {
+                return false;
+            };
+            let [t0, t1] = target
+                .graph()
+                .edge_endpoints(EdgeId::from(target.stereo_bonds().site(image_id)))
+                .map(AtomId::from);
+            if !((m0 == t0 && m1 == t1) || (m0 == t1 && m1 == t0)) {
+                return false;
+            }
+            let Some(action) = frame_action(
+                source.stereo_bonds().ligands(id),
+                target.stereo_bonds().ligands(image_id),
+            ) else {
+                return false;
+            };
+            form_preserved(
+                source.stereo_bonds().attributes(id),
+                target.stereo_bonds().attributes(image_id),
+                action,
+            )
+        }
+    }
+}
+
+/// Whether the remapping `images` carries every stereo entity of `source` onto a stereo entity of
+/// `target` with the same site and the same form.
+///
+/// `images` holds the image of each node of `incidence_graph`, the incidence graph of `source`,
+/// and `target` has the entity counts of `source`. A generator of `source` is such a remapping of
+/// `source` onto itself.
+pub(crate) fn remapping_preserves_stereo(
+    source: &ReactionSpan,
+    target: &ReactionSpan,
+    incidence_graph: &IncidenceGraph,
+    images: &[NodeId],
+) -> bool {
+    let image_of = |index: usize| images[index].0;
     for id in source.stereo_atoms().ids() {
-        let Entity::StereoAtom(image_id) = entity_image(Entity::StereoAtom(id)) else {
-            return false;
-        };
-        if entity_image(Entity::Atom(source.stereo_atoms().site(id)))
-            != Entity::Atom(target.stereo_atoms().site(image_id))
-        {
-            return false;
-        }
-        let Some(action) = frame_action(
-            source.stereo_atoms().ligands(id),
-            target.stereo_atoms().ligands(image_id),
-        ) else {
-            return false;
-        };
-        if !form_preserved(
-            source.stereo_atoms().attributes(id),
-            target.stereo_atoms().attributes(image_id),
-            action,
+        if !stereo_record_preserved(
+            source,
+            target,
+            incidence_graph,
+            image_of,
+            SpanStereoRecordId::Atom(id),
         ) {
             return false;
         }
     }
-
     for id in source.stereo_bonds().ids() {
-        let Entity::StereoBond(image_id) = entity_image(Entity::StereoBond(id)) else {
-            return false;
-        };
-        let [s0, s1] = source
-            .graph()
-            .edge_endpoints(EdgeId::from(source.stereo_bonds().site(id)))
-            .map(AtomId::from);
-        let (Entity::Atom(m0), Entity::Atom(m1)) = (
-            entity_image(Entity::Atom(s0)),
-            entity_image(Entity::Atom(s1)),
-        ) else {
-            return false;
-        };
-        let [t0, t1] = target
-            .graph()
-            .edge_endpoints(EdgeId::from(target.stereo_bonds().site(image_id)))
-            .map(AtomId::from);
-        if !((m0 == t0 && m1 == t1) || (m0 == t1 && m1 == t0)) {
-            return false;
-        }
-        let Some(action) = frame_action(
-            source.stereo_bonds().ligands(id),
-            target.stereo_bonds().ligands(image_id),
-        ) else {
-            return false;
-        };
-        if !form_preserved(
-            source.stereo_bonds().attributes(id),
-            target.stereo_bonds().attributes(image_id),
-            action,
+        if !stereo_record_preserved(
+            source,
+            target,
+            incidence_graph,
+            image_of,
+            SpanStereoRecordId::Bond(id),
         ) {
             return false;
         }
     }
-
     true
+}
+
+impl ReactionSpan {
+    /// Generating set for the proper (delta-, overlay-, stereo-, and constraint-preserving)
+    /// automorphism subgroup of this span over `IncidenceLevel::Full`, paired with the incidence
+    /// graph on which the generators act.
+    ///
+    /// Returns `None` when initial coloring rejects malformed span attributes or when a stereo or
+    /// constraint check encounters a contradiction; callers treat `None` as the trivial subgroup
+    /// `{1}`.
+    pub(crate) fn proper_incidence_generators(
+        &self,
+        algorithm: AutomorphismAlgorithm,
+    ) -> Option<(IncidenceGraph, Vec<Vec<NodeId>>)> {
+        let incidence = self.incidence_graph(IncidenceLevel::Full);
+        let node_count = incidence.node_count();
+        if node_count <= 1 {
+            return Some((incidence, Vec::new()));
+        }
+
+        let colors = initial_colors(self, &incidence, DescriptionLevel::Structure, true).ok()?;
+        let adapter = AutomorphismAdapter::new(&incidence, &colors);
+        let group = adapter.graph().automorphisms(
+            |node| adapter.node_color(node),
+            |edge| adapter.edge_color(edge),
+            algorithm,
+        );
+        let generators = group.generators();
+        if generators.is_empty() {
+            return Some((incidence, Vec::new()));
+        }
+
+        let has_stereo = self.stereo_atoms().count() > 0 || self.stereo_bonds().count() > 0;
+        let has_constraints = !self.constraints().is_empty();
+        if !has_stereo && !has_constraints {
+            return Some((incidence, generators.to_vec()));
+        }
+
+        if has_stereo {
+            let stereo_normalizable = self.stereo_atoms().ids().all(|id| {
+                self.stereo_atoms()
+                    .attributes(id)
+                    .clone()
+                    .normalize()
+                    .is_ok()
+            }) && self.stereo_bonds().ids().all(|id| {
+                self.stereo_bonds()
+                    .attributes(id)
+                    .clone()
+                    .normalize()
+                    .is_ok()
+            });
+            if !stereo_normalizable {
+                return None;
+            }
+        }
+        if has_constraints && self.clone().reframe().is_err() {
+            return None;
+        }
+
+        let preserves_constraints = |node_images: &[NodeId]| -> bool {
+            let remapping = remapping_from_images(self, self, &incidence, node_images);
+            self.framed_eq_under(self, &remapping)
+        };
+        if generators.iter().all(|generator| {
+            (!has_stereo || remapping_preserves_stereo(self, self, &incidence, generator))
+                && (!has_constraints || preserves_constraints(generator))
+        }) {
+            return Some((incidence, generators.to_vec()));
+        }
+
+        let mut base = Vec::new();
+        let mut base_pos = vec![usize::MAX; node_count];
+        let mut add_base = |node: IncidenceNodeId| -> usize {
+            let idx = node.index();
+            if base_pos[idx] == usize::MAX {
+                base_pos[idx] = base.len();
+                base.push(idx);
+            }
+            base_pos[idx]
+        };
+
+        let mut tagged_records =
+            Vec::with_capacity(self.stereo_atoms().count() + self.stereo_bonds().count());
+        for id in self.stereo_atoms().ids() {
+            let mut max_pos = add_base(
+                incidence
+                    .node_of(Entity::StereoAtom(id))
+                    .expect("stereo atom is in full incidence graph"),
+            );
+            max_pos = max_pos.max(add_base(
+                incidence
+                    .node_of(Entity::Atom(self.stereo_atoms().site(id)))
+                    .expect("stereo atom site is in incidence graph"),
+            ));
+            for ligand in self.stereo_atoms().ligands(id) {
+                max_pos = max_pos.max(add_base(
+                    incidence
+                        .node_of(Entity::Atom(ligand.atom_id))
+                        .expect("stereo atom ligand is in incidence graph"),
+                ));
+            }
+            tagged_records.push((max_pos, SpanStereoRecordId::Atom(id)));
+        }
+        for id in self.stereo_bonds().ids() {
+            let mut max_pos = add_base(
+                incidence
+                    .node_of(Entity::StereoBond(id))
+                    .expect("stereo bond is in full incidence graph"),
+            );
+            let [first, second] = self
+                .graph()
+                .edge_endpoints(EdgeId::from(self.stereo_bonds().site(id)))
+                .map(AtomId::from);
+            max_pos = max_pos.max(add_base(
+                incidence
+                    .node_of(Entity::Atom(first))
+                    .expect("stereo bond endpoint is in incidence graph"),
+            ));
+            max_pos = max_pos.max(add_base(
+                incidence
+                    .node_of(Entity::Atom(second))
+                    .expect("stereo bond endpoint is in incidence graph"),
+            ));
+            for ligand in self.stereo_bonds().ligands(id) {
+                max_pos = max_pos.max(add_base(
+                    incidence
+                        .node_of(Entity::Atom(ligand.atom_id))
+                        .expect("stereo bond ligand is in incidence graph"),
+                ));
+            }
+            tagged_records.push((max_pos, SpanStereoRecordId::Bond(id)));
+        }
+
+        if has_constraints {
+            let mut referenced = BTreeSet::new();
+            for span in self.constraints() {
+                match span {
+                    ConstraintSpan::Unchanged(constraint)
+                    | ConstraintSpan::Added(constraint)
+                    | ConstraintSpan::Removed(constraint) => {
+                        collect_constraint_entities(constraint, &mut referenced);
+                    }
+                }
+            }
+            for entity in referenced {
+                match entity {
+                    Entity::Bond(bond) => {
+                        let [first, second] = self
+                            .graph()
+                            .edge_endpoints(EdgeId::from(bond))
+                            .map(AtomId::from);
+                        add_base(
+                            incidence
+                                .node_of(Entity::Atom(first))
+                                .expect("constraint bond endpoint is in incidence graph"),
+                        );
+                        add_base(
+                            incidence
+                                .node_of(Entity::Atom(second))
+                                .expect("constraint bond endpoint is in incidence graph"),
+                        );
+                    }
+                    other => {
+                        add_base(
+                            incidence
+                                .node_of(other)
+                                .expect("constraint entity is in full incidence graph"),
+                        );
+                    }
+                }
+            }
+        }
+
+        if base.is_empty() {
+            return None;
+        }
+
+        let mut records_at_depth = vec![Vec::new(); base.len()];
+        for (depth, record) in tagged_records {
+            records_at_depth[depth].push(record);
+        }
+        let final_depth = base.len() - 1;
+        let mut node_buf = if has_constraints {
+            vec![NodeId(0); node_count]
+        } else {
+            Vec::new()
+        };
+
+        let proper = extract_subgroup_generators(node_count, generators, &base, |depth, images| {
+            let stereo_ok = records_at_depth[depth].iter().all(|&record| {
+                stereo_record_preserved(self, self, &incidence, |idx| images[idx], record)
+            });
+            if !stereo_ok {
+                return false;
+            }
+            if has_constraints && depth == final_depth {
+                for (slot, &img) in node_buf.iter_mut().zip(images) {
+                    *slot = NodeId(img);
+                }
+                preserves_constraints(&node_buf)
+            } else {
+                true
+            }
+        });
+
+        debug_assert!(proper.iter().all(|generator| {
+            (!has_stereo || remapping_preserves_stereo(self, self, &incidence, generator))
+                && (!has_constraints || preserves_constraints(generator))
+        }));
+        Some((incidence, proper))
+    }
 }
 
 pub(crate) fn retain_stereo_preserving_generators(
