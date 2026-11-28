@@ -10,8 +10,9 @@ use std::mem;
 use std::ops::ControlFlow;
 
 use super::bitset::{
-    degree_sequence_ok, init_wide_candidates, init_word_candidates, LazyWordAdj,
-    PrecomputedWordAdj, WideAdj, WordAdj, WordMask, WIDE_LAZY_ADJ_LIMIT,
+    degree_sequence_ok, init_wide_candidates, init_word_candidates,
+    reset_target_chain_for_wide_candidates, LazyWordAdj, PrecomputedWordAdj, WideAdj, WordAdj,
+    WordMask, WIDE_LAZY_ADJ_LIMIT,
 };
 use super::predicate::SubgraphIsomorphismPredicate;
 use super::prepared::{
@@ -39,21 +40,22 @@ struct DynamicSymmetry<'a> {
 }
 
 impl<'a> DynamicSymmetry<'a> {
+    /// Precondition: when `active_target_sym` is `Some(_)`, `target_chain` has already been
+    /// initialized for the active target subgroup.
     fn build(
         prepared_query: Option<&'a PreparedSubgraphQuery>,
-        target_sym: Option<&'a TargetSymmetry>,
+        active_target_sym: Option<&'a TargetSymmetry>,
         target_chain: &'a mut TargetStabilizerChain,
     ) -> Option<Self> {
         let pq = prepared_query?;
         let query_sym = (!pq.symmetry().is_trivial()).then_some(pq.symmetry());
-        let active_target_sym = target_sym.filter(|sym| !sym.is_trivial());
         let has_q_sym = query_sym.is_some();
         let has_h_sym = active_target_sym.is_some();
         if !has_q_sym && !has_h_sym {
             return None;
         }
-        if let Some(ts) = active_target_sym {
-            target_chain.reset(ts);
+        if has_h_sym {
+            debug_assert!(!target_chain.is_current_trivial());
         }
         Some(Self {
             has_q_sym,
@@ -73,12 +75,15 @@ impl<'a> DynamicSymmetry<'a> {
 
     #[inline(always)]
     fn rejects_before_edge_check(&self, prefix_len: usize, best_q: usize, v: usize) -> bool {
-        if !self.has_h_sym || self.target_chain.is_current_trivial() {
+        let Some(target_sym) = self.target_sym else {
+            return false;
+        };
+        if self.target_chain.is_current_trivial() {
             return false;
         }
         let priority = self.prepared_query.priority_order();
         if prefix_len < priority.len() && priority[prefix_len] as usize == best_q {
-            !self.target_chain.is_orbit_min_at_current(v)
+            !self.target_chain.is_orbit_min_at_current(target_sym, v)
         } else {
             false
         }
@@ -93,9 +98,9 @@ impl<'a> DynamicSymmetry<'a> {
         prefix_len: usize,
         mapping: &[usize],
     ) -> Option<(usize, usize)> {
-        if !self.has_h_sym {
+        let Some(target_sym) = self.target_sym else {
             return Some((prefix_len, usize::MAX));
-        }
+        };
         let priority = self.prepared_query.priority_order();
         let n1 = priority.len();
         let mut next_prefix_len = prefix_len;
@@ -115,13 +120,17 @@ impl<'a> DynamicSymmetry<'a> {
             let r_is_last = next_prefix_len == n1 && p_r == priority[n1 - 1];
             let t_r = mapping[p_r as usize];
             if !self.has_q_sym && r_is_last {
-                if !self.target_chain.is_orbit_min_at_current(t_r) {
+                if !self.target_chain.is_orbit_min_at_current(target_sym, t_r) {
                     if pushed {
                         self.target_chain.truncate(saved_depth);
                     }
                     return None;
                 }
-            } else if self.target_chain.try_push_orbit_min(t_r) {
+            } else if self.target_chain.try_push_orbit_min_with_tree(
+                target_sym,
+                t_r,
+                self.has_q_sym,
+            ) {
                 pushed = true;
             } else {
                 if pushed {
@@ -529,8 +538,19 @@ where
         return ControlFlow::Continue(());
     }
 
+    let mut cand_union = W::ZERO;
+    for &c in &trail[..n1] {
+        cand_union = cand_union | c;
+    }
+    let active_target_sym = target_sym.filter(|ts| {
+        W::reset_target_chain_for_candidates(&mut scratch.target_chain, ts, cand_union)
+    });
     scratch.out_nodes.resize(n1, NodeId(0));
-    let sym = DynamicSymmetry::build(Some(prepared_query), target_sym, &mut scratch.target_chain);
+    let sym = DynamicSymmetry::build(
+        Some(prepared_query),
+        active_target_sym,
+        &mut scratch.target_chain,
+    );
 
     let mut adj = PrecomputedWordAdj(adj_rows);
     let mut mapping = [usize::MAX; N];
@@ -1062,25 +1082,26 @@ where
                     }
                 }
                 if !wipeout
-                    && sym.has_h_sym
                     && next_prefix_len > prefix_len
                     && next_prefix_len < n1
                     && !sym.target_chain.is_current_trivial()
                 {
-                    let p_next = sym.prepared_query.priority_order()[next_prefix_len] as usize;
-                    let mut filtered = W::ZERO;
-                    let mut dom_bits = ctx.trail[next_base + p_next];
-                    while !dom_bits.is_zero() {
-                        let cand_t = dom_bits.trailing_zeros() as usize;
-                        dom_bits = dom_bits.clear_lowest();
-                        if sym.target_chain.is_orbit_min_at_current(cand_t) {
-                            filtered = filtered | W::bit(cand_t);
+                    if let Some(target_sym) = sym.target_sym {
+                        let p_next = sym.prepared_query.priority_order()[next_prefix_len] as usize;
+                        let mut filtered = W::ZERO;
+                        let mut dom_bits = ctx.trail[next_base + p_next];
+                        while !dom_bits.is_zero() {
+                            let cand_t = dom_bits.trailing_zeros() as usize;
+                            dom_bits = dom_bits.clear_lowest();
+                            if sym.target_chain.is_orbit_min_at_current(target_sym, cand_t) {
+                                filtered = filtered | W::bit(cand_t);
+                            }
                         }
-                    }
-                    if filtered.is_zero() {
-                        wipeout = true;
-                    } else {
-                        ctx.trail[next_base + p_next] = filtered;
+                        if filtered.is_zero() {
+                            wipeout = true;
+                        } else {
+                            ctx.trail[next_base + p_next] = filtered;
+                        }
                     }
                 }
             }
@@ -1185,7 +1206,10 @@ fn solve_wide<const COUNT_ONLY: bool, B, P: SubgraphIsomorphismPredicate>(
     scratch.mapping.resize(n1, usize::MAX);
     scratch.out_nodes.resize(n1, NodeId(0));
 
-    let sym = DynamicSymmetry::build(prepared_query, target_sym, &mut scratch.target_chain);
+    let active_target_sym = target_sym.filter(|ts| {
+        reset_target_chain_for_wide_candidates(&mut scratch.target_chain, ts, &dom_wide, n1, words)
+    });
+    let sym = DynamicSymmetry::build(prepared_query, active_target_sym, &mut scratch.target_chain);
 
     let mut assigned = vec![false; n1];
     let mut unit_done = vec![false; n1];
@@ -1849,12 +1873,13 @@ fn wide_dfs<const COUNT_ONLY: bool, B, P: SubgraphIsomorphismPredicate>(
                             let b = rem_bits.trailing_zeros() as usize;
                             rem_bits &= rem_bits - 1;
                             let cand_t = (word_idx << 6) + b;
-                            let is_min = ctx
-                                .sym
-                                .as_ref()
-                                .expect("sym present")
+                            let sym_ref = ctx.sym.as_ref().expect("sym present");
+                            let target_sym = sym_ref
+                                .target_sym
+                                .expect("target symmetry present when filtering");
+                            let is_min = sym_ref
                                 .target_chain
-                                .is_orbit_min_at_current(cand_t);
+                                .is_orbit_min_at_current(target_sym, cand_t);
                             if is_min {
                                 filtered |= 1u64 << b;
                             }

@@ -48,6 +48,13 @@ pub struct SubgraphIsomorphismScratch {
     pub(crate) adj_built_wide: Vec<u64>,
     pub(crate) trail_u64: Vec<u64>,
     pub(crate) trail_u128: Vec<u128>,
+    pub(crate) sym_gt_offsets: Vec<usize>,
+    pub(crate) sym_gt_depths: Vec<usize>,
+    pub(crate) sym_lt_offsets: Vec<usize>,
+    pub(crate) sym_lt_depths: Vec<usize>,
+    pub(crate) sym_priority_pos: Vec<usize>,
+    pub(crate) sym_prefix_len_after: Vec<usize>,
+    pub(crate) sym_by_query: Vec<usize>,
     pub(crate) target_chain: TargetStabilizerChain,
 }
 

@@ -10,11 +10,13 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
-    AtomConstraintForm, AtomForm, AtomHandle, AtomId, BondForm, Constraint, ConstraintSpan, Delta,
-    Deltas, Edits, ElectronCountsForm, EntitySpan, Molecule, MoleculeCorrespondence,
-    MoleculeEntries, Reaction, ReactionSpan, ReactionSpanEntries, RollbackMethod,
-    SubstructureMatchAlgorithm, SubstructureMatchConfig,
+    AtomConstraintForm, AtomDelta, AtomFieldChange, AtomForm, AtomHandle, AtomId, BondDelta,
+    BondForm, BondId, Constraint, ConstraintSpan, Delta, Deltas, Edits, ElectronCountsForm,
+    EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm,
+    PreparedSubstructureHost, Reaction, ReactionSpan, ReactionSpanEntries, RingScope,
+    RollbackMethod, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
+use umol_graph_ir::mol_dsl;
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
@@ -23,6 +25,17 @@ const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     automorphism_algorithm: AutomorphismAlgorithm::TrailIr,
     reduce_pattern_symmetry: false,
     reduce_host_symmetry: false,
+};
+
+const MATCH_CONFIG_VF2: SubstructureMatchConfig = SubstructureMatchConfig {
+    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+    ..MATCH_CONFIG
+};
+
+const MATCH_CONFIG_SYM: SubstructureMatchConfig = SubstructureMatchConfig {
+    reduce_pattern_symmetry: true,
+    reduce_host_symmetry: true,
+    ..MATCH_CONFIG
 };
 
 fn application_case() -> (Reaction, Molecule, MoleculeCorrespondence) {
@@ -139,6 +152,7 @@ fn reversal_case() -> Reaction {
 
 fn benchmark_reaction(c: &mut Criterion) {
     let (reaction, host, correspondence) = application_case();
+    let prepared_host = PreparedSubstructureHost::new(&host);
     let applications = reaction
         .apply(&host, MATCH_CONFIG)
         .unwrap()
@@ -181,6 +195,16 @@ fn benchmark_reaction(c: &mut Criterion) {
             black_box(
                 reaction
                     .apply(black_box(&host), MATCH_CONFIG)
+                    .unwrap()
+                    .collect::<Vec<_>>(),
+            )
+        })
+    });
+    group.bench_function("apply_to_host/all_matches", |b| {
+        b.iter(|| {
+            black_box(
+                reaction
+                    .apply_to_host(black_box(&prepared_host), MATCH_CONFIG)
                     .unwrap()
                     .collect::<Vec<_>>(),
             )
@@ -365,5 +389,407 @@ fn benchmark_mutation(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_reaction, benchmark_mutation);
+fn library_hosts() -> Vec<Molecule> {
+    let biphenyl = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 12],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+            (AtomId(6), AtomId(7), BondForm::from_order(1)),
+            (AtomId(7), AtomId(8), BondForm::from_order(1)),
+            (AtomId(8), AtomId(9), BondForm::from_order(1)),
+            (AtomId(9), AtomId(10), BondForm::from_order(1)),
+            (AtomId(10), AtomId(11), BondForm::from_order(1)),
+            (AtomId(11), AtomId(6), BondForm::from_order(1)),
+            (AtomId(0), AtomId(6), BondForm::from_order(1)),
+        ],
+        aromatic: vec![
+            ((0..6).map(AtomId).collect(), AromaticSystemForm::default()),
+            ((6..12).map(AtomId).collect(), AromaticSystemForm::default()),
+        ],
+        ..Default::default()
+    });
+    let naphthalene_diol = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+            (AtomId(4), AtomId(6), BondForm::from_order(1)),
+            (AtomId(6), AtomId(7), BondForm::from_order(1)),
+            (AtomId(7), AtomId(8), BondForm::from_order(1)),
+            (AtomId(8), AtomId(9), BondForm::from_order(1)),
+            (AtomId(9), AtomId(5), BondForm::from_order(1)),
+            (AtomId(1), AtomId(10), BondForm::from_order(1)),
+            (AtomId(7), AtomId(11), BondForm::from_order(1)),
+        ],
+        aromatic: vec![((0..10).map(AtomId).collect(), AromaticSystemForm::default())],
+        ..Default::default()
+    });
+    let adipic_acid = mol_dsl!(
+        r#"{:atoms ["O" "C" "O" "C" "C" "C" "C" "C" "O" "O"]
+            :bonds [[0 1 "1"] [1 2 "2"] [1 3 "1"] [3 4 "1"] [4 5 "1"]
+                    [5 6 "1"] [6 7 "1"] [7 8 "2"] [7 9 "1"]]}"#
+    );
+    let benzamide = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::Cl),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            (AtomId(3), AtomId(4), BondForm::from_order(1)),
+            (AtomId(4), AtomId(5), BondForm::from_order(1)),
+            (AtomId(5), AtomId(0), BondForm::from_order(1)),
+            (AtomId(0), AtomId(6), BondForm::from_order(1)),
+            (AtomId(6), AtomId(7), BondForm::from_order(2)),
+            (AtomId(6), AtomId(8), BondForm::from_order(1)),
+            (AtomId(3), AtomId(9), BondForm::from_order(1)),
+        ],
+        aromatic: vec![((0..6).map(AtomId).collect(), AromaticSystemForm::default())],
+        ..Default::default()
+    });
+    let cyclohexene_diol = mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C" "C" "C" "O" "O" "C" "N"]
+            :bonds [[0 1 "2"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [2 6 "1"] [5 7 "1"] [3 8 "1"] [8 9 "1"]]}"#
+    );
+    let piperidine_ester = mol_dsl!(
+        r#"{:atoms ["N" "C" "C" "C" "C" "C" "C" "O" "O" "C" "C" "Cl"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [3 6 "1"] [6 7 "2"] [6 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"]]}"#
+    );
+    vec![
+        biphenyl,
+        naphthalene_diol,
+        adipic_acid,
+        benzamide,
+        cyclohexene_diol,
+        piperidine_ester,
+    ]
+}
+
+fn reaction_library() -> Vec<Reaction> {
+    let charge_atom0 = |new_charge: i64| {
+        Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Undetermined,
+                new: NumForm::Lit(new_charge),
+            },
+        })])
+    };
+    let attach_cl_at = |site: u32, next_atom: u32, next_bond: u32| {
+        Deltas::from_iter([
+            Delta::Atom(AtomDelta::Add {
+                id: AtomId(next_atom),
+                attributes: AtomForm::from_element(Element::Cl),
+            }),
+            Delta::Bond(BondDelta::Add {
+                id: BondId(next_bond),
+                atoms: [AtomId(site), AtomId(next_atom)],
+                attributes: BondForm::from_order(1),
+            }),
+        ])
+    };
+
+    vec![
+        // Acyclic functional-group transformations.
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["O" "C" "O"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+            charge_atom0(-1),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+                id: BondId(0),
+                atoms: [AtomId(0), AtomId(1)],
+                attributes: BondForm::from_order(2),
+            })]),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            attach_cl_at(1, 2, 1),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["N" "C"] :bonds [[0 1 "1"]]}"#),
+            charge_atom0(1),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "Cl"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([
+                Delta::Bond(BondDelta::Remove {
+                    id: BondId(0),
+                    atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Atom(AtomDelta::Remove {
+                    id: AtomId(1),
+                    attributes: AtomForm::from_element(Element::Cl),
+                }),
+            ]),
+        ),
+        // Ring-constrained transformations exercising lazy `RingSet` caching on `PreparedSubstructureHost`.
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)
+                    .with_constraint(AtomConstraintForm::ring_membership(RingScope::All, 1))
+                    .with_constraint(AtomConstraintForm::degree(2))],
+                ..Default::default()
+            }),
+            attach_cl_at(0, 1, 0),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::N)
+                    .with_constraint(AtomConstraintForm::ring_membership(RingScope::All, 1))],
+                ..Default::default()
+            }),
+            charge_atom0(1),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C)
+                        .with_constraint(AtomConstraintForm::ring_membership(RingScope::All, 1)),
+                    AtomForm::from_element(Element::O),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+                ..Default::default()
+            }),
+            charge_atom0(1),
+        ),
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C)
+                        .with_constraint(AtomConstraintForm::ring_membership(RingScope::All, 1)),
+                    AtomForm::from_element(Element::C)
+                        .with_constraint(AtomConstraintForm::ring_membership(RingScope::All, 1)),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(2),
+                    atoms: [AtomId(1), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        // Symmetric-LHS transformations.
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 6],
+                bonds: (0..6)
+                    .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
+                    .collect(),
+                aromatic: vec![((0..6).map(AtomId).collect(), AromaticSystemForm::default())],
+                ..Default::default()
+            }),
+            attach_cl_at(0, 6, 6),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::O),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(2),
+                    atoms: [AtomId(1), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+            charge_atom0(1),
+        ),
+        // Rare-heteroatom rules exercising fast element-bitmask pre-screening.
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["S" "O"] :bonds [[0 1 "2"]]}"#),
+            charge_atom0(1),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["P" "O"] :bonds [[0 1 "2"]]}"#),
+            charge_atom0(1),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["B" "O"] :bonds [[0 1 "1"]]}"#),
+            charge_atom0(-1),
+        ),
+        Reaction::new(
+            mol_dsl!(r#"{:atoms ["Si" "O"] :bonds [[0 1 "1"]]}"#),
+            charge_atom0(1),
+        ),
+    ]
+}
+
+fn benchmark_reaction_library(c: &mut Criterion) {
+    let hosts = library_hosts();
+    let prepared_hosts: Vec<PreparedSubstructureHost> =
+        hosts.iter().map(PreparedSubstructureHost::new).collect();
+    let reactions = reaction_library();
+
+    for host in &hosts {
+        for reaction in &reactions {
+            let direct = reaction
+                .apply(host, MATCH_CONFIG)
+                .expect("benchmark reaction satisfies preconditions")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("benchmark application succeeds");
+            let prepared = reaction
+                .apply_to_host(&PreparedSubstructureHost::new(host), MATCH_CONFIG)
+                .expect("benchmark reaction satisfies preconditions")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("benchmark application succeeds");
+            assert_eq!(direct.len(), prepared.len());
+        }
+    }
+
+    let mut group = c.benchmark_group("reaction_library");
+    group.bench_function("apply/vf2rdkit_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                for reaction in &reactions {
+                    total += reaction.apply(host, MATCH_CONFIG_VF2).unwrap().count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("apply/bitset_ri_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                for reaction in &reactions {
+                    total += reaction.apply(host, MATCH_CONFIG).unwrap().count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("apply_to_host_per_run/bitset_ri_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                let prepared = PreparedSubstructureHost::new(host);
+                for reaction in &reactions {
+                    total += reaction
+                        .apply_to_host(&prepared, MATCH_CONFIG)
+                        .unwrap()
+                        .count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("apply_to_host_prebuilt/bitset_ri_unsym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &prepared_hosts {
+                for reaction in &reactions {
+                    total += reaction.apply_to_host(host, MATCH_CONFIG).unwrap().count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("apply/bitset_ri_sym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                for reaction in &reactions {
+                    total += reaction.apply(host, MATCH_CONFIG_SYM).unwrap().count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("apply_to_host_per_run/bitset_ri_sym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &hosts {
+                let prepared = PreparedSubstructureHost::new(host);
+                for reaction in &reactions {
+                    total += reaction
+                        .apply_to_host(&prepared, MATCH_CONFIG_SYM)
+                        .unwrap()
+                        .count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.bench_function("apply_to_host_prebuilt/bitset_ri_sym", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            for host in &prepared_hosts {
+                for reaction in &reactions {
+                    total += reaction
+                        .apply_to_host(host, MATCH_CONFIG_SYM)
+                        .unwrap()
+                        .count();
+                }
+            }
+            black_box(total)
+        })
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    benchmark_reaction,
+    benchmark_reaction_library,
+    benchmark_mutation
+);
 criterion_main!(benches);

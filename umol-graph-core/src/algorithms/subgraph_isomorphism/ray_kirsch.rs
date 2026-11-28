@@ -141,7 +141,10 @@ impl<'a> StepSymmetry<'a> {
 
     #[inline(always)]
     fn rejects_before_predicate(&self, idx: usize, v: usize) -> bool {
-        if !self.has_h_sym || self.target_chain.is_current_trivial() {
+        let Some(target_sym) = self.target_sym else {
+            return false;
+        };
+        if self.target_chain.is_current_trivial() {
             return false;
         }
         let prev_k = if idx == 0 {
@@ -150,7 +153,7 @@ impl<'a> StepSymmetry<'a> {
             self.prefix_len_after[idx - 1]
         };
         if self.prefix_len_after[idx] > prev_k {
-            !self.target_chain.is_orbit_min_at_current(v)
+            !self.target_chain.is_orbit_min_at_current(target_sym, v)
         } else {
             false
         }
@@ -158,7 +161,10 @@ impl<'a> StepSymmetry<'a> {
 
     #[inline]
     fn try_advance_host_chain(&mut self, idx: usize, mapping: &[usize]) -> Option<usize> {
-        if !self.has_h_sym || self.target_chain.is_current_trivial() {
+        let Some(target_sym) = self.target_sym else {
+            return Some(usize::MAX);
+        };
+        if self.target_chain.is_current_trivial() {
             return Some(usize::MAX);
         }
         let prev_k = if idx == 0 {
@@ -180,13 +186,17 @@ impl<'a> StepSymmetry<'a> {
             }
             let t_r = mapping[self.priority_order[r] as usize];
             if !self.has_q_sym && r + 1 == n1 {
-                if !self.target_chain.is_orbit_min_at_current(t_r) {
+                if !self.target_chain.is_orbit_min_at_current(target_sym, t_r) {
                     if pushed {
                         self.target_chain.truncate(saved_depth);
                     }
                     return None;
                 }
-            } else if self.target_chain.try_push_orbit_min(t_r) {
+            } else if self.target_chain.try_push_orbit_min_with_tree(
+                target_sym,
+                t_r,
+                self.has_q_sym,
+            ) {
                 pushed = true;
             } else {
                 if pushed {

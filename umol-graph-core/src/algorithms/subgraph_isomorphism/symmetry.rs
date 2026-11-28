@@ -12,6 +12,7 @@
 use std::cmp::Reverse;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use std::mem;
 
 use crate::algorithms::automorphism::{
     AutomorphismAlgorithm, AutomorphismGroup, AutomorphismScratch,
@@ -96,7 +97,8 @@ pub(crate) fn query_priority_order(query: &Graph) -> Vec<u32> {
 /// Compact support bitset (`v` set iff `perm[v] != v`) for exact disjoint-support pruning.
 #[derive(Clone, Debug)]
 enum Support {
-    Inline(u64),
+    U64(u64),
+    U128(u128),
     Wide(Vec<u64>),
 }
 
@@ -110,7 +112,15 @@ impl Support {
                     mask |= 1u64 << i;
                 }
             }
-            Self::Inline(mask)
+            Self::U64(mask)
+        } else if n <= 128 {
+            let mut mask = 0u128;
+            for (i, &img) in perm.iter().enumerate() {
+                if img as usize != i {
+                    mask |= 1u128 << i;
+                }
+            }
+            Self::U128(mask)
         } else {
             let mut words = vec![0u64; n.div_ceil(64)];
             for (i, &img) in perm.iter().enumerate() {
@@ -122,13 +132,47 @@ impl Support {
         }
     }
 
+    #[inline]
     fn is_disjoint(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Inline(a), Self::Inline(b)) => (a & b) == 0,
+            (Self::U64(a), Self::U64(b)) => (a & b) == 0,
+            (Self::U128(a), Self::U128(b)) => (a & b) == 0,
             (Self::Wide(a), Self::Wide(b)) => a.iter().zip(b).all(|(&x, &y)| (x & y) == 0),
             _ => unreachable!("supports in the same group have matching width"),
         }
     }
+
+    #[inline]
+    fn as_u128(&self) -> u128 {
+        match *self {
+            Self::U64(mask) => u128::from(mask),
+            Self::U128(mask) => mask,
+            Self::Wide(_) => unreachable!("u128 support queried only when node_count <= 128"),
+        }
+    }
+}
+
+fn is_involution(perm: &[u32]) -> bool {
+    perm.iter()
+        .enumerate()
+        .all(|(i, &img)| perm[img as usize] as usize == i)
+}
+
+fn build_disjoint_masks(supports: &[Support]) -> Vec<u64> {
+    if supports.len() > 64 {
+        return Vec::new();
+    }
+    let k = supports.len();
+    let mut masks = vec![0u64; k];
+    for i in 0..k {
+        for j in (i + 1)..k {
+            if supports[i].is_disjoint(&supports[j]) {
+                masks[i] |= 1u64 << j;
+                masks[j] |= 1u64 << i;
+            }
+        }
+    }
+    masks
 }
 
 /// Schreier tree for one base point in a stabilizer chain.
@@ -243,9 +287,11 @@ fn first_moved(perm: &[u32]) -> Option<usize> {
 }
 
 /// Sims's filter: maintains a small generating set with identical generated subgroup.
+#[derive(Clone, Debug, Default)]
 struct SimsFilter {
     /// For each `i`, entries `(j, gen_idx)` where generator `gen_idx` fixes `0..i` and maps `i -> j`.
     buckets: Vec<Vec<(u32, usize)>>,
+    dirty_buckets: Vec<usize>,
     generators: Vec<Vec<u32>>,
     inv_generators: Vec<Vec<u32>>,
 }
@@ -254,9 +300,22 @@ impl SimsFilter {
     fn new(node_count: usize) -> Self {
         Self {
             buckets: vec![Vec::new(); node_count],
+            dirty_buckets: Vec::new(),
             generators: Vec::new(),
             inv_generators: Vec::new(),
         }
+    }
+
+    fn reset(&mut self, node_count: usize) {
+        if self.buckets.len() < node_count {
+            self.buckets.resize_with(node_count, Vec::new);
+        }
+        for &idx in &self.dirty_buckets {
+            self.buckets[idx].clear();
+        }
+        self.dirty_buckets.clear();
+        self.generators.clear();
+        self.inv_generators.clear();
     }
 
     fn insert(&mut self, mut perm: Vec<u32>) {
@@ -270,12 +329,19 @@ impl SimsFilter {
             } else {
                 let gen_idx = self.generators.len();
                 let inv = invert_perm(&perm);
+                if self.buckets[i].is_empty() {
+                    self.dirty_buckets.push(i);
+                }
                 self.buckets[i].push((j, gen_idx));
                 self.generators.push(perm);
                 self.inv_generators.push(inv);
                 break;
             }
         }
+    }
+
+    fn take_generators(&mut self) -> Vec<Vec<u32>> {
+        mem::take(&mut self.generators)
     }
 
     fn into_generators(self) -> Vec<Vec<u32>> {
@@ -617,6 +683,81 @@ impl QuerySymmetryConstraints {
     }
 }
 
+#[derive(Clone, Debug)]
+enum TargetGeneratorMasks {
+    U64 {
+        moved: u64,
+        gen_orbit_reps: Vec<u64>,
+    },
+    U128 {
+        moved: u128,
+        gen_orbit_reps: Vec<u128>,
+    },
+    Wide {
+        moved: Vec<u64>,
+        gen_orbit_reps: Vec<Vec<u64>>,
+    },
+}
+
+impl TargetGeneratorMasks {
+    fn build(node_count: usize, orbits: &[NodeId], generators: &[Vec<u32>]) -> Self {
+        if node_count <= 64 {
+            let mut moved = 0u64;
+            let mut gen_orbit_reps = Vec::with_capacity(generators.len());
+            for gen in generators {
+                let mut reps = 0u64;
+                for (v, &img) in gen.iter().enumerate() {
+                    if img as usize != v {
+                        moved |= 1u64 << v;
+                        reps |= 1u64 << orbits[v].index();
+                    }
+                }
+                gen_orbit_reps.push(reps);
+            }
+            Self::U64 {
+                moved,
+                gen_orbit_reps,
+            }
+        } else if node_count <= 128 {
+            let mut moved = 0u128;
+            let mut gen_orbit_reps = Vec::with_capacity(generators.len());
+            for gen in generators {
+                let mut reps = 0u128;
+                for (v, &img) in gen.iter().enumerate() {
+                    if img as usize != v {
+                        moved |= 1u128 << v;
+                        reps |= 1u128 << orbits[v].index();
+                    }
+                }
+                gen_orbit_reps.push(reps);
+            }
+            Self::U128 {
+                moved,
+                gen_orbit_reps,
+            }
+        } else {
+            let words = node_count.div_ceil(64);
+            let mut moved = vec![0u64; words];
+            let mut gen_orbit_reps = Vec::with_capacity(generators.len());
+            for gen in generators {
+                let mut reps = vec![0u64; words];
+                for (v, &img) in gen.iter().enumerate() {
+                    if img as usize != v {
+                        moved[v / 64] |= 1u64 << (v % 64);
+                        let rep = orbits[v].index();
+                        reps[rep / 64] |= 1u64 << (rep % 64);
+                    }
+                }
+                gen_orbit_reps.push(reps);
+            }
+            Self::Wide {
+                moved,
+                gen_orbit_reps,
+            }
+        }
+    }
+}
+
 /// Operation-issued or generator-validated symmetry carrier for a target (host) graph.
 ///
 /// Stores the target's orbit partition, bitmasks of minimum orbit representatives, and a compact
@@ -638,23 +779,47 @@ pub struct TargetSymmetry {
     orbit_reps_u128: u128,
     orbit_reps_words: Vec<u64>,
     generators: Vec<Vec<u32>>,
+    inv_generators: Vec<Vec<u32>>,
+    gen_supports: Vec<Support>,
+    gen_is_involution: Vec<bool>,
+    gen_disjoint_from: Vec<u64>,
+    gen_masks: TargetGeneratorMasks,
 }
 
 impl TargetSymmetry {
-    /// Trivial symmetry (`{1}`, every vertex in its own singleton orbit) for a target with
-    /// `node_count` nodes.
-    pub fn none(node_count: usize) -> Self {
-        let orbits: Vec<NodeId> = (0..node_count as u32).map(NodeId).collect();
+    fn from_orbits_and_generators(
+        node_count: usize,
+        orbit_count: usize,
+        orbits: Vec<NodeId>,
+        generators: Vec<Vec<u32>>,
+    ) -> Self {
         let (orbit_reps_u64, orbit_reps_u128, orbit_reps_words) = build_orbit_rep_masks(&orbits);
+        let inv_generators = generators.iter().map(|g| invert_perm(g)).collect();
+        let gen_supports: Vec<Support> = generators.iter().map(|g| Support::from_perm(g)).collect();
+        let gen_is_involution = generators.iter().map(|g| is_involution(g)).collect();
+        let gen_disjoint_from = build_disjoint_masks(&gen_supports);
+        let gen_masks = TargetGeneratorMasks::build(node_count, &orbits, &generators);
         Self {
             node_count,
-            orbit_count: node_count,
+            orbit_count,
             orbits,
             orbit_reps_u64,
             orbit_reps_u128,
             orbit_reps_words,
-            generators: Vec::new(),
+            generators,
+            inv_generators,
+            gen_supports,
+            gen_is_involution,
+            gen_disjoint_from,
+            gen_masks,
         }
+    }
+
+    /// Trivial symmetry (`{1}`, every vertex in its own singleton orbit) for a target with
+    /// `node_count` nodes.
+    pub fn none(node_count: usize) -> Self {
+        let orbits: Vec<NodeId> = (0..node_count as u32).map(NodeId).collect();
+        Self::from_orbits_and_generators(node_count, node_count, orbits, Vec::new())
     }
 
     /// Compute target symmetry for `target` under `node_color` and `edge_color` using `alg`.
@@ -687,7 +852,6 @@ impl TargetSymmetry {
         let orbits: Vec<NodeId> = (0..node_count as u32)
             .map(|v| group.orbit_of(NodeId(v)))
             .collect();
-        let (orbit_reps_u64, orbit_reps_u128, orbit_reps_words) = build_orbit_rep_masks(&orbits);
         let generators = if orbit_count == node_count {
             Vec::new()
         } else {
@@ -697,15 +861,7 @@ impl TargetSymmetry {
             }
             filter.into_generators()
         };
-        Self {
-            node_count,
-            orbit_count,
-            orbits,
-            orbit_reps_u64,
-            orbit_reps_u128,
-            orbit_reps_words,
-            generators,
-        }
+        Self::from_orbits_and_generators(node_count, orbit_count, orbits, generators)
     }
 
     /// Construct target symmetry from an externally supplied subgroup of `Aut(target)`, such as a
@@ -730,20 +886,22 @@ impl TargetSymmetry {
         }
         let filtered = filter.into_generators();
         let (orbits, orbit_count) = compute_orbits(node_count, &filtered);
-        let (orbit_reps_u64, orbit_reps_u128, orbit_reps_words) = build_orbit_rep_masks(&orbits);
-        Ok(Self {
+        let generators = if orbit_count == node_count {
+            Vec::new()
+        } else {
+            filtered
+        };
+        Ok(Self::from_orbits_and_generators(
             node_count,
             orbit_count,
             orbits,
-            orbit_reps_u64,
-            orbit_reps_u128,
-            orbit_reps_words,
-            generators: if orbit_count == node_count {
-                Vec::new()
-            } else {
-                filtered
-            },
-        })
+            generators,
+        ))
+    }
+
+    #[inline]
+    fn supports_level0_fast_path(&self) -> bool {
+        self.node_count <= 128 && self.generators.len() <= 64
     }
 
     /// Number of nodes in the target graph domain.
@@ -820,13 +978,256 @@ fn build_orbit_rep_masks(orbits: &[NodeId]) -> (u64, u128, Vec<u64>) {
     (u64_mask, u128_mask, words)
 }
 
-/// One level of a target point-stabilizer chain `S_d = Stab_{G_H}(t_0, ..., t_{d-1})`.
 #[derive(Clone, Debug)]
-struct TargetStabilizerLevel {
+enum TargetSchreierTree {
+    /// Two-point Schreier tree `{base, partner}` generated by one isolated involution.
+    Involution {
+        base: u32,
+        partner: u32,
+        gen_idx: u32,
+    },
+    General {
+        base: u32,
+        parent_pt: Vec<u32>,
+        parent_gen: Vec<u32>,
+    },
+}
+
+impl TargetSchreierTree {
+    fn apply_left_inv_coset_rep(
+        &self,
+        target: usize,
+        inv_generators: &[Vec<u32>],
+        perm: &mut [u32],
+    ) {
+        match self {
+            Self::Involution {
+                base,
+                partner,
+                gen_idx,
+            } => {
+                if target != *base as usize {
+                    debug_assert_eq!(target, *partner as usize);
+                    let g_inv = &inv_generators[*gen_idx as usize];
+                    for slot in perm.iter_mut() {
+                        *slot = g_inv[*slot as usize];
+                    }
+                }
+            }
+            Self::General {
+                base,
+                parent_pt,
+                parent_gen,
+            } => {
+                apply_left_inv_coset_rep_slice(
+                    *base as usize,
+                    target,
+                    parent_pt,
+                    parent_gen,
+                    inv_generators,
+                    perm,
+                );
+            }
+        }
+    }
+}
+
+fn coset_rep_into_slice(
+    base: usize,
+    target: usize,
+    parent_pt: &[u32],
+    parent_gen: &[u32],
+    generators: &[Vec<u32>],
+    out: &mut [u32],
+    tmp: &mut [u32],
+) {
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = i as u32;
+    }
+    let mut cur = target;
+    while cur != base {
+        let g = &generators[parent_gen[cur] as usize];
+        for (i, slot) in tmp.iter_mut().enumerate() {
+            *slot = out[g[i] as usize];
+        }
+        out.copy_from_slice(tmp);
+        cur = parent_pt[cur] as usize;
+    }
+}
+
+fn apply_left_inv_coset_rep_slice(
+    base: usize,
+    target: usize,
+    parent_pt: &[u32],
+    parent_gen: &[u32],
+    inv_generators: &[Vec<u32>],
+    perm: &mut [u32],
+) {
+    let mut cur = target;
+    while cur != base {
+        let g_inv = &inv_generators[parent_gen[cur] as usize];
+        for slot in perm.iter_mut() {
+            *slot = g_inv[*slot as usize];
+        }
+        cur = parent_pt[cur] as usize;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn stabilize_point_indexed_scratch(
+    base: usize,
+    node_count: usize,
+    generators: &[Vec<u32>],
+    inv_generators: &[Vec<u32>],
+    gen_supports: &[Support],
+    active_mask: Option<u64>,
+    orbit: &[u32],
+    parent_pt: &[u32],
+    parent_gen: &[u32],
+    u_x: &mut [u32],
+    tmp: &mut [u32],
+    candidate: &mut [u32],
+    sims_filter: &mut SimsFilter,
+) -> Vec<Vec<u32>> {
+    let mut filter_used = false;
+    let seed = |gen: &Vec<u32>, filter_used: &mut bool, sims_filter: &mut SimsFilter| {
+        if gen[base] as usize == base {
+            if !*filter_used {
+                sims_filter.reset(node_count);
+                *filter_used = true;
+            }
+            sims_filter.insert(gen.clone());
+        }
+    };
+    if let Some(mut mask) = active_mask {
+        while mask != 0 {
+            let gi = mask.trailing_zeros() as usize;
+            mask &= mask - 1;
+            seed(&generators[gi], &mut filter_used, sims_filter);
+        }
+    } else {
+        for gen in generators {
+            seed(gen, &mut filter_used, sims_filter);
+        }
+    }
+
+    for &x_u32 in orbit {
+        let x = x_u32 as usize;
+        coset_rep_into_slice(base, x, parent_pt, parent_gen, generators, u_x, tmp);
+        let u_x_supp = (x != base).then(|| Support::from_perm(u_x));
+
+        let mut try_gen = |gen_idx: usize| {
+            let gen = &generators[gen_idx];
+            let y = gen[x] as usize;
+            if x == base && y == base {
+                return;
+            }
+            if parent_pt[y] as usize == x && parent_gen[y] as usize == gen_idx {
+                return;
+            }
+            if u_x_supp
+                .as_ref()
+                .is_some_and(|u_supp| gen_supports[gen_idx].is_disjoint(u_supp))
+            {
+                return;
+            }
+
+            for v in 0..node_count {
+                candidate[v] = gen[u_x[v] as usize];
+            }
+            apply_left_inv_coset_rep_slice(
+                base,
+                y,
+                parent_pt,
+                parent_gen,
+                inv_generators,
+                candidate,
+            );
+            if first_moved(candidate).is_some() {
+                if !filter_used {
+                    sims_filter.reset(node_count);
+                    filter_used = true;
+                }
+                sims_filter.insert(candidate.to_vec());
+            }
+        };
+
+        if let Some(mut mask) = active_mask {
+            while mask != 0 {
+                let gi = mask.trailing_zeros() as usize;
+                mask &= mask - 1;
+                try_gen(gi);
+            }
+        } else {
+            for gen_idx in 0..generators.len() {
+                try_gen(gen_idx);
+            }
+        }
+    }
+
+    if filter_used {
+        sims_filter.take_generators()
+    } else {
+        Vec::new()
+    }
+}
+
+#[inline]
+fn level0_orbit_of(target_sym: &TargetSymmetry, dropped_supp: u128, v: usize) -> usize {
+    if ((dropped_supp >> v) & 1) != 0 {
+        v
+    } else {
+        target_sym.orbits[v].index()
+    }
+}
+
+/// One distinct derived stabilizer subgroup `S` in a target point-stabilizer chain.
+#[derive(Clone, Debug)]
+struct TargetStabilizerGroup {
     orbits: Vec<NodeId>,
     generators: Vec<Vec<u32>>,
-    /// Schreier tree rooted at `t_d` (populated when `S_d` is non-trivial and pushed past `t_d`).
-    tree: Option<SchreierTree>,
+    inv_generators: Vec<Vec<u32>>,
+    gen_supports: Vec<Support>,
+    gen_is_involution: Vec<bool>,
+}
+
+impl TargetStabilizerGroup {
+    fn from_generators(node_count: usize, generators: Vec<Vec<u32>>) -> Self {
+        let (orbits, _) = compute_orbits(node_count, &generators);
+        let inv_generators = generators.iter().map(|g| invert_perm(g)).collect();
+        let gen_supports = generators.iter().map(|g| Support::from_perm(g)).collect();
+        let gen_is_involution = generators.iter().map(|g| is_involution(g)).collect();
+        Self {
+            orbits,
+            generators,
+            inv_generators,
+            gen_supports,
+            gen_is_involution,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum TargetStepGroup {
+    Trivial,
+    /// Borrows `&TargetSymmetry` directly with zero clones (`n2 <= 128`, `generators.len() <= 64`).
+    ///
+    /// `active_mask` selects active generator indices in `target_sym.generators`, and
+    /// `dropped_supp` marks vertices in the supports of dropped isolated involutions (now fixed).
+    Level0 {
+        active_mask: u64,
+        dropped_supp: u128,
+    },
+    Derived(usize),
+}
+
+/// One rank entry in `TargetStabilizerChain`: fixed-point pushes share the parent's group with
+/// zero heap allocation, isolated involutions on `Level0` clear one bit in `active_mask`, and
+/// trivial stabilizers use `TargetStepGroup::Trivial`.
+#[derive(Clone, Copy, Debug)]
+struct TargetStabilizerStep {
+    group: TargetStepGroup,
+    tree_idx: Option<usize>,
 }
 
 /// Incremental target point-stabilizer chain supporting both push-down host-symmetry pruning
@@ -834,7 +1235,16 @@ struct TargetStabilizerLevel {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TargetStabilizerChain {
     node_count: usize,
-    levels: Vec<TargetStabilizerLevel>,
+    steps: Vec<TargetStabilizerStep>,
+    groups: Vec<TargetStabilizerGroup>,
+    trees: Vec<TargetSchreierTree>,
+    bfs_parent_pt: Vec<u32>,
+    bfs_parent_gen: Vec<u32>,
+    bfs_orbit: Vec<u32>,
+    tmp_u_x: Vec<u32>,
+    tmp_buf: Vec<u32>,
+    tmp_cand: Vec<u32>,
+    sims_filter: SimsFilter,
 }
 
 impl TargetStabilizerChain {
@@ -843,82 +1253,693 @@ impl TargetStabilizerChain {
         Self::default()
     }
 
+    fn clear(&mut self) {
+        self.steps.clear();
+        self.groups.clear();
+        self.trees.clear();
+    }
+
+    fn init_derived_level0_from_indices(
+        &mut self,
+        target_sym: &TargetSymmetry,
+        active_indices: &[usize],
+    ) {
+        self.node_count = target_sym.node_count;
+        self.steps.clear();
+        self.trees.clear();
+        if active_indices.is_empty() {
+            self.groups.clear();
+            return;
+        }
+        self.groups.truncate(1);
+        if self.groups.is_empty() {
+            self.groups.push(TargetStabilizerGroup {
+                orbits: target_sym.orbits.clone(),
+                generators: active_indices
+                    .iter()
+                    .map(|&i| target_sym.generators[i].clone())
+                    .collect(),
+                inv_generators: active_indices
+                    .iter()
+                    .map(|&i| target_sym.inv_generators[i].clone())
+                    .collect(),
+                gen_supports: active_indices
+                    .iter()
+                    .map(|&i| target_sym.gen_supports[i].clone())
+                    .collect(),
+                gen_is_involution: active_indices
+                    .iter()
+                    .map(|&i| target_sym.gen_is_involution[i])
+                    .collect(),
+            });
+        } else {
+            let g0 = &mut self.groups[0];
+            g0.orbits.clear();
+            g0.orbits.extend_from_slice(&target_sym.orbits);
+            g0.generators.clear();
+            g0.generators.extend(
+                active_indices
+                    .iter()
+                    .map(|&i| target_sym.generators[i].clone()),
+            );
+            g0.inv_generators.clear();
+            g0.inv_generators.extend(
+                active_indices
+                    .iter()
+                    .map(|&i| target_sym.inv_generators[i].clone()),
+            );
+            g0.gen_supports.clear();
+            g0.gen_supports.extend(
+                active_indices
+                    .iter()
+                    .map(|&i| target_sym.gen_supports[i].clone()),
+            );
+            g0.gen_is_involution.clear();
+            g0.gen_is_involution.extend(
+                active_indices
+                    .iter()
+                    .map(|&i| target_sym.gen_is_involution[i]),
+            );
+        }
+        self.steps.push(TargetStabilizerStep {
+            group: TargetStepGroup::Derived(0),
+            tree_idx: None,
+        });
+    }
+
     /// Initialize level 0 from `target_sym`.
     pub(crate) fn reset(&mut self, target_sym: &TargetSymmetry) {
         self.node_count = target_sym.node_count;
-        self.levels.clear();
-        if !target_sym.is_trivial() {
-            self.levels.push(TargetStabilizerLevel {
+        self.steps.clear();
+        self.trees.clear();
+        if target_sym.is_trivial() {
+            self.groups.clear();
+            return;
+        }
+        if target_sym.supports_level0_fast_path() {
+            self.groups.clear();
+            let k = target_sym.generators.len();
+            let active_mask = if k == 64 { u64::MAX } else { (1u64 << k) - 1 };
+            self.steps.push(TargetStabilizerStep {
+                group: TargetStepGroup::Level0 {
+                    active_mask,
+                    dropped_supp: 0,
+                },
+                tree_idx: None,
+            });
+            return;
+        }
+        self.groups.truncate(1);
+        if self.groups.is_empty() {
+            self.groups.push(TargetStabilizerGroup {
                 orbits: target_sym.orbits.clone(),
                 generators: target_sym.generators.clone(),
-                tree: None,
+                inv_generators: target_sym.inv_generators.clone(),
+                gen_supports: target_sym.gen_supports.clone(),
+                gen_is_involution: target_sym.gen_is_involution.clone(),
             });
+        } else {
+            let g0 = &mut self.groups[0];
+            g0.orbits.clear();
+            g0.orbits.extend_from_slice(&target_sym.orbits);
+            g0.generators.clear();
+            g0.generators.extend(target_sym.generators.iter().cloned());
+            g0.inv_generators.clear();
+            g0.inv_generators
+                .extend(target_sym.inv_generators.iter().cloned());
+            g0.gen_supports.clear();
+            g0.gen_supports
+                .extend(target_sym.gen_supports.iter().cloned());
+            g0.gen_is_involution.clear();
+            g0.gen_is_involution
+                .extend_from_slice(&target_sym.gen_is_involution);
+        }
+        self.steps.push(TargetStabilizerStep {
+            group: TargetStepGroup::Derived(0),
+            tree_idx: None,
+        });
+    }
+
+    /// Initialize level 0 restricted to generators acting non-trivially on the orbit closure of
+    /// `cand_union` (`n2 <= 64`). Returns `false` if the restricted symmetry is trivial (`{1}`).
+    pub(crate) fn reset_for_u64(&mut self, target_sym: &TargetSymmetry, cand_union: u64) -> bool {
+        if target_sym.is_trivial() || cand_union == 0 {
+            self.clear();
+            return false;
+        }
+        let TargetGeneratorMasks::U64 {
+            moved,
+            gen_orbit_reps,
+        } = &target_sym.gen_masks
+        else {
+            unreachable!("u64 candidate filtering queried only when node_count <= 64");
+        };
+        let mut active = cand_union & *moved;
+        if active == 0 {
+            self.clear();
+            return false;
+        }
+        let mut u_orbit_reps = 0u64;
+        while active != 0 {
+            let v = active.trailing_zeros() as usize;
+            active &= active - 1;
+            u_orbit_reps |= 1u64 << target_sym.orbits[v].index();
+        }
+        if target_sym.supports_level0_fast_path() {
+            let mut active_mask = 0u64;
+            for (idx, &reps) in gen_orbit_reps.iter().enumerate() {
+                if (reps & u_orbit_reps) != 0 {
+                    active_mask |= 1u64 << idx;
+                }
+            }
+            if active_mask == 0 {
+                self.clear();
+                return false;
+            }
+            self.node_count = target_sym.node_count;
+            self.steps.clear();
+            self.groups.clear();
+            self.trees.clear();
+            self.steps.push(TargetStabilizerStep {
+                group: TargetStepGroup::Level0 {
+                    active_mask,
+                    dropped_supp: 0,
+                },
+                tree_idx: None,
+            });
+            return true;
+        }
+        let mut active_indices = Vec::with_capacity(gen_orbit_reps.len());
+        for (idx, &reps) in gen_orbit_reps.iter().enumerate() {
+            if (reps & u_orbit_reps) != 0 {
+                active_indices.push(idx);
+            }
+        }
+        if active_indices.is_empty() {
+            self.clear();
+            return false;
+        }
+        self.init_derived_level0_from_indices(target_sym, &active_indices);
+        true
+    }
+
+    /// Initialize level 0 restricted to generators acting non-trivially on the orbit closure of
+    /// `cand_union` (`n2 <= 128`). Returns `false` if the restricted symmetry is trivial (`{1}`).
+    pub(crate) fn reset_for_u128(&mut self, target_sym: &TargetSymmetry, cand_union: u128) -> bool {
+        if target_sym.is_trivial() || cand_union == 0 {
+            self.clear();
+            return false;
+        }
+        match &target_sym.gen_masks {
+            TargetGeneratorMasks::U64 { .. } => self.reset_for_u64(target_sym, cand_union as u64),
+            TargetGeneratorMasks::U128 {
+                moved,
+                gen_orbit_reps,
+            } => {
+                let mut active = cand_union & *moved;
+                if active == 0 {
+                    self.clear();
+                    return false;
+                }
+                let mut u_orbit_reps = 0u128;
+                while active != 0 {
+                    let v = active.trailing_zeros() as usize;
+                    active &= active - 1;
+                    u_orbit_reps |= 1u128 << target_sym.orbits[v].index();
+                }
+                if target_sym.supports_level0_fast_path() {
+                    let mut active_mask = 0u64;
+                    for (idx, &reps) in gen_orbit_reps.iter().enumerate() {
+                        if (reps & u_orbit_reps) != 0 {
+                            active_mask |= 1u64 << idx;
+                        }
+                    }
+                    if active_mask == 0 {
+                        self.clear();
+                        return false;
+                    }
+                    self.node_count = target_sym.node_count;
+                    self.steps.clear();
+                    self.groups.clear();
+                    self.trees.clear();
+                    self.steps.push(TargetStabilizerStep {
+                        group: TargetStepGroup::Level0 {
+                            active_mask,
+                            dropped_supp: 0,
+                        },
+                        tree_idx: None,
+                    });
+                    return true;
+                }
+                let mut active_indices = Vec::with_capacity(gen_orbit_reps.len());
+                for (idx, &reps) in gen_orbit_reps.iter().enumerate() {
+                    if (reps & u_orbit_reps) != 0 {
+                        active_indices.push(idx);
+                    }
+                }
+                if active_indices.is_empty() {
+                    self.clear();
+                    return false;
+                }
+                self.init_derived_level0_from_indices(target_sym, &active_indices);
+                true
+            }
+            TargetGeneratorMasks::Wide { .. } => {
+                unreachable!("u128 candidate filtering queried only when node_count <= 128");
+            }
         }
     }
 
-    /// Truncate the chain back to `depth` stabilized points (leaving `levels.len() == depth + 1`,
+    /// Initialize level 0 restricted to generators acting non-trivially on the orbit closure of
+    /// `cand_union` (arbitrary `n2`). Returns `false` if the restricted symmetry is trivial (`{1}`).
+    pub(crate) fn reset_for_words(
+        &mut self,
+        target_sym: &TargetSymmetry,
+        cand_union: &[u64],
+    ) -> bool {
+        if target_sym.is_trivial() {
+            self.clear();
+            return false;
+        }
+        match &target_sym.gen_masks {
+            TargetGeneratorMasks::U64 { .. } => {
+                let mask = cand_union.first().copied().unwrap_or(0);
+                self.reset_for_u64(target_sym, mask)
+            }
+            TargetGeneratorMasks::U128 { .. } => {
+                let lo = u128::from(cand_union.first().copied().unwrap_or(0));
+                let hi = u128::from(cand_union.get(1).copied().unwrap_or(0));
+                self.reset_for_u128(target_sym, lo | (hi << 64))
+            }
+            TargetGeneratorMasks::Wide {
+                moved,
+                gen_orbit_reps,
+            } => {
+                let words = moved.len();
+                let mut any_moved = false;
+                let mut u_orbit_reps = vec![0u64; words];
+                for w in 0..words.min(cand_union.len()) {
+                    let mut active = cand_union[w] & moved[w];
+                    if active != 0 {
+                        any_moved = true;
+                        while active != 0 {
+                            let bit = active.trailing_zeros() as usize;
+                            active &= active - 1;
+                            let v = w * 64 + bit;
+                            let rep = target_sym.orbits[v].index();
+                            u_orbit_reps[rep / 64] |= 1u64 << (rep % 64);
+                        }
+                    }
+                }
+                if !any_moved {
+                    self.clear();
+                    return false;
+                }
+                let mut active_indices = Vec::with_capacity(gen_orbit_reps.len());
+                for (idx, reps) in gen_orbit_reps.iter().enumerate() {
+                    if reps.iter().zip(&u_orbit_reps).any(|(&a, &b)| (a & b) != 0) {
+                        active_indices.push(idx);
+                    }
+                }
+                if active_indices.is_empty() {
+                    self.clear();
+                    return false;
+                }
+                self.init_derived_level0_from_indices(target_sym, &active_indices);
+                true
+            }
+        }
+    }
+
+    /// Truncate the chain back to `depth` stabilized points (leaving `steps.len() == depth + 1`,
     /// or `0` when initialized from a trivial symmetry group).
     pub(crate) fn truncate(&mut self, depth: usize) {
-        if self.levels.is_empty() {
+        if self.steps.is_empty() {
             return;
         }
-        let keep = (depth + 1).min(self.levels.len());
-        self.levels.truncate(keep);
-        if let Some(last) = self.levels.last_mut() {
-            last.tree = None;
+        let keep = (depth + 1).min(self.steps.len());
+        self.steps.truncate(keep);
+        if let Some(last) = self.steps.last_mut() {
+            last.tree_idx = None;
         }
+        let max_group = self
+            .steps
+            .iter()
+            .filter_map(|s| match s.group {
+                TargetStepGroup::Derived(idx) => Some(idx),
+                TargetStepGroup::Trivial | TargetStepGroup::Level0 { .. } => None,
+            })
+            .max()
+            .map_or(0, |g| g + 1);
+        self.groups.truncate(max_group);
+        let max_tree = self
+            .steps
+            .iter()
+            .filter_map(|s| s.tree_idx)
+            .max()
+            .map_or(0, |t| t + 1);
+        self.trees.truncate(max_tree);
     }
 
     /// Current stabilizer depth (`d` means `S_d = Stab(t_0, ..., t_{d-1})` is at the top).
     pub(crate) fn depth(&self) -> usize {
-        self.levels.len().saturating_sub(1)
+        self.steps.len().saturating_sub(1)
     }
 
     /// Whether the current top stabilizer `S_d` is trivial (`{1}`).
     pub(crate) fn is_current_trivial(&self) -> bool {
-        self.levels
+        self.steps
             .last()
-            .is_none_or(|level| level.generators.is_empty())
+            .is_none_or(|step| matches!(step.group, TargetStepGroup::Trivial))
     }
 
     /// Whether `target_node` is the minimum vertex in its orbit under the current stabilizer `S_d`.
-    pub(crate) fn is_orbit_min_at_current(&self, target_node: usize) -> bool {
-        match self.levels.last() {
+    pub(crate) fn is_orbit_min_at_current(
+        &self,
+        target_sym: &TargetSymmetry,
+        target_node: usize,
+    ) -> bool {
+        match self.steps.last() {
             None => true,
-            Some(level) => level.orbits[target_node].index() == target_node,
+            Some(step) => match step.group {
+                TargetStepGroup::Trivial => true,
+                TargetStepGroup::Level0 { dropped_supp, .. } => {
+                    level0_orbit_of(target_sym, dropped_supp, target_node) == target_node
+                }
+                TargetStepGroup::Derived(idx) => {
+                    self.groups[idx].orbits[target_node].index() == target_node
+                }
+            },
         }
     }
 
     /// Verify that `target_node` is minimal in its orbit under the current stabilizer `S_d`,
-    /// and if so push `S_{d+1} = Stab_{S_d}(target_node)` onto the chain.
+    /// and if so push `S_{d+1} = Stab_{S_d}(target_node)` onto the chain, retaining the Schreier
+    /// tree only when `keep_tree` is `true` (combined `G_Q × G_H` mode).
     ///
     /// Returns `false` (leaving the chain unchanged) if `target_node` is not an `S_d`-orbit
     /// minimum.
-    pub(crate) fn try_push_orbit_min(&mut self, target_node: usize) -> bool {
-        let Some(top) = self.levels.last_mut() else {
+    pub(crate) fn try_push_orbit_min_with_tree(
+        &mut self,
+        target_sym: &TargetSymmetry,
+        target_node: usize,
+        keep_tree: bool,
+    ) -> bool {
+        let Some(&top) = self.steps.last() else {
             return true;
         };
-        if top.generators.is_empty() {
-            return true;
+        match top.group {
+            TargetStepGroup::Trivial => true,
+            TargetStepGroup::Level0 {
+                active_mask,
+                dropped_supp,
+            } => {
+                if level0_orbit_of(target_sym, dropped_supp, target_node) != target_node {
+                    return false;
+                }
+
+                let mut moving_count = 0usize;
+                let mut single_mover = 0usize;
+                let mut rem = active_mask;
+                while rem != 0 {
+                    let gi = rem.trailing_zeros() as usize;
+                    rem &= rem - 1;
+                    if target_sym.generators[gi][target_node] as usize != target_node {
+                        moving_count += 1;
+                        single_mover = gi;
+                    }
+                }
+
+                // Fixed-point fast path: zero allocations, shares parent's group.
+                if moving_count == 0 {
+                    self.steps.push(TargetStabilizerStep {
+                        group: TargetStepGroup::Level0 {
+                            active_mask,
+                            dropped_supp,
+                        },
+                        tree_idx: None,
+                    });
+                    return true;
+                }
+
+                // Isolated involution fast path: direct-product factor `<g_m> × H` stabilizes to
+                // `H` with zero BFS, zero SimsFilter, and zero orbit recomputation.
+                let other_mask = active_mask & !(1u64 << single_mover);
+                if moving_count == 1
+                    && target_sym.gen_is_involution[single_mover]
+                    && (other_mask & !target_sym.gen_disjoint_from[single_mover]) == 0
+                {
+                    if keep_tree {
+                        let partner = target_sym.generators[single_mover][target_node];
+                        let tree_idx = self.trees.len();
+                        self.trees.push(TargetSchreierTree::Involution {
+                            base: target_node as u32,
+                            partner,
+                            gen_idx: single_mover as u32,
+                        });
+                        if let Some(last) = self.steps.last_mut() {
+                            last.tree_idx = Some(tree_idx);
+                        }
+                    }
+                    let next_group = if other_mask == 0 {
+                        TargetStepGroup::Trivial
+                    } else {
+                        TargetStepGroup::Level0 {
+                            active_mask: other_mask,
+                            dropped_supp: dropped_supp
+                                | target_sym.gen_supports[single_mover].as_u128(),
+                        }
+                    };
+                    self.steps.push(TargetStabilizerStep {
+                        group: next_group,
+                        tree_idx: None,
+                    });
+                    return true;
+                }
+
+                // General non-disjoint / higher-order stabilization over `active_mask`.
+                let n = self.node_count;
+                self.bfs_parent_pt.clear();
+                self.bfs_parent_pt.resize(n, UNVISITED);
+                self.bfs_parent_gen.clear();
+                self.bfs_parent_gen.resize(n, ROOT_GEN);
+                self.bfs_orbit.clear();
+                self.bfs_parent_pt[target_node] = target_node as u32;
+                self.bfs_orbit.push(target_node as u32);
+
+                let mut head = 0;
+                while head < self.bfs_orbit.len() {
+                    let x = self.bfs_orbit[head] as usize;
+                    head += 1;
+                    let mut mask = active_mask;
+                    while mask != 0 {
+                        let gi = mask.trailing_zeros() as usize;
+                        mask &= mask - 1;
+                        let y = target_sym.generators[gi][x] as usize;
+                        if self.bfs_parent_pt[y] == UNVISITED {
+                            self.bfs_parent_pt[y] = x as u32;
+                            self.bfs_parent_gen[y] = gi as u32;
+                            self.bfs_orbit.push(y as u32);
+                        }
+                    }
+                }
+
+                self.tmp_u_x.resize(n, 0);
+                self.tmp_buf.resize(n, 0);
+                self.tmp_cand.resize(n, 0);
+                let next_gens = stabilize_point_indexed_scratch(
+                    target_node,
+                    n,
+                    &target_sym.generators,
+                    &target_sym.inv_generators,
+                    &target_sym.gen_supports,
+                    Some(active_mask),
+                    &self.bfs_orbit,
+                    &self.bfs_parent_pt,
+                    &self.bfs_parent_gen,
+                    &mut self.tmp_u_x,
+                    &mut self.tmp_buf,
+                    &mut self.tmp_cand,
+                    &mut self.sims_filter,
+                );
+
+                if keep_tree {
+                    let tree_idx = self.trees.len();
+                    self.trees.push(TargetSchreierTree::General {
+                        base: target_node as u32,
+                        parent_pt: self.bfs_parent_pt.clone(),
+                        parent_gen: self.bfs_parent_gen.clone(),
+                    });
+                    if let Some(last) = self.steps.last_mut() {
+                        last.tree_idx = Some(tree_idx);
+                    }
+                }
+
+                let next_group = if next_gens.is_empty() {
+                    TargetStepGroup::Trivial
+                } else {
+                    let idx = self.groups.len();
+                    self.groups
+                        .push(TargetStabilizerGroup::from_generators(n, next_gens));
+                    TargetStepGroup::Derived(idx)
+                };
+                self.steps.push(TargetStabilizerStep {
+                    group: next_group,
+                    tree_idx: None,
+                });
+                true
+            }
+            TargetStepGroup::Derived(group_idx) => {
+                if self.groups[group_idx].orbits[target_node].index() != target_node {
+                    return false;
+                }
+
+                let mut moving_count = 0usize;
+                let mut single_mover = 0usize;
+                for (gi, g) in self.groups[group_idx].generators.iter().enumerate() {
+                    if g[target_node] as usize != target_node {
+                        moving_count += 1;
+                        single_mover = gi;
+                    }
+                }
+
+                // Fixed-point fast path: zero allocations, shares parent's stabilizer group.
+                if moving_count == 0 {
+                    self.steps.push(TargetStabilizerStep {
+                        group: TargetStepGroup::Derived(group_idx),
+                        tree_idx: None,
+                    });
+                    return true;
+                }
+
+                // Isolated involution fast path on a derived stabilizer group.
+                if moving_count == 1 && self.groups[group_idx].gen_is_involution[single_mover] {
+                    let disjoint_from_others = {
+                        let supp = &self.groups[group_idx].gen_supports[single_mover];
+                        self.groups[group_idx]
+                            .gen_supports
+                            .iter()
+                            .enumerate()
+                            .all(|(i, other)| i == single_mover || supp.is_disjoint(other))
+                    };
+                    if disjoint_from_others {
+                        if keep_tree {
+                            let partner =
+                                self.groups[group_idx].generators[single_mover][target_node];
+                            let tree_idx = self.trees.len();
+                            self.trees.push(TargetSchreierTree::Involution {
+                                base: target_node as u32,
+                                partner,
+                                gen_idx: single_mover as u32,
+                            });
+                            if let Some(last) = self.steps.last_mut() {
+                                last.tree_idx = Some(tree_idx);
+                            }
+                        }
+                        let next_group = if self.groups[group_idx].generators.len() == 1 {
+                            TargetStepGroup::Trivial
+                        } else {
+                            let next_gens: Vec<Vec<u32>> = self.groups[group_idx]
+                                .generators
+                                .iter()
+                                .enumerate()
+                                .filter(|&(i, _)| i != single_mover)
+                                .map(|(_, g)| g.clone())
+                                .collect();
+                            let idx = self.groups.len();
+                            self.groups.push(TargetStabilizerGroup::from_generators(
+                                self.node_count,
+                                next_gens,
+                            ));
+                            TargetStepGroup::Derived(idx)
+                        };
+                        self.steps.push(TargetStabilizerStep {
+                            group: next_group,
+                            tree_idx: None,
+                        });
+                        return true;
+                    }
+                }
+
+                let n = self.node_count;
+                self.bfs_parent_pt.clear();
+                self.bfs_parent_pt.resize(n, UNVISITED);
+                self.bfs_parent_gen.clear();
+                self.bfs_parent_gen.resize(n, ROOT_GEN);
+                self.bfs_orbit.clear();
+                self.bfs_parent_pt[target_node] = target_node as u32;
+                self.bfs_orbit.push(target_node as u32);
+
+                let group = &self.groups[group_idx];
+                let mut head = 0;
+                while head < self.bfs_orbit.len() {
+                    let x = self.bfs_orbit[head] as usize;
+                    head += 1;
+                    for (gen_idx, gen) in group.generators.iter().enumerate() {
+                        let y = gen[x] as usize;
+                        if self.bfs_parent_pt[y] == UNVISITED {
+                            self.bfs_parent_pt[y] = x as u32;
+                            self.bfs_parent_gen[y] = gen_idx as u32;
+                            self.bfs_orbit.push(y as u32);
+                        }
+                    }
+                }
+
+                self.tmp_u_x.resize(n, 0);
+                self.tmp_buf.resize(n, 0);
+                self.tmp_cand.resize(n, 0);
+                let next_gens = stabilize_point_indexed_scratch(
+                    target_node,
+                    n,
+                    &group.generators,
+                    &group.inv_generators,
+                    &group.gen_supports,
+                    None,
+                    &self.bfs_orbit,
+                    &self.bfs_parent_pt,
+                    &self.bfs_parent_gen,
+                    &mut self.tmp_u_x,
+                    &mut self.tmp_buf,
+                    &mut self.tmp_cand,
+                    &mut self.sims_filter,
+                );
+
+                if keep_tree {
+                    let tree_idx = self.trees.len();
+                    self.trees.push(TargetSchreierTree::General {
+                        base: target_node as u32,
+                        parent_pt: self.bfs_parent_pt.clone(),
+                        parent_gen: self.bfs_parent_gen.clone(),
+                    });
+                    if let Some(last) = self.steps.last_mut() {
+                        last.tree_idx = Some(tree_idx);
+                    }
+                }
+
+                let next_group = if next_gens.is_empty() {
+                    TargetStepGroup::Trivial
+                } else {
+                    let idx = self.groups.len();
+                    self.groups
+                        .push(TargetStabilizerGroup::from_generators(n, next_gens));
+                    TargetStepGroup::Derived(idx)
+                };
+                self.steps.push(TargetStabilizerStep {
+                    group: next_group,
+                    tree_idx: None,
+                });
+                true
+            }
         }
-        if top.orbits[target_node].index() != target_node {
-            return false;
-        }
-        let tree = SchreierTree::build(target_node, self.node_count, &top.generators);
-        let (next_gens, next_orbits) = if tree.orbit.len() <= 1 {
-            (top.generators.clone(), top.orbits.clone())
-        } else {
-            let next_gens = stabilize_point(&tree, self.node_count);
-            let (next_orbits, _) = compute_orbits(self.node_count, &next_gens);
-            (next_gens, next_orbits)
-        };
-        top.tree = Some(tree);
-        self.levels.push(TargetStabilizerLevel {
-            orbits: next_orbits,
-            generators: next_gens,
-            tree: None,
-        });
-        true
+    }
+
+    #[cfg(test)]
+    pub(crate) fn try_push_orbit_min(
+        &mut self,
+        target_sym: &TargetSymmetry,
+        target_node: usize,
+    ) -> bool {
+        self.try_push_orbit_min_with_tree(target_sym, target_node, true)
     }
 }
 
@@ -940,7 +1961,7 @@ fn run_double_orbit_check(
     embedding: &[usize],
     query_sym: &QuerySymmetryConstraints,
     target_sym: &TargetSymmetry,
-    target_levels: &[TargetStabilizerLevel],
+    target_chain: &TargetStabilizerChain,
     suffix_is_global_min: &[bool],
 ) -> bool {
     let n1 = embedding.len();
@@ -955,7 +1976,8 @@ fn run_double_orbit_check(
         &h_init,
         embedding,
         query_sym,
-        target_levels,
+        target_sym,
+        target_chain,
         suffix_is_global_min,
         &mut g_tmp,
     )
@@ -964,8 +1986,9 @@ fn run_double_orbit_check(
 /// Exact leaf canonicality guard for combined `G_Q × G_H` symmetry reduction reusing an already
 /// pushed target stabilizer chain along `priority_order`.
 ///
-/// Precondition: `chain` was initialized from `target_sym` and pushed with `try_push_orbit_min`
-/// across `priority_order` until trivial or complete.
+/// Precondition: `chain` was initialized from `target_sym` and pushed with
+/// `try_push_orbit_min_with_tree(target_sym, ..., true)` across `priority_order` until trivial or
+/// complete.
 pub(crate) fn is_canonical_double_orbit_with_built_chain(
     embedding: &[usize],
     priority_order: &[u32],
@@ -977,7 +2000,7 @@ pub(crate) fn is_canonical_double_orbit_with_built_chain(
     debug_assert_eq!(n1, query_sym.node_count);
     debug_assert_eq!(n1, priority_order.len());
     debug_assert!(query_sym.is_trivial() || query_sym.priority_order == priority_order);
-    if n1 == 0 || target_sym.is_trivial() || query_sym.is_trivial() {
+    if n1 == 0 || target_sym.is_trivial() || query_sym.is_trivial() || chain.steps.is_empty() {
         return true;
     }
 
@@ -990,7 +2013,7 @@ pub(crate) fn is_canonical_double_orbit_with_built_chain(
         embedding,
         query_sym,
         target_sym,
-        &chain.levels,
+        chain,
         &suffix_is_global_min,
     )
 }
@@ -1026,7 +2049,7 @@ fn is_canonical_double_orbit_embedding(
         if chain.is_current_trivial() {
             break;
         }
-        if !chain.try_push_orbit_min(embedding[p_r as usize]) {
+        if !chain.try_push_orbit_min_with_tree(target_sym, embedding[p_r as usize], true) {
             return false;
         }
     }
@@ -1039,7 +2062,7 @@ fn is_canonical_double_orbit_embedding(
         embedding,
         query_sym,
         target_sym,
-        &chain.levels,
+        chain,
         &suffix_is_global_min,
     )
 }
@@ -1051,7 +2074,8 @@ fn check_double_orbit_recursive(
     h_cur: &[u32],
     embedding: &[usize],
     query_sym: &QuerySymmetryConstraints,
-    target_levels: &[TargetStabilizerLevel],
+    target_sym: &TargetSymmetry,
+    target_chain: &TargetStabilizerChain,
     suffix_is_global_min: &[bool],
     g_tmp: &mut [u32],
 ) -> bool {
@@ -1061,10 +2085,13 @@ fn check_double_orbit_recursive(
     }
 
     let priority_order = &query_sym.priority_order;
-    let target_level = target_levels.get(rank).filter(|l| !l.generators.is_empty());
+    let target_step = target_chain
+        .steps
+        .get(rank)
+        .filter(|s| !matches!(s.group, TargetStepGroup::Trivial));
     let query_done = rank > query_sym.last_active_rank;
 
-    if query_done && target_level.is_none() {
+    if query_done && target_step.is_none() {
         for &p_j in &priority_order[rank..] {
             let val = h_cur[embedding[g_cur[p_j as usize] as usize]] as usize;
             let expected = embedding[p_j as usize];
@@ -1083,7 +2110,7 @@ fn check_double_orbit_recursive(
 
     let check_branch = |g_next: &[u32], g_tmp: &mut [u32]| -> bool {
         let w = h_cur[embedding[g_next[p_r] as usize]] as usize;
-        match target_level {
+        match target_step {
             None => {
                 if w < t_r {
                     return false;
@@ -1097,13 +2124,24 @@ fn check_double_orbit_recursive(
                     h_cur,
                     embedding,
                     query_sym,
-                    target_levels,
+                    target_sym,
+                    target_chain,
                     suffix_is_global_min,
                     g_tmp,
                 )
             }
-            Some(level) => {
-                let w_min = level.orbits[w].index();
+            Some(step) => {
+                let (w_min, inv_generators) = match step.group {
+                    TargetStepGroup::Level0 { dropped_supp, .. } => (
+                        level0_orbit_of(target_sym, dropped_supp, w),
+                        target_sym.inv_generators.as_slice(),
+                    ),
+                    TargetStepGroup::Derived(idx) => {
+                        let group = &target_chain.groups[idx];
+                        (group.orbits[w].index(), group.inv_generators.as_slice())
+                    }
+                    TargetStepGroup::Trivial => unreachable!("filtered out above"),
+                };
                 if w_min < t_r {
                     return false;
                 }
@@ -1117,24 +2155,29 @@ fn check_double_orbit_recursive(
                         h_cur,
                         embedding,
                         query_sym,
-                        target_levels,
+                        target_sym,
+                        target_chain,
                         suffix_is_global_min,
                         g_tmp,
                     )
                 } else {
                     let mut h_next = h_cur.to_vec();
-                    level
-                        .tree
-                        .as_ref()
-                        .expect("non-trivial target level carries Schreier tree")
-                        .apply_left_inv_coset_rep(w, &mut h_next);
+                    let tree_idx = step
+                        .tree_idx
+                        .expect("non-fixed target step carries Schreier tree");
+                    target_chain.trees[tree_idx].apply_left_inv_coset_rep(
+                        w,
+                        inv_generators,
+                        &mut h_next,
+                    );
                     check_double_orbit_recursive(
                         rank + 1,
                         g_next,
                         &h_next,
                         embedding,
                         query_sym,
-                        target_levels,
+                        target_sym,
+                        target_chain,
                         suffix_is_global_min,
                         g_tmp,
                     )
@@ -1270,7 +2313,7 @@ mod tests {
             if chain.is_current_trivial() {
                 return true;
             }
-            if !chain.try_push_orbit_min(emb[p_r as usize]) {
+            if !chain.try_push_orbit_min(target_sym, emb[p_r as usize]) {
                 return false;
             }
         }
@@ -1471,7 +2514,7 @@ mod tests {
         let mut chain = TargetStabilizerChain::new();
         chain.reset(&c4);
         assert!(!chain.is_current_trivial());
-        assert!(chain.try_push_orbit_min(0));
+        assert!(chain.try_push_orbit_min(&c4, 0));
         assert!(chain.is_current_trivial());
 
         // Wide target (`n = 144 > 128`): 72 colored disjoint edges -> even nodes are orbit reps.
@@ -1792,6 +2835,139 @@ mod tests {
                     assert_eq!(reps, vec![expected_min], "G_Q×G_H lex-min rep ({qi}, {hi})");
                 }
             }
+        }
+    }
+
+    #[rstest]
+    #[case::u64_domain(12)]
+    #[case::u128_domain(72)]
+    #[case::wide_domain(136)]
+    fn test_target_stabilizer_chain_candidate_filtering_and_fixed_points(#[case] n: usize) {
+        // Asymmetric component on 0..3 (edge 0-1, 1-2 with distinct colors),
+        // two disjoint involution pairs on (3, 4) and (5, 6), plus a third disjoint
+        // involution pair on (n-2, n-1).
+        let edges = vec![
+            [0u32, 1],
+            [1, 2],
+            [3, 4],
+            [5, 6],
+            [(n - 2) as u32, (n - 1) as u32],
+        ];
+        let graph = Graph::new(n, &edges);
+        let sym = TargetSymmetry::from_graph(
+            &graph,
+            |v| match v.index() {
+                0 => 0u8,
+                1 => 1,
+                2 => 2,
+                3 | 4 => 3,
+                5 | 6 => 4,
+                x if x == n - 2 || x == n - 1 => 5,
+                x => (10 + x) as u8,
+            },
+            |_| 0u8,
+            AutomorphismAlgorithm::TrailIr,
+        );
+        assert!(!sym.is_trivial());
+
+        let mut chain = TargetStabilizerChain::new();
+        let reset_with = |chain: &mut TargetStabilizerChain, nodes: &[usize]| -> bool {
+            if n <= 64 {
+                let mut mask = 0u64;
+                for &v in nodes {
+                    mask |= 1u64 << v;
+                }
+                chain.reset_for_u64(&sym, mask)
+            } else if n <= 128 {
+                let mut mask = 0u128;
+                for &v in nodes {
+                    mask |= 1u128 << v;
+                }
+                chain.reset_for_u128(&sym, mask)
+            } else {
+                let mut words = vec![0u64; n.div_ceil(64)];
+                for &v in nodes {
+                    words[v / 64] |= 1u64 << (v % 64);
+                }
+                chain.reset_for_words(&sym, &words)
+            }
+        };
+
+        // Candidates restricted to fixed points {0, 1, 2} drop symmetry to trivial immediately.
+        assert!(!reset_with(&mut chain, &[0, 1, 2]));
+        assert!(chain.is_current_trivial());
+
+        // Candidates {0, 3, 4, 5, 6} retain the two disjoint involutions (3, 4) and (5, 6) and
+        // drop (n-2, n-1). On `n <= 128`, all level-0 / isolated-involution steps allocate zero
+        // derived groups.
+        assert!(reset_with(&mut chain, &[0, 3, 4, 5, 6]));
+        assert!(!chain.is_current_trivial());
+        if n <= 128 {
+            assert!(chain.groups.is_empty());
+        } else {
+            assert_eq!(chain.groups.len(), 1);
+            assert_eq!(chain.groups[0].generators.len(), 2);
+        }
+
+        // Fixed point 0 shares parent group without allocating trees or derived groups.
+        assert!(chain.try_push_orbit_min_with_tree(&sym, 0, false));
+        assert_eq!(chain.depth(), 1);
+        assert!(chain.trees.is_empty());
+        assert!(!chain.is_current_trivial());
+
+        // Non-minimal 4 is rejected.
+        assert!(!chain.try_push_orbit_min_with_tree(&sym, 4, false));
+        assert_eq!(chain.depth(), 1);
+
+        // Stabilizing 3 drops isolated involution (3, 4); vertex 4 is now fixed while (5, 6)
+        // remains active, with zero derived groups on `n <= 128`.
+        assert!(chain.try_push_orbit_min_with_tree(&sym, 3, false));
+        assert_eq!(chain.depth(), 2);
+        assert!(!chain.is_current_trivial());
+        assert!(chain.is_orbit_min_at_current(&sym, 4));
+        assert!(!chain.is_orbit_min_at_current(&sym, 6));
+        if n <= 128 {
+            assert!(chain.groups.is_empty());
+        }
+
+        // Stabilizing 5 drops (5, 6) and reaches trivial `{1}`.
+        assert!(chain.try_push_orbit_min_with_tree(&sym, 5, false));
+        assert_eq!(chain.depth(), 3);
+        assert!(chain.is_current_trivial());
+        assert!(chain.trees.is_empty());
+
+        // Truncate back to depth 1 and verify compact `Involution` trees when `keep_tree = true`.
+        chain.truncate(1);
+        assert_eq!(chain.depth(), 1);
+        assert!(!chain.is_orbit_min_at_current(&sym, 4));
+        assert!(chain.try_push_orbit_min_with_tree(&sym, 3, true));
+        assert!(chain.try_push_orbit_min_with_tree(&sym, 5, true));
+        assert!(chain.is_current_trivial());
+        assert_eq!(chain.trees.len(), 2);
+        assert!(matches!(
+            chain.trees[0],
+            TargetSchreierTree::Involution {
+                base: 3,
+                partner: 4,
+                ..
+            }
+        ));
+        assert!(matches!(
+            chain.trees[1],
+            TargetSchreierTree::Involution {
+                base: 5,
+                partner: 6,
+                ..
+            }
+        ));
+
+        chain.truncate(0);
+        assert_eq!(chain.depth(), 0);
+        assert!(chain.trees.is_empty());
+        if n <= 128 {
+            assert!(chain.groups.is_empty());
+        } else {
+            assert_eq!(chain.groups.len(), 1);
         }
     }
 }

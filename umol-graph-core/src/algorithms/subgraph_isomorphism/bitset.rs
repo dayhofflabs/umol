@@ -6,7 +6,7 @@ use std::ops::{BitAnd, BitOr, Not, Shl};
 
 use super::predicate::SubgraphIsomorphismPredicate;
 use super::prepared::{PreparedSubgraphQuery, SubgraphIsomorphismScratch};
-use super::symmetry::TargetSymmetry;
+use super::symmetry::{TargetStabilizerChain, TargetSymmetry};
 use crate::graph::Graph;
 use crate::id::{EdgeId, NodeId};
 
@@ -34,6 +34,11 @@ pub(super) trait WordMask:
     fn clear_lowest(self) -> Self;
     fn test(self, index: usize) -> bool;
     fn orbit_reps(target_sym: &TargetSymmetry) -> Self;
+    fn reset_target_chain_for_candidates(
+        chain: &mut TargetStabilizerChain,
+        target_sym: &TargetSymmetry,
+        cand_union: Self,
+    ) -> bool;
     fn node_candidates<P: SubgraphIsomorphismPredicate>(
         pred: &mut P,
         query_node: NodeId,
@@ -104,6 +109,15 @@ impl WordMask for u64 {
     #[inline(always)]
     fn orbit_reps(target_sym: &TargetSymmetry) -> Self {
         target_sym.orbit_reps_u64()
+    }
+
+    #[inline]
+    fn reset_target_chain_for_candidates(
+        chain: &mut TargetStabilizerChain,
+        target_sym: &TargetSymmetry,
+        cand_union: Self,
+    ) -> bool {
+        chain.reset_for_u64(target_sym, cand_union)
     }
 
     #[inline(always)]
@@ -191,6 +205,15 @@ impl WordMask for u128 {
     #[inline(always)]
     fn orbit_reps(target_sym: &TargetSymmetry) -> Self {
         target_sym.orbit_reps_u128()
+    }
+
+    #[inline]
+    fn reset_target_chain_for_candidates(
+        chain: &mut TargetStabilizerChain,
+        target_sym: &TargetSymmetry,
+        cand_union: Self,
+    ) -> bool {
+        chain.reset_for_u128(target_sym, cand_union)
     }
 
     #[inline(always)]
@@ -714,4 +737,24 @@ pub(super) fn init_wide_candidates<P: SubgraphIsomorphismPredicate>(
         }
     }
     true
+}
+
+pub(super) fn reset_target_chain_for_wide_candidates(
+    chain: &mut TargetStabilizerChain,
+    target_sym: &TargetSymmetry,
+    cand_wide: &[u64],
+    n1: usize,
+    words: usize,
+) -> bool {
+    if target_sym.is_trivial() {
+        return false;
+    }
+    let mut cand_union = vec![0u64; words];
+    for q in 0..n1 {
+        let row = &cand_wide[q * words..(q + 1) * words];
+        for (dst, &src) in cand_union.iter_mut().zip(row) {
+            *dst |= src;
+        }
+    }
+    chain.reset_for_words(target_sym, &cand_union)
 }

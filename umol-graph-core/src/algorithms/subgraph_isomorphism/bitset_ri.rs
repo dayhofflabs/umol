@@ -12,8 +12,9 @@ use std::mem;
 use std::ops::ControlFlow;
 
 use super::bitset::{
-    degree_sequence_ok, init_wide_candidates, init_word_candidates, LazyWordAdj,
-    PrecomputedWordAdj, WideAdj, WordAdj, WordMask, WIDE_LAZY_ADJ_LIMIT,
+    degree_sequence_ok, init_wide_candidates, init_word_candidates,
+    reset_target_chain_for_wide_candidates, LazyWordAdj, PrecomputedWordAdj, WideAdj, WordAdj,
+    WordMask, WIDE_LAZY_ADJ_LIMIT,
 };
 use super::predicate::SubgraphIsomorphismPredicate;
 use super::prepared::{
@@ -53,17 +54,20 @@ struct SearchSymmetry<'a> {
 }
 
 impl<'a> SearchSymmetry<'a> {
+    /// Build push-down symmetry state reusing scratch buffers.
+    ///
+    /// Precondition: when `active_target_sym` is `Some(_)`, `scratch.target_chain` has already
+    /// been initialized for the active target subgroup.
     fn build(
         prepared_query: Option<&'a PreparedSubgraphQuery>,
-        target_sym: Option<&'a TargetSymmetry>,
+        active_target_sym: Option<&'a TargetSymmetry>,
         order: &[usize],
         pos: &[usize],
-        target_chain: &'a mut TargetStabilizerChain,
+        scratch: &'a mut SubgraphIsomorphismScratch,
     ) -> Option<Self> {
         let query_sym = prepared_query
             .map(PreparedSubgraphQuery::symmetry)
             .filter(|sym| !sym.is_trivial());
-        let active_target_sym = target_sym.filter(|sym| !sym.is_trivial());
         let has_q_sym = query_sym.is_some();
         let has_h_sym = active_target_sym.is_some();
         if !has_q_sym && !has_h_sym {
@@ -71,10 +75,14 @@ impl<'a> SearchSymmetry<'a> {
         }
 
         let n1 = order.len();
-        let mut sym_gt_offsets = Vec::new();
-        let mut sym_gt_depths = Vec::new();
-        let mut sym_lt_offsets = Vec::new();
-        let mut sym_lt_depths = Vec::new();
+        let mut sym_gt_offsets = mem::take(&mut scratch.sym_gt_offsets);
+        let mut sym_gt_depths = mem::take(&mut scratch.sym_gt_depths);
+        let mut sym_lt_offsets = mem::take(&mut scratch.sym_lt_offsets);
+        let mut sym_lt_depths = mem::take(&mut scratch.sym_lt_depths);
+        sym_gt_offsets.clear();
+        sym_gt_depths.clear();
+        sym_lt_offsets.clear();
+        sym_lt_depths.clear();
 
         if let Some(pq) = prepared_query {
             if has_q_sym {
@@ -104,11 +112,13 @@ impl<'a> SearchSymmetry<'a> {
         let priority_order = prepared_query
             .map(PreparedSubgraphQuery::priority_order)
             .unwrap_or(&[]);
-        let mut priority_pos = Vec::new();
-        let mut prefix_len_after = Vec::new();
-        if let Some(ts) = active_target_sym {
+        let mut priority_pos = mem::take(&mut scratch.sym_priority_pos);
+        let mut prefix_len_after = mem::take(&mut scratch.sym_prefix_len_after);
+        priority_pos.clear();
+        prefix_len_after.clear();
+        if active_target_sym.is_some() {
             debug_assert_eq!(priority_order.len(), n1);
-            target_chain.reset(ts);
+            debug_assert!(!scratch.target_chain.is_current_trivial());
             priority_pos.reserve(n1);
             for &q in priority_order {
                 priority_pos.push(pos[q as usize]);
@@ -123,11 +133,10 @@ impl<'a> SearchSymmetry<'a> {
             }
         }
 
-        let by_query = if has_q_sym && has_h_sym {
-            vec![0usize; n1]
-        } else {
-            Vec::new()
-        };
+        let mut by_query = mem::take(&mut scratch.sym_by_query);
+        if has_q_sym && has_h_sym {
+            by_query.resize(n1, 0);
+        }
 
         Some(Self {
             has_q_sym,
@@ -141,7 +150,7 @@ impl<'a> SearchSymmetry<'a> {
             prefix_len_after,
             query_sym,
             target_sym: active_target_sym,
-            target_chain,
+            target_chain: &mut scratch.target_chain,
             by_query,
         })
     }
@@ -171,7 +180,10 @@ impl<'a> SearchSymmetry<'a> {
     /// Fast pre-edge check when `order[depth]` is the next unstabilized priority vertex `p_{prev_k}`.
     #[inline(always)]
     fn rejects_candidate_before_edge_check(&self, depth: usize, v: usize) -> bool {
-        if !self.has_h_sym || self.target_chain.is_current_trivial() {
+        let Some(target_sym) = self.target_sym else {
+            return false;
+        };
+        if self.target_chain.is_current_trivial() {
             return false;
         }
         let prev_k = if depth == 0 {
@@ -180,7 +192,7 @@ impl<'a> SearchSymmetry<'a> {
             self.prefix_len_after[depth - 1]
         };
         if self.prefix_len_after[depth] > prev_k {
-            !self.target_chain.is_orbit_min_at_current(v)
+            !self.target_chain.is_orbit_min_at_current(target_sym, v)
         } else {
             false
         }
@@ -192,7 +204,10 @@ impl<'a> SearchSymmetry<'a> {
     /// pruned (leaving `target_chain` restored).
     #[inline]
     fn try_advance_host_chain(&mut self, depth: usize, mapping: &[usize]) -> Option<usize> {
-        if !self.has_h_sym || self.target_chain.is_current_trivial() {
+        let Some(target_sym) = self.target_sym else {
+            return Some(usize::MAX);
+        };
+        if self.target_chain.is_current_trivial() {
             return Some(usize::MAX);
         }
         let prev_k = if depth == 0 {
@@ -214,13 +229,17 @@ impl<'a> SearchSymmetry<'a> {
             }
             let t_r = mapping[self.priority_pos[r]];
             if !self.has_q_sym && r + 1 == n1 {
-                if !self.target_chain.is_orbit_min_at_current(t_r) {
+                if !self.target_chain.is_orbit_min_at_current(target_sym, t_r) {
                     if pushed {
                         self.target_chain.truncate(saved_depth);
                     }
                     return None;
                 }
-            } else if self.target_chain.try_push_orbit_min(t_r) {
+            } else if self.target_chain.try_push_orbit_min_with_tree(
+                target_sym,
+                t_r,
+                self.has_q_sym,
+            ) {
                 pushed = true;
             } else {
                 if pushed {
@@ -791,18 +810,26 @@ where
     let parents_offsets = mem::take(&mut scratch.parents_offsets);
     let parents_data = mem::take(&mut scratch.parents_data);
     scratch.out_nodes.resize(n1, NodeId(0));
+    let mut out_nodes = mem::take(&mut scratch.out_nodes);
 
+    let mut cand_union = W::ZERO;
+    for &c in &cand[..n1] {
+        cand_union = cand_union | c;
+    }
+    let active_target_sym = target_sym.filter(|ts| {
+        W::reset_target_chain_for_candidates(&mut scratch.target_chain, ts, cand_union)
+    });
     let sym = SearchSymmetry::build(
         Some(prepared_query),
-        target_sym,
+        active_target_sym,
         &order[..n1],
         &pos[..n1],
-        &mut scratch.target_chain,
+        scratch,
     );
 
     let mut adj = PrecomputedWordAdj(adj_rows);
     let mut mapping = [0usize; N];
-    let res = {
+    let (res, sym) = {
         let mut ctx = WordDfsCtx {
             target,
             n2,
@@ -815,21 +842,42 @@ where
             all_edges_undetermined: pred.all_edges_undetermined(),
             adj: &mut adj,
             mapping: &mut mapping[..n1],
-            out_nodes: &mut scratch.out_nodes,
+            out_nodes: &mut out_nodes,
             sym,
             pred,
             count,
             visitor,
         };
-        if use_lookahead {
+        let res = if use_lookahead {
             word_dfs::<W, _, true, COUNT_ONLY, B, P>(&mut ctx, 0, W::ZERO, W::ZERO)
         } else {
             word_dfs::<W, _, false, COUNT_ONLY, B, P>(&mut ctx, 0, W::ZERO, W::ZERO)
-        }
+        };
+        (res, ctx.sym)
     };
+    if let Some(sym) = sym {
+        let SearchSymmetry {
+            sym_gt_offsets,
+            sym_gt_depths,
+            sym_lt_offsets,
+            sym_lt_depths,
+            priority_pos,
+            prefix_len_after,
+            by_query,
+            ..
+        } = sym;
+        scratch.sym_gt_offsets = sym_gt_offsets;
+        scratch.sym_gt_depths = sym_gt_depths;
+        scratch.sym_lt_offsets = sym_lt_offsets;
+        scratch.sym_lt_depths = sym_lt_depths;
+        scratch.sym_priority_pos = priority_pos;
+        scratch.sym_prefix_len_after = prefix_len_after;
+        scratch.sym_by_query = by_query;
+    }
 
     scratch.parents_offsets = parents_offsets;
     scratch.parents_data = parents_data;
+    scratch.out_nodes = out_nodes;
     res
 }
 
@@ -1220,6 +1268,9 @@ fn solve_wide<const COUNT_ONLY: bool, B, P: SubgraphIsomorphismPredicate>(
     scratch.used.clear();
     scratch.used.resize(n2, false);
     scratch.out_nodes.resize(n1, NodeId(0));
+    let mut mapping = mem::take(&mut scratch.mapping);
+    let mut used = mem::take(&mut scratch.used);
+    let mut out_nodes = mem::take(&mut scratch.out_nodes);
 
     let adj = if let Some(pre) = prepared_adj {
         WideAdj::Precomputed(pre)
@@ -1232,15 +1283,12 @@ fn solve_wide<const COUNT_ONLY: bool, B, P: SubgraphIsomorphismPredicate>(
         WideAdj::None
     };
 
-    let sym = SearchSymmetry::build(
-        prepared_query,
-        target_sym,
-        &order,
-        &pos,
-        &mut scratch.target_chain,
-    );
+    let active_target_sym = target_sym.filter(|ts| {
+        reset_target_chain_for_wide_candidates(&mut scratch.target_chain, ts, &cand_wide, n1, words)
+    });
+    let sym = SearchSymmetry::build(prepared_query, active_target_sym, &order, &pos, scratch);
 
-    let res = {
+    let (res, sym) = {
         let mut ctx = WideDfsCtx {
             target,
             n2,
@@ -1251,16 +1299,36 @@ fn solve_wide<const COUNT_ONLY: bool, B, P: SubgraphIsomorphismPredicate>(
             parents_data: &parents_data,
             all_edges_undetermined: pred.all_edges_undetermined(),
             adj,
-            mapping: &mut scratch.mapping,
-            used: &mut scratch.used,
-            out_nodes: &mut scratch.out_nodes,
+            mapping: &mut mapping,
+            used: &mut used,
+            out_nodes: &mut out_nodes,
             sym,
             pred,
             count,
             visitor,
         };
-        wide_dfs::<COUNT_ONLY, B, P>(&mut ctx, 0)
+        let res = wide_dfs::<COUNT_ONLY, B, P>(&mut ctx, 0);
+        (res, ctx.sym)
     };
+    if let Some(sym) = sym {
+        let SearchSymmetry {
+            sym_gt_offsets,
+            sym_gt_depths,
+            sym_lt_offsets,
+            sym_lt_depths,
+            priority_pos,
+            prefix_len_after,
+            by_query,
+            ..
+        } = sym;
+        scratch.sym_gt_offsets = sym_gt_offsets;
+        scratch.sym_gt_depths = sym_gt_depths;
+        scratch.sym_lt_offsets = sym_lt_offsets;
+        scratch.sym_lt_depths = sym_lt_depths;
+        scratch.sym_priority_pos = priority_pos;
+        scratch.sym_prefix_len_after = prefix_len_after;
+        scratch.sym_by_query = by_query;
+    }
 
     scratch.order = order;
     scratch.pos = pos;
@@ -1269,6 +1337,9 @@ fn solve_wide<const COUNT_ONLY: bool, B, P: SubgraphIsomorphismPredicate>(
     scratch.cand_wide = cand_wide;
     scratch.adj_wide = adj_wide;
     scratch.adj_built_wide = adj_built_wide;
+    scratch.mapping = mapping;
+    scratch.used = used;
+    scratch.out_nodes = out_nodes;
     res
 }
 
