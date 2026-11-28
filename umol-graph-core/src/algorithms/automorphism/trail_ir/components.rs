@@ -320,8 +320,8 @@ impl ComponentSolver {
             let old_len = self.orbits.len();
             self.orbits.resize(n, 0);
             self.perm_map.resize(n, 0);
-            for v in old_len..n {
-                self.perm_map[v] = v as u32;
+            for (offset, slot) in self.perm_map[old_len..n].iter_mut().enumerate() {
+                *slot = (old_len + offset) as u32;
             }
             self.aut_mark.resize(n, 0);
             self.aut_wmark.resize(n, 0);
@@ -486,8 +486,8 @@ impl ComponentSolver {
         for idx in 0..count {
             let tc = self.twin_buf[idx];
             let first = partition.lab[tc.start];
-            for pos in tc.start + 1..tc.start + tc.len {
-                self.orbit_union(first, partition.lab[pos]);
+            for &v in &partition.lab[tc.start + 1..tc.start + tc.len] {
+                self.orbit_union(first, v);
             }
             for factor in 2..=tc.len as u64 {
                 self.group_factors.push(factor);
